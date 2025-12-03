@@ -2,13 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permisos existentes -->
+    <!-- Permisos de almacenamiento e imágenes -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+    <!-- ESTE ES EL NUEVO PERMISO OBLIGATORIO PARA ANDROID 14+ -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+
+    <!-- Notificaciones -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
-    <!-- PERMISO Y CARACTERÍSTICA DE CÁMARA -->
+    <!-- Cámara -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -27,7 +33,6 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.CrossChApp">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -43,7 +48,16 @@
             </intent-filter>
         </service>
 
-        <!-- FILE PROVIDER para compartir la imagen de forma segura -->
+        <!-- Configuración de Notificaciones (Icono y Color) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_launcher_foreground" />
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@android:color/holo_orange_dark" />
+
+        <!-- File Provider -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"

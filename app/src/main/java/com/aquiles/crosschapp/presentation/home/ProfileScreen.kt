@@ -1,9 +1,7 @@
 package com.aquiles.crosschapp.presentation.home
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -27,15 +25,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
@@ -46,15 +45,14 @@ import java.util.*
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
-private val ColorPrimaryAction = Color(0xFFFC5200)
+private val ColorPrimaryAction = Color(0xFFFC5200) // Tu naranja
 private val ColorAdminAction = Color(0xFF673AB7)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.1f)
+private val ColorBorder = Color.White.copy(alpha = 0.1f) // Borde fino
 private val ColorSuccess = Color(0xFF4CAF50)
 private val ColorError = Color(0xFFEF5350)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     innerPadding: PaddingValues,
@@ -68,6 +66,7 @@ fun ProfileScreen(
     val profileUpdateState by profileViewModel.profileUpdateState.collectAsState()
     val context = LocalContext.current
 
+    // --- Lógica de permisos e imagen (Sin cambios) ---
     val imagePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
         uri?.let { profileViewModel.uploadProfileImage(it) }
     }
@@ -95,20 +94,11 @@ fun ProfileScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.1f))
+            .background(Color.Black.copy(alpha = 0.1f)) // Fondo base
     ) {
+        // --- SCAFFOLD SIN TOP BAR ---
         Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = { Text("Mi Perfil", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
-                    actions = {
-                        IconButton(onClick = onEditProfileClicked) {
-                            Icon(Icons.Default.Edit, "Editar", tint = ColorPrimaryAction)
-                        }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
-                )
-            },
+            topBar = { /* Dejamos vacío para quitar el título "Mi Perfil" */ },
             containerColor = Color.Transparent
         ) { localPadding ->
 
@@ -129,18 +119,21 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 16.dp),
-                        contentPadding = PaddingValues(top = localPadding.calculateTopPadding(), bottom = innerPadding.calculateBottomPadding() + 20.dp),
+                        contentPadding = PaddingValues(top = localPadding.calculateTopPadding() + 10.dp, bottom = innerPadding.calculateBottomPadding() + 20.dp),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
+                        // HEADER NUEVO (Estilo iOS)
                         item {
-                            ProfileHeader(
+                            ProfileHeaderIOSStyle(
                                 user = state.user,
                                 activeBookingsCount = state.activeBookings.size,
                                 onImageClick = { launchImagePicker() },
+                                onEditClick = onEditProfileClicked, // Pasamos la acción
                                 isLoadingImage = profileUpdateState is ProfileUpdateState.Loading
                             )
                         }
 
+                        // Botones de Acción
                         item {
                             ActionButtonsSection(
                                 user = state.user,
@@ -149,6 +142,7 @@ fun ProfileScreen(
                             )
                         }
 
+                        // Reservas Activas
                         item {
                             GlassCardSection(title = "Próximas Reservas") {
                                 if (state.activeBookings.isEmpty()) {
@@ -170,6 +164,7 @@ fun ProfileScreen(
                             }
                         }
 
+                        // Historiales
                         item {
                             GlassCardSection(title = "Historial") {
                                 ExpandableHistorySection(
@@ -196,6 +191,7 @@ fun ProfileScreen(
                             }
                         }
 
+                        // Cerrar Sesión
                         item {
                             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 TextButton(onClick = onLogout) {
@@ -211,39 +207,106 @@ fun ProfileScreen(
 }
 
 // =====================================================
-// COMPONENTES UI (GLASS STYLE)
+// NUEVO COMPONENTE DE CABECERA (Estilo iOS)
 // =====================================================
 
 @Composable
-fun ProfileHeader(user: User, activeBookingsCount: Int, onImageClick: () -> Unit, isLoadingImage: Boolean) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(110.dp)
-                .clip(CircleShape)
-                .border(2.dp, ColorPrimaryAction, CircleShape)
-                .clickable { onImageClick() }
-        ) {
-            if (isLoadingImage) {
-                CircularProgressIndicator(color = ColorPrimaryAction)
-            } else {
-                SubcomposeAsyncImage(
-                    model = user.profileImageUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    error = { Box(Modifier.fillMaxSize().background(Color.Gray)) { Icon(Icons.Default.Person, null, modifier = Modifier.align(Alignment.Center), tint = Color.White) } }
-                )
+fun ProfileHeaderIOSStyle(
+    user: User,
+    activeBookingsCount: Int,
+    onImageClick: () -> Unit,
+    onEditClick: () -> Unit,
+    isLoadingImage: Boolean
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+
+        // ZONA SUPERIOR: Foto, Botón Editar y Tarjeta de Nombre
+        Box(modifier = Modifier.fillMaxWidth()) {
+
+            // 1. Botón Editar Flotante (Arriba a la derecha)
+            // Usamos un Z-Index alto visualmente al ponerlo en el Box, alineado TopEnd
+            IconButton(
+                onClick = onEditClick,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 4.dp, top = 0.dp) // Ajuste fino
+                    .shadow(elevation = 8.dp, shape = CircleShape)
+                    .background(ColorPrimaryAction, CircleShape) // Círculo Naranja
+                    .size(44.dp)
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = "Editar", tint = Color.White, modifier = Modifier.size(20.dp))
             }
-            Box(
-                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape).padding(4.dp)
-            ) { Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
+
+            // 2. Contenido Central (Foto y Tarjeta)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp) // Bajamos un poco para que el botón editar respire
+            ) {
+                // Foto de Perfil
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(120.dp) // Un poco más grande
+                        .clip(CircleShape)
+                        .border(3.dp, ColorPrimaryAction, CircleShape)
+                        .clickable { onImageClick() }
+                ) {
+                    if (isLoadingImage) {
+                        CircularProgressIndicator(color = ColorPrimaryAction)
+                    } else {
+                        SubcomposeAsyncImage(
+                            model = user.profileImageUrl,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                            error = { Box(Modifier.fillMaxSize().background(Color.Gray)) { Icon(Icons.Default.Person, null, modifier = Modifier.align(Alignment.Center), tint = Color.White) } }
+                        )
+                    }
+                    // Icono cámara pequeño
+                    Box(
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape).padding(4.dp)
+                    ) { Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
+                }
+
+                Spacer(Modifier.height(20.dp))
+
+                // TARJETA CRISTALINA PARA EL NOMBRE
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), // Márgenes laterales para centrar
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = ColorGlassSurface), // Fondo Cristal
+                    border = BorderStroke(1.dp, ColorBorder) // Borde fino
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 16.dp, horizontal = 24.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = user.fullName,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorTextPrimary,
+                            textAlign = TextAlign.Center
+                        )
+
+                        // Mostramos el email o fecha de registro
+                        Text(
+                            text = user.email,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ColorTextSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(16.dp))
-        Text(user.fullName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
-        Text(user.email, style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
+
         Spacer(Modifier.height(24.dp))
+
+        // ESTADÍSTICAS (Igual que antes pero separadas visualmente)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
             ProfileStatCard(user.totalClassesAttended.toString(), "Asistencias", Icons.AutoMirrored.Filled.DirectionsRun, Modifier.weight(1f))
             ProfileStatCard(activeBookingsCount.toString(), "Reservas", Icons.Default.Event, Modifier.weight(1f))
@@ -251,6 +314,10 @@ fun ProfileHeader(user: User, activeBookingsCount: Int, onImageClick: () -> Unit
         }
     }
 }
+
+// =====================================================
+// COMPONENTES EXISTENTES (Sin cambios mayores)
+// =====================================================
 
 @Composable
 fun ProfileStatCard(value: String, label: String, icon: ImageVector, modifier: Modifier = Modifier) {

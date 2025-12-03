@@ -61,7 +61,8 @@ dependencies {
 
     // Firebase BoM (Bill of Materials)
     implementation(platform("com.google.firebase:firebase-bom:33.15.0"))
-
+// App Check
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
     // Dependencias específicas de Firebase
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")

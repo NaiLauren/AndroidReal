@@ -49,6 +49,8 @@ sealed class BenchmarkOperationState {
 class AdminViewModel : ViewModel() {
 
     private val firestore = FirebaseFirestore.getInstance()
+
+    private var userListListener: com.google.firebase.firestore.ListenerRegistration? = null
     private val storage = FirebaseStorage.getInstance()
 
     private val currentUserGymId: String?
@@ -1006,20 +1008,39 @@ class AdminViewModel : ViewModel() {
         _classOperationState.value = ClassOperationState.Idle
     }
 
+    // --- FUNCIÓN ACTUALIZADA: CARGA EN TIEMPO REAL ---
     fun loadAllUsers() {
-        executeAdminAction(
-            errorStateSetter = { _userListState.value = UserListState.Error(it) }
-        ) { _, gymId ->
-            _userListState.value = UserListState.Loading
-            try {
-                val snapshot = firestore.collection("users")
-                    .whereEqualTo("gym_id", gymId)
-                    .get().await()
-                _userListState.value = UserListState.Success(snapshot.toObjects(User::class.java).filter { it.id != UserSession.getCurrentUserId() })
-            } catch (e: Exception) {
-                _userListState.value = UserListState.Error(e.localizedMessage ?: "Error al cargar usuarios.")
-            }
+        // 1. Obtenemos el ID y validamos
+        val gymId = currentUserGymId
+        if (gymId.isNullOrBlank()) {
+            _userListState.value = UserListState.Error("No se pudo identificar tu gimnasio.")
+            return
         }
+
+        // 2. Estado de carga
+        _userListState.value = UserListState.Loading
+
+        // 3. Limpiamos listener anterior si existe (para no duplicar)
+        userListListener?.remove()
+
+        // 4. Iniciamos la escucha en vivo (SnapshotListener)
+        userListListener = firestore.collection("users")
+            .whereEqualTo("gym_id", gymId)
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    _userListState.value = UserListState.Error(e.localizedMessage ?: "Error al cargar usuarios.")
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val users = snapshot.toObjects(User::class.java)
+                        .filter { it.id != UserSession.getCurrentUserId() }
+
+                    _userListState.value = UserListState.Success(users)
+                } else {
+                    _userListState.value = UserListState.Success(emptyList())
+                }
+            }
     }
 
     fun loadUserDetails(userId: String) {
@@ -1255,5 +1276,9 @@ class AdminViewModel : ViewModel() {
         val file = File(imageFolder, "shared_image_${System.currentTimeMillis()}.jpg")
         val authority = "${context.packageName}.provider"
         return FileProvider.getUriForFile(context, authority, file)
+    }
+    override fun onCleared() {
+        super.onCleared()
+        userListListener?.remove() // <--- Agrega esta línea para detener la escucha
     }
 }

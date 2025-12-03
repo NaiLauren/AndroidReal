@@ -1,15 +1,15 @@
-// RUTA: app/src/main/java/com/aquiles/crosschapp/data/model/MyFirebaseMessagingService.kt
-
 package com.aquiles.crosschapp.data.model
 
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.RingtoneManager
+import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.aquiles.crosschapp.MainActivity
-import com.aquiles.crosschapp.MyApplication.Companion.DEFAULT_CHANNEL_ID
 import com.aquiles.crosschapp.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -24,41 +24,57 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        // Nos aseguramos de procesar solo mensajes de "data" para tener control total
-        if (remoteMessage.data.isNotEmpty()) {
-            Log.d(TAG, "Mensaje de 'data' recibido: ${remoteMessage.data}")
+        // 1. Prioridad a la notificación automática si la app está en segundo plano
+        // Si viene payload 'notification', el sistema la maneja solo (si la app está cerrada).
+        // Si viene payload 'data' y la app está abierta, o si es solo 'data', lo manejamos nosotros.
 
-            val title = remoteMessage.data["title"] ?: "TribeOnMove"
-            val body = remoteMessage.data["body"] ?: "Has recibido una nueva notificación."
+        val title = remoteMessage.notification?.title ?: remoteMessage.data["title"] ?: "CrossChApp"
+        val body = remoteMessage.notification?.body ?: remoteMessage.data["body"] ?: "Tienes una nueva notificación"
 
-            showNotification(title, body)
-        } else {
-            Log.d(TAG, "Mensaje recibido sin payload de 'data'.")
-        }
+        // Mostrar la notificación manual para asegurar sonido y vibración
+        showNotification(title, body)
     }
 
-    private fun showNotification(title: String, message: String) {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
-        val pendingIntent = PendingIntent.getActivity(this, 0, intent,
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
+    private fun showNotification(title: String, messageBody: String) {
+        val intent = Intent(this, MainActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
 
-        val notificationBuilder = NotificationCompat.Builder(this, DEFAULT_CHANNEL_ID)
-            // --- ¡IMPORTANTE! Usa un icono de notificación blanco y transparente ---
-            .setSmallIcon(R.drawable.ic_stat_notification) // Asegúrate de tener este drawable
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // ID del canal debe ser consistente
+        val channelId = "crosschapp_default_channel"
+        val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+        val notificationBuilder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_stat_notification) // Asegúrate que este icono sea blanco con fondo transparente
             .setContentTitle(title)
-            .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_HIGH) // Prioridad alta para heads-up
-            .setContentIntent(pendingIntent)
+            .setContentText(messageBody)
             .setAutoCancel(true)
-            .setDefaults(NotificationCompat.DEFAULT_ALL) // Usa la configuración (sonido, vibración) del CANAL
+            .setSound(defaultSoundUri) // Sonido
+            .setVibrate(longArrayOf(1000, 1000, 1000, 1000, 1000)) // Vibración
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Ya no creamos el canal aquí. Solo mostramos la notificación.
+        // --- CORRECCIÓN CLAVE: CREAR EL CANAL SIEMPRE ---
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Si el canal ya existe, esto no hace nada, así que es seguro llamarlo siempre
+            val channel = NotificationChannel(
+                channelId,
+                "Notificaciones Generales", // Nombre visible para el usuario
+                NotificationManager.IMPORTANCE_HIGH // IMPORTANCE_HIGH = Sonido + Popup
+            )
+            channel.description = "Avisos importantes de la app"
+            channel.enableVibration(true)
+            channel.enableLights(true)
+            notificationManager.createNotificationChannel(channel)
+        }
+
         notificationManager.notify(System.currentTimeMillis().toInt(), notificationBuilder.build())
-        Log.d(TAG, "Notificación mostrada usando el canal '$DEFAULT_CHANNEL_ID'.")
     }
 
     override fun onNewToken(token: String) {

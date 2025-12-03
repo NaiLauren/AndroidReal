@@ -272,7 +272,8 @@ fun NavGraphBuilder.mainGraph(
             EditProfileScreen(
                 innerPadding = innerPadding,
                 profileViewModel = viewModel(),
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onLogout = onLogout // <--- AGREGAR ESTO
             )
         }
         composable("request_credits_screen") {

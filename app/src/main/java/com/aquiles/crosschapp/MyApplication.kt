@@ -1,5 +1,4 @@
 // RUTA: app/src/main/java/com/aquiles/crosschapp/MyApplication.kt
-// VERSIÓN FINAL Y LIMPIA
 
 package com.aquiles.crosschapp
 
@@ -11,6 +10,10 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
+// Imports nuevos para Firebase App Check
+import com.google.firebase.FirebaseApp
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 
 class MyApplication : Application() {
 
@@ -21,7 +24,17 @@ class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // La única responsabilidad de esta clase es crear el canal de notificación al iniciar la app.
+        // 1. Inicializamos Firebase (asegura el contexto)
+        FirebaseApp.initializeApp(this)
+
+        // 2. Activamos App Check usando el proveedor Play Integrity
+        // Esto validará que la app sea legítima usando el SHA-256 que registraste.
+        val firebaseAppCheck = FirebaseAppCheck.getInstance()
+        firebaseAppCheck.installAppCheckProviderFactory(
+            PlayIntegrityAppCheckProviderFactory.getInstance()
+        )
+
+        // 3. Crear el canal de notificación (Tu código original)
         createNotificationChannel()
     }
 

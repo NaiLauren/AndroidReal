@@ -30,7 +30,18 @@ data class User(
     val birthDate: Date? = null,
 
     val boxIdentifier: String? = null,
-    val fcmTokens: List<String> = emptyList()
+    val fcmTokens: List<String> = emptyList(),
+
+    // --- NUEVO: FICHA MÉDICA Y LEGALES ---
+    var hasHeartCondition: Boolean? = null,
+    var hasInjuries: Boolean? = null,
+    var medicalNotes: String? = null,
+    var waiverAccepted: Boolean? = null,
+    var waiverDate: Date? = null, // Firestore lo mapea automático a Timestamp/Date
+
+    // --- RASTRO DIGITAL LEGAL (AUDITORÍA) ---
+    var waiverVersion: String? = null,
+    var waiverDevice: String? = null
 ) {
     @get:Exclude
     val hasValidCredits: Boolean
@@ -56,7 +67,6 @@ data class User(
     val isMember: Boolean
         get() = this.role == "member"
 
-    // --- ESTA ES LA PROPIEDAD QUE FALTABA ---
     // Permite entrar al Horario si es Admin, tiene créditos O tiene reservas pendientes.
     @get:Exclude
     val canAccessSchedule: Boolean

@@ -10,13 +10,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.* // Trae todos los iconos (Verified, Warning, etc)
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -35,15 +34,14 @@ import com.aquiles.crosschapp.presentation.viewmodel.UserDetailsState
 import java.text.SimpleDateFormat
 import java.util.*
 
-// --- DESIGN SYSTEM CONSTANTS ---
+// CONSTANTES
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorBackgroundGradientStart = Color(0xFF000000)
-private val ColorBackgroundGradientEnd = Color(0xFF121212)
 private val ColorError = Color(0xFFEF5350)
+private val ColorSuccess = Color(0xFF4CAF50)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,61 +53,24 @@ fun AdminUserDetailsScreen(
 ) {
     val userDetailsState by adminViewModel.userDetailsState.collectAsState()
 
-    LaunchedEffect(key1 = userId) {
-        adminViewModel.loadUserDetails(userId)
-    }
+    LaunchedEffect(key1 = userId) { adminViewModel.loadUserDetails(userId) }
+    DisposableEffect(Unit) { onDispose { adminViewModel.clearUserDetails() } }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            adminViewModel.clearUserDetails()
-        }
-    }
-
-    // --- UI STRUCTURE ---
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f))) {
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
                     title = { Text("Perfil de Alumno", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
-                    navigationIcon = {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
-                        }
-                    },
+                    navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary) } },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
                 )
             },
             containerColor = Color.Transparent
         ) { localScaffoldPadding ->
             when (val state = userDetailsState) {
-                is UserDetailsState.Loading, is UserDetailsState.Idle -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = ColorPrimaryAction)
-                    }
-                }
-                is UserDetailsState.Error -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize().padding(localScaffoldPadding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = state.message,
-                            color = ColorError,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-                is UserDetailsState.Success -> {
-                    UserProfileContent(
-                        user = state.user,
-                        localScaffoldPadding = localScaffoldPadding,
-                        mainScaffoldPadding = innerPadding
-                    )
-                }
+                is UserDetailsState.Loading, is UserDetailsState.Idle -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) }
+                is UserDetailsState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(state.message, color = ColorError) }
+                is UserDetailsState.Success -> UserProfileContent(user = state.user, localScaffoldPadding = localScaffoldPadding, mainScaffoldPadding = innerPadding)
             }
         }
     }
@@ -124,10 +85,7 @@ private fun UserProfileContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(
-                top = localScaffoldPadding.calculateTopPadding(),
-                bottom = mainScaffoldPadding.calculateBottomPadding()
-            )
+            .padding(top = localScaffoldPadding.calculateTopPadding(), bottom = mainScaffoldPadding.calculateBottomPadding())
             .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -135,74 +93,80 @@ private fun UserProfileContent(
     ) {
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Avatar Grande
+        // AVATAR
         Box(
-            modifier = Modifier
-                .size(130.dp)
-                .clip(CircleShape)
-                .background(Color.Black)
-                .border(2.dp, ColorPrimaryAction, CircleShape),
+            modifier = Modifier.size(130.dp).clip(CircleShape).background(Color.Black).border(2.dp, ColorPrimaryAction, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             SubcomposeAsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(user.profileImageUrl ?: "")
-                    .crossfade(true)
-                    .build(),
-                contentDescription = "Foto de perfil",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            ) {
-                val painterState = painter.state
-                if (painterState is AsyncImagePainter.State.Loading || painterState is AsyncImagePainter.State.Error) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(60.dp),
-                        tint = ColorTextSecondary
-                    )
-                } else {
-                    SubcomposeAsyncImageContent()
-                }
-            }
+                model = ImageRequest.Builder(LocalContext.current).data(user.profileImageUrl ?: "").crossfade(true).build(),
+                contentDescription = "Foto", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
+            ) { if (painter.state is AsyncImagePainter.State.Error) Icon(Icons.Default.Person, null, modifier = Modifier.size(60.dp), tint = ColorTextSecondary) else SubcomposeAsyncImageContent() }
         }
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = user.fullName,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = ColorTextPrimary
-            )
-            Text(
-                text = if (user.role == "owner") "Administrador" else if (user.role == "coach") "Coach" else "Alumno",
-                style = MaterialTheme.typography.bodyLarge,
-                color = ColorPrimaryAction
-            )
+            Text(text = user.fullName, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+            Text(text = user.role.uppercase(), style = MaterialTheme.typography.bodyLarge, color = ColorPrimaryAction)
+        }
+
+        // --- 1. NUEVA TARJETA: AUDITORÍA LEGAL ---
+        GlassInfoCard(title = "Auditoría Legal y Médica", icon = Icons.Default.Shield) {
+
+            // ESTADO DE FIRMA
+            if (user.waiverAccepted == true) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Verified, null, tint = ColorSuccess)
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text("Firma VÁLIDA", color = ColorSuccess, fontWeight = FontWeight.Bold)
+                        Text("Versión: ${user.waiverVersion ?: "1.0"}", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                    }
+                }
+
+                // Detalles Forenses
+                val dateStr = user.waiverDate?.let { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(it) } ?: "-"
+                InfoDetailRow(icon = Icons.Default.History, label = "Firmado el", value = dateStr)
+
+                if (!user.waiverDevice.isNullOrBlank()) {
+                    InfoDetailRow(icon = Icons.Default.Smartphone, label = "Dispositivo", value = user.waiverDevice!!)
+                }
+
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, null, tint = ColorError)
+                    Spacer(Modifier.width(8.dp))
+                    Text("NO ha firmado renuncia", color = ColorError, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            HorizontalDivider(color = ColorBorder)
+
+            // DATOS MÉDICOS
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Cardíaco:", color = ColorTextSecondary)
+                Text(if (user.hasHeartCondition == true) "SÍ" else "NO", color = if (user.hasHeartCondition == true) ColorError else ColorSuccess, fontWeight = FontWeight.Bold)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Lesiones:", color = ColorTextSecondary)
+                Text(if (user.hasInjuries == true) "SÍ" else "NO", color = if (user.hasInjuries == true) Color(0xFFFFA500) else ColorSuccess, fontWeight = FontWeight.Bold)
+            }
+
+            if (!user.medicalNotes.isNullOrBlank()) {
+                Text("Notas:", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                Text(user.medicalNotes!!, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            }
         }
 
         GlassInfoCard(title = "Contacto", icon = Icons.Default.ContactMail) {
             InfoDetailRow(icon = Icons.Default.Email, label = "Email", value = user.email)
-            InfoDetailRow(
-                icon = Icons.Default.Phone,
-                label = "Teléfono",
-                value = user.phoneNumber.takeIf { !it.isNullOrBlank() } ?: "No especificado"
-            )
-            InfoDetailRow(
-                icon = Icons.Default.HealthAndSafety,
-                label = "Emergencia",
-                value = user.emergencyContact?.takeIf { it.isNotBlank() } ?: "No especificado"
-            )
+            InfoDetailRow(icon = Icons.Default.Phone, label = "Teléfono", value = user.phoneNumber?.takeIf { it.isNotBlank() } ?: "-")
+            InfoDetailRow(icon = Icons.Default.HealthAndSafety, label = "Emergencia", value = user.emergencyContact?.takeIf { it.isNotBlank() } ?: "-")
         }
 
         GlassInfoCard(title = "Membresía", icon = Icons.Default.CardMembership) {
-            InfoDetailRow(icon = Icons.Default.ConfirmationNumber, label = "Créditos Disponibles", value = "${user.credits}")
-            val dateFormat = remember { SimpleDateFormat("dd 'de' MMMM, yyyy", Locale("es", "ES")) }
-            InfoDetailRow(
-                icon = Icons.Default.EventAvailable,
-                label = "Vencimiento",
-                value = user.creditValidUntil?.let { dateFormat.format(it) } ?: "Sin fecha límite"
-            )
+            InfoDetailRow(icon = Icons.Default.ConfirmationNumber, label = "Créditos", value = "${user.credits}")
+            val date = user.creditValidUntil?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: "-"
+            InfoDetailRow(icon = Icons.Default.EventAvailable, label = "Vencimiento", value = date)
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -210,16 +174,10 @@ private fun UserProfileContent(
 }
 
 @Composable
-private fun GlassInfoCard(
-    title: String,
-    icon: ImageVector,
-    content: @Composable ColumnScope.() -> Unit
-) {
+private fun GlassInfoCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, ColorBorder), colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -227,14 +185,10 @@ private fun GlassInfoCard(
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
             }
-
             Spacer(Modifier.height(16.dp))
             HorizontalDivider(color = ColorBorder)
             Spacer(Modifier.height(16.dp))
-
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                content()
-            }
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { content() }
         }
     }
 }
@@ -242,25 +196,11 @@ private fun GlassInfoCard(
 @Composable
 private fun InfoDetailRow(icon: ImageVector, label: String, value: String) {
     Row(verticalAlignment = Alignment.Top) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp).padding(top = 2.dp),
-            tint = ColorTextSecondary
-        )
+        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp).padding(top = 2.dp), tint = ColorTextSecondary)
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = ColorTextSecondary
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = ColorTextPrimary
-            )
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+            Text(text = value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = ColorTextPrimary)
         }
     }
 }

@@ -14,12 +14,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security // <--- NUEVO
+import androidx.compose.material.icons.filled.Shield // <--- NUEVO
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -44,14 +45,13 @@ private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorBackgroundGradientStart = Color(0xFF000000)
-private val ColorBackgroundGradientEnd = Color(0xFF121212)
 private val ColorError = Color(0xFFEF5350)
 private val ColorSuccess = Color(0xFF4CAF50)
 private val ColorWarning = Color(0xFFFFA500)
 
+// 1. ACTUALIZAMOS EL ENUM LOCAL DE ORDENAMIENTO
 private enum class SortOrder {
-    EXPIRATION_SOON, ALPHABETICAL, MOST_CREDITS
+    EXPIRATION_SOON, ALPHABETICAL, MOST_CREDITS, MISSING_WAIVER
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,14 +63,14 @@ fun AdminManageUsersScreen(
 ) {
     var selectedUserIds by remember { mutableStateOf(setOf<String>()) }
     var searchQuery by remember { mutableStateOf("") }
-    var sortOrder by remember { mutableStateOf(SortOrder.EXPIRATION_SOON) }
+    // Por defecto mostramos riesgo legal primero, o vencimiento (tu eliges)
+    var sortOrder by remember { mutableStateOf(SortOrder.MISSING_WAIVER) }
     val userListState by adminViewModel.userListState.collectAsState()
 
     LaunchedEffect(Unit) {
         adminViewModel.loadAllUsers()
     }
 
-    // --- UI STRUCTURE ---
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -110,45 +110,45 @@ fun AdminManageUsersScreen(
                     .padding(top = localScaffoldPadding.calculateTopPadding())
                     .padding(horizontal = 16.dp)
             ) {
-                // Buscador Glass
-                GlassSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it }
-                )
+                GlassSearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Filtros
+                // 2. FILTROS (SCROLLABLE ROW SI SON MUCHOS)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // --- NUEVO FILTRO: SIN FIRMA ---
+                    GlassFilterChip(
+                        selected = sortOrder == SortOrder.MISSING_WAIVER,
+                        onClick = { sortOrder = SortOrder.MISSING_WAIVER },
+                        label = "⚠️ Sin Firma"
+                    )
                     GlassFilterChip(
                         selected = sortOrder == SortOrder.EXPIRATION_SOON,
                         onClick = { sortOrder = SortOrder.EXPIRATION_SOON },
-                        label = "Por Vencer"
+                        label = "Vencen"
                     )
                     GlassFilterChip(
                         selected = sortOrder == SortOrder.ALPHABETICAL,
                         onClick = { sortOrder = SortOrder.ALPHABETICAL },
                         label = "A-Z"
                     )
-                    GlassFilterChip(
-                        selected = sortOrder == SortOrder.MOST_CREDITS,
-                        onClick = { sortOrder = SortOrder.MOST_CREDITS },
-                        label = "Más Créditos"
-                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 when (val state = userListState) {
-                    is UserListState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) }
-                    is UserListState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${state.message}", color = ColorError) }
+                    is UserListState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) }
+                    is UserListState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${state.message}", color = ColorError) }
                     is UserListState.Success -> {
+
+                        // 3. LÓGICA DE ORDENAMIENTO ACTUALIZADA
                         val filteredAndSortedUsers = remember(searchQuery, sortOrder, state.users) {
                             val filtered = state.users.filter { user -> user.fullName.contains(searchQuery, ignoreCase = true) }
                             when (sortOrder) {
+                                SortOrder.MISSING_WAIVER -> filtered.sortedBy { it.waiverAccepted == true } // False (no firmó) va primero
                                 SortOrder.EXPIRATION_SOON -> filtered.sortedBy { it.creditValidUntil ?: Date(Long.MAX_VALUE) }
                                 SortOrder.ALPHABETICAL -> filtered.sortedBy { it.fullName }
                                 SortOrder.MOST_CREDITS -> filtered.sortedByDescending { it.credits }
@@ -156,7 +156,7 @@ fun AdminManageUsersScreen(
                         }
 
                         if (filteredAndSortedUsers.isEmpty()) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No se encontraron alumnos.", color = ColorTextSecondary) }
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No se encontraron alumnos.", color = ColorTextSecondary) }
                         } else {
                             LazyColumn(
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -182,26 +182,18 @@ fun AdminManageUsersScreen(
     }
 }
 
-// =====================================================
-// COMPONENTES UI (GLASS STYLE)
-// =====================================================
-
+// ... (GlassSearchBar y GlassFilterChip siguen igual) ...
 @Composable
 fun GlassSearchBar(query: String, onQueryChange: (String) -> Unit) {
     OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text("Buscar por nombre...", color = ColorTextSecondary) },
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = ColorTextSecondary) },
+        value = query, onValueChange = onQueryChange, modifier = Modifier.fillMaxWidth(),
+        label = { Text("Buscar...", color = ColorTextSecondary) },
+        leadingIcon = { Icon(Icons.Default.Search, null, tint = ColorTextSecondary) },
         singleLine = true,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = ColorPrimaryAction,
-            unfocusedBorderColor = ColorBorder,
-            focusedTextColor = ColorTextPrimary,
-            cursorColor = ColorPrimaryAction,
-            focusedContainerColor = ColorGlassSurface,
-            unfocusedContainerColor = ColorGlassSurface
+            focusedBorderColor = ColorPrimaryAction, unfocusedBorderColor = ColorBorder,
+            focusedTextColor = ColorTextPrimary, cursorColor = ColorPrimaryAction,
+            focusedContainerColor = ColorGlassSurface, unfocusedContainerColor = ColorGlassSurface
         ),
         shape = RoundedCornerShape(12.dp)
     )
@@ -216,14 +208,14 @@ fun GlassFilterChip(selected: Boolean, onClick: () -> Unit, label: String) {
         colors = FilterChipDefaults.filterChipColors(
             containerColor = ColorGlassSurface,
             selectedContainerColor = ColorPrimaryAction,
-            labelColor = ColorTextSecondary,
+            labelColor = ColorTextSecondary, // Color del texto cuando no está seleccionado
             selectedLabelColor = Color.White
         ),
         border = FilterChipDefaults.filterChipBorder(
+            enabled = true, // <--- ESTA LÍNEA FALTABA Y CAUSABA EL ERROR
+            selected = selected,
             borderColor = ColorBorder,
-            selectedBorderColor = Color.Transparent,
-            enabled = true,
-            selected = selected
+            selectedBorderColor = Color.Transparent
         )
     )
 }
@@ -236,21 +228,18 @@ fun UserStatusItemGlass(
     onUserClick: (String) -> Unit,
     onSendMessageClick: (String, String) -> Unit
 ) {
-    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale("es", "ES")) }
+    val dateFormat = remember { SimpleDateFormat("dd MMM", Locale("es", "ES")) }
     val today = Calendar.getInstance()
     val expirationDate = user.creditValidUntil?.let { Calendar.getInstance().apply { time = it } }
-    val daysUntilExpiration = expirationDate?.let { TimeUnit.MILLISECONDS.toDays(it.timeInMillis - today.timeInMillis) }
 
+    // Lógica Status Color
     val statusColor = when {
         expirationDate == null || expirationDate.before(today) -> ColorError
-        daysUntilExpiration != null && daysUntilExpiration <= 7 -> ColorWarning
         else -> ColorSuccess
     }
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onUserClick(user.id) },
+        modifier = Modifier.fillMaxWidth().clickable { onUserClick(user.id) },
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, if (isSelected) ColorPrimaryAction else ColorBorder),
         colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
@@ -259,79 +248,48 @@ fun UserStatusItemGlass(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Checkbox area
             Box(modifier = Modifier.clickable { onSelectionChange() }) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onSelectionChange() },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = ColorPrimaryAction,
-                        uncheckedColor = ColorTextSecondary,
-                        checkmarkColor = Color.White
-                    )
-                )
+                Checkbox(checked = isSelected, onCheckedChange = { onSelectionChange() }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary))
             }
-
             Spacer(modifier = Modifier.width(8.dp))
 
             // Avatar
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.size(50.dp).clip(CircleShape).background(Color.Black), contentAlignment = Alignment.Center) {
                 SubcomposeAsyncImage(
                     model = ImageRequest.Builder(LocalContext.current).data(user.profileImageUrl).crossfade(true).build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    if (painter.state is AsyncImagePainter.State.Loading || painter.state is AsyncImagePainter.State.Error) {
-                        Icon(Icons.Default.Person, null, tint = ColorTextSecondary, modifier = Modifier.size(24.dp))
-                    } else {
-                        SubcomposeAsyncImageContent()
-                    }
-                }
+                    contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
+                ) { if (painter.state is AsyncImagePainter.State.Error) Icon(Icons.Default.Person, null, tint = ColorTextSecondary) else SubcomposeAsyncImageContent() }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Info
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = user.fullName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorTextPrimary
-                )
-                Text(
-                    text = "Créditos: ${user.credits}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ColorTextSecondary
-                )
+                // 4. NOMBRE + ESCUDO SI FALTA FIRMA
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = user.fullName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
 
+                    if (user.waiverAccepted != true) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Security, // O Icons.Default.Shield
+                            contentDescription = "Sin Firma",
+                            tint = ColorError,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Text(text = "Créditos: ${user.credits}", style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(statusColor))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = user.creditValidUntil?.let { dateFormat.format(it) } ?: "Sin membresía",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ColorTextSecondary.copy(alpha = 0.8f)
-                    )
+                    Text(text = user.creditValidUntil?.let { dateFormat.format(it) } ?: "-", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary.copy(alpha = 0.8f))
                 }
             }
 
-            // Botón Mensaje Directo
             IconButton(onClick = { onSendMessageClick(user.id, user.fullName) }) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Mensaje",
-                    tint = ColorPrimaryAction
-                )
+                Icon(Icons.AutoMirrored.Filled.Send, "Mensaje", tint = ColorPrimaryAction)
             }
         }
     }

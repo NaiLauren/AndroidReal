@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import com.aquiles.crosschapp.R
@@ -47,10 +49,9 @@ import com.aquiles.crosschapp.ui.theme.CrossChAppTheme
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f) // Más opaco para legibilidad
-private val ColorBackgroundGradientStart = Color(0xFF000000)
-private val ColorBackgroundGradientEnd = Color(0xFF121212)
+private val ColorBorder = Color.White.copy(alpha = 0.1f) // Borde muy sutil
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f) // Fondo de tarjeta principal
+private val ColorInputBackground = Color.Black.copy(alpha = 0.3f) // Fondo de los inputs (dentro de la tarjeta)
 
 @Composable
 fun RegisterScreen(
@@ -70,6 +71,7 @@ fun RegisterScreen(
     }
     val selectedGym by authViewModel.selectedGym.collectAsState()
 
+    // Form States
     var name by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var phoneNumber by remember { mutableStateOf("") }
@@ -81,6 +83,7 @@ fun RegisterScreen(
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var passwordsDoNotMatch by remember { mutableStateOf(false) }
 
+    // Handlers
     LaunchedEffect(authState) {
         when (val state = authState) {
             is AuthState.Success -> {
@@ -98,19 +101,21 @@ fun RegisterScreen(
 
     // --- UI STRUCTURE ---
     Box(modifier = Modifier.fillMaxSize()) {
-        // Fondo de Imagen con Overlay Gradiente para mejorar contraste
+        // 1. Fondo e Imagen
         Image(
             painter = painterResource(id = R.drawable.fondo5),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
+        // Gradiente oscuro
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.1f), Color.Black.copy(alpha = 0.8f))))
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.2f), Color.Black.copy(alpha = 0.9f))))
         )
 
+        // 2. Contenido Scrolleable
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -119,9 +124,9 @@ fun RegisterScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Spacer(Modifier.height(40.dp)) // Espacio superior
+            Spacer(Modifier.height(50.dp)) // Espacio superior
 
-            // Tarjeta Glass Contenedora
+            // Tarjeta Glass Contenedora (Formulario)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
@@ -147,17 +152,25 @@ fun RegisterScreen(
                         )
                     }
 
-                    Text(
-                        text = "Únete a ${selectedGym?.name ?: "TribeOnMove"}",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorTextPrimary,
-                        textAlign = TextAlign.Center
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Únete a",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ColorTextSecondary
+                        )
+                        Text(
+                            text = selectedGym?.name ?: "TribeOnMove",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorTextPrimary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                    // Inputs Estilizados
+                    // --- INPUTS ---
+                    // Usamos el nuevo estilo "Filled Glass" para mejor contraste dentro de la tarjeta
                     GlassRegisterTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -190,7 +203,6 @@ fun RegisterScreen(
                         keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
 
-                    // Password
                     GlassRegisterTextField(
                         value = password,
                         onValueChange = { password = it; passwordsDoNotMatch = false },
@@ -205,7 +217,6 @@ fun RegisterScreen(
                         keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
 
-                    // Confirm Password
                     GlassRegisterTextField(
                         value = confirmPassword,
                         onValueChange = { confirmPassword = it; passwordsDoNotMatch = false },
@@ -226,12 +237,14 @@ fun RegisterScreen(
                             text = "Las contraseñas no coinciden.",
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
                         )
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // --- BOTÓN CON GLOW ---
                     Button(
                         onClick = {
                             if (password == confirmPassword) {
@@ -244,7 +257,10 @@ fun RegisterScreen(
                                 passwordsDoNotMatch = true
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .shadow(10.dp, RoundedCornerShape(12.dp), spotColor = ColorPrimaryAction), // Glow
                         enabled = name.isNotBlank() && lastName.isNotBlank() && email.isNotBlank() && password.length >= 6 && confirmPassword.isNotBlank() && authState !is AuthState.Loading,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ColorPrimaryAction,
@@ -255,7 +271,7 @@ fun RegisterScreen(
                         if (authState is AuthState.Loading) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                         } else {
-                            Text("REGISTRARSE", fontWeight = FontWeight.Bold)
+                            Text("REGISTRARSE", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         }
                     }
 
@@ -268,11 +284,12 @@ fun RegisterScreen(
                 }
             }
 
-            Spacer(Modifier.height(40.dp)) // Espacio inferior
+            Spacer(Modifier.height(50.dp)) // Espacio inferior generoso
         }
     }
 }
 
+// --- INPUT MEJORADO (Estilo Login) ---
 @Composable
 fun GlassRegisterTextField(
     value: String,
@@ -284,21 +301,31 @@ fun GlassRegisterTextField(
     trailingIcon: @Composable (() -> Unit)? = null,
     isError: Boolean = false
 ) {
-    OutlinedTextField(
+    // Usamos TextField estándar en lugar de Outlined para que se vea como un bloque sólido
+    // Esto es más consistente con el "Box" style del LoginScreen
+    TextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, color = ColorTextSecondary) },
-        modifier = Modifier.fillMaxWidth(),
+        label = { Text(label) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                BorderStroke(1.dp, if (isError) MaterialTheme.colorScheme.error else ColorBorder),
+                RoundedCornerShape(12.dp)
+            ),
         singleLine = true,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = ColorPrimaryAction,
-            unfocusedBorderColor = ColorBorder,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = ColorInputBackground, // Fondo oscuro semitransparente
+            unfocusedContainerColor = ColorInputBackground,
+            disabledContainerColor = ColorInputBackground,
             focusedTextColor = ColorTextPrimary,
             unfocusedTextColor = ColorTextPrimary,
+            focusedLabelColor = ColorPrimaryAction, // Label Naranja al enfocar
+            unfocusedLabelColor = ColorTextSecondary,
             cursorColor = ColorPrimaryAction,
-            focusedContainerColor = Color.Transparent,
-            unfocusedContainerColor = Color.Transparent,
-            errorBorderColor = MaterialTheme.colorScheme.error,
+            focusedIndicatorColor = Color.Transparent, // Sin linea inferior
+            unfocusedIndicatorColor = Color.Transparent,
+            errorIndicatorColor = Color.Transparent,
             errorLabelColor = MaterialTheme.colorScheme.error
         ),
         shape = RoundedCornerShape(12.dp),
