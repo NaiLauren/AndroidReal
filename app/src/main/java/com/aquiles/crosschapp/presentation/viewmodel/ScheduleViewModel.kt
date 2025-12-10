@@ -99,7 +99,6 @@ class ScheduleViewModel : ViewModel() {
             .addSnapshotListener { s, e ->
                 if (e != null) {
                     // Si falla por falta de índice, el logcat te dará el link para crearlo.
-                    // Mientras tanto, mostramos error o null.
                     _nextBookingState.value = NextBookingState.Error(e.message ?: "Error loading next booking")
                     return@addSnapshotListener
                 }
@@ -171,11 +170,7 @@ class ScheduleViewModel : ViewModel() {
                 if (!user.hasValidCredits && !isAdminOrCoach) throw IllegalStateException("Sin créditos")
 
                 val now = Date()
-                val thirtyMinBefore = Date(gymClass.dateTime.time - (30 * 60 * 1000))
                 if (now.after(gymClass.dateTime)) throw IllegalStateException("Clase finalizada")
-
-                // Permitir reservar tarde si hay cupo (opcional, ajustado a tu regla de negocio)
-                // if (now.after(thirtyMinBefore) && gymClass.enrolledUserIds.isEmpty()) throw IllegalStateException("Clase cerrada")
 
                 firestore.runTransaction { tx ->
                     val userRef = firestore.collection("users").document(user.id)
@@ -217,13 +212,21 @@ class ScheduleViewModel : ViewModel() {
             _bookingState.value = BookingState.Loading(classId)
             try {
                 val classDoc = firestore.collection("gymClasses").document(classId).get().await()
-                val gymClass = classDoc.toObject(GymClass::class.java) ?: throw IllegalStateException("Clase no encontrada")
+                val gymClass = classDoc.toObject(GymClass::class.java)
+                    ?: throw IllegalStateException("Clase no encontrada")
 
+                if (gymClass.dateTime == null) throw IllegalStateException("Fecha inválida")
+
+                // --- INICIO DE VALIDACIÓN 30 MINUTOS ---
                 val now = Date()
-                val thirtyMinBefore = Date(gymClass.dateTime!!.time - (30 * 60 * 1000))
+                val thirtyMinBefore = Date(gymClass.dateTime.time - (30 * 60 * 1000))
                 val isAdminOrCoach = user.role == "owner" || user.role == "coach"
 
-                if (now.after(thirtyMinBefore) && !isAdminOrCoach) throw IllegalStateException("Fuera de tiempo para cancelar")
+                // Si NO es admin/entrenador Y ya pasó el límite de tiempo (faltan menos de 30 min)
+                if (now.after(thirtyMinBefore) && !isAdminOrCoach) {
+                    throw IllegalStateException("No se puede cancelar con menos de 30 minutos de antelación.")
+                }
+                // --- FIN DE VALIDACIÓN ---
 
                 firestore.runTransaction { tx ->
                     val userRef = firestore.collection("users").document(user.id)

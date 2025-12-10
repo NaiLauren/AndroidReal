@@ -4,7 +4,7 @@
 package com.aquiles.crosschapp
 
 import android.Manifest
-import android.annotation.SuppressLint // <-- Import necesario para la corrección
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -37,6 +37,7 @@ import com.aquiles.crosschapp.presentation.navigation.AppBottomNavigationBar
 import com.aquiles.crosschapp.presentation.navigation.BottomNavItem
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import com.aquiles.crosschapp.ui.theme.CrossChAppTheme
+import com.aquiles.crosschapp.presentation.home.AdminPaymentConfigScreen // IMPORTANTE: Importar la nueva pantalla
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
@@ -44,12 +45,9 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
-        // --- CORRECCIÓN DE WARNING 2: Cuerpos de if/else vacíos ---
         if (isGranted) {
-            // Permiso concedido, no se requiere acción inmediata.
             Log.d("Permissions", "POST_NOTIFICATIONS permission granted.")
         } else {
-            // Permiso denegado, se puede mostrar un mensaje si fuera necesario.
             Log.d("Permissions", "POST_NOTIFICATIONS permission denied.")
         }
     }
@@ -254,8 +252,6 @@ fun NavGraphBuilder.mainGraph(
                 adminViewModel = viewModel(),
                 scheduleViewModel = viewModel(),
                 performanceViewModel = performanceViewModel,
-                onNavigateToCreateWod = { navController.navigate("create_edit_wod_screen") },
-                onNavigateToEditWod = { wodId: String -> navController.navigate("create_edit_wod_screen?wodId=$wodId") },
                 onNavigateToClassDetail = { classId: String -> navController.navigate("class_details/$classId") },
                 onNavigateToScheduleAtDate = { date: LocalDate -> navController.navigate(BottomNavItem.Schedule.route + "?date=" + date.toString()) },
                 onNavigateToWodHistory = { /* A implementar */ },
@@ -273,7 +269,7 @@ fun NavGraphBuilder.mainGraph(
                 innerPadding = innerPadding,
                 profileViewModel = viewModel(),
                 onNavigateBack = { navController.popBackStack() },
-                onLogout = onLogout // <--- AGREGAR ESTO
+                onLogout = onLogout
             )
         }
         composable("request_credits_screen") {
@@ -315,6 +311,15 @@ fun NavGraphBuilder.mainGraph(
                 navController = navController
             )
         }
+
+        // --- NUEVA RUTA: CONFIGURACIÓN DE PAGO ---
+        composable("admin_payment_config") {
+            AdminPaymentConfigScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        // -----------------------------------------
+
         composable("admin_manage_benchmarks") {
             AdminManageBenchmarksScreen(
                 innerPadding = innerPadding,

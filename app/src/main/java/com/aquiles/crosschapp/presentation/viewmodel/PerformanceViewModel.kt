@@ -18,48 +18,53 @@ import java.time.format.TextStyle
 import java.util.*
 import kotlinx.coroutines.flow.StateFlow
 
-// --- DATA CLASSES Y ENUMS A NIVEL SUPERIOR (CORRIGE ERRORES DE REDECLARACIÓN) ---
+// --- DATA CLASSES Y ENUMS ---
 data class WeeklyAttendanceDay(val dayName: String, val attended: Boolean)
 sealed interface AttendanceData {
     data class BarChartData(val values: List<Float>, val labels: List<String>) : AttendanceData
     data class WeeklySummaryData(val days: List<WeeklyAttendanceDay>) : AttendanceData
 }
 enum class TimeRange { WEEK, MONTH, YEAR }
+
 data class AttendanceChartUiState(
     val data: AttendanceData = AttendanceData.BarChartData(emptyList(), emptyList()),
     val selectedRange: TimeRange = TimeRange.MONTH,
     val isLoading: Boolean = true
 )
-// CORRECCIÓN: 'result' ahora es de tipo 'Any' para aceptar WodResult y BenchmarkResult
+
 data class PerformanceRecord(
     val result: Any,
     val wodDetails: Any?
 )
+
 sealed class PerformanceState {
     object Idle : PerformanceState()
     object Loading : PerformanceState()
     data class Success(val records: List<PerformanceRecord>) : PerformanceState()
     data class Error(val message: String) : PerformanceState()
 }
+
 sealed class AchievementState {
     object Idle: AchievementState()
     object Loading : AchievementState()
     data class Success(val achievements: List<Achievement>) : AchievementState()
     data class Error(val message: String) : AchievementState()
 }
+
 private data class AchievementData(
     val id: String,
     val title: String,
     val description: String,
     val iconName: String
 )
+
 sealed class SaveResultState {
     object Idle : SaveResultState()
     object Loading : SaveResultState()
     data class Success(val message: String) : SaveResultState()
     data class Error(val message: String) : SaveResultState()
 }
-// NUEVO ESTADO PARA GUARDAR BENCHMARKS
+
 sealed class BenchmarkSaveState {
     object Idle : BenchmarkSaveState()
     object Loading : BenchmarkSaveState()
@@ -76,27 +81,43 @@ class PerformanceViewModel : ViewModel() {
     // Estados para la UI
     private val _benchmarkRecordsState = MutableStateFlow<PerformanceState>(PerformanceState.Idle)
     val benchmarkRecordsState = _benchmarkRecordsState.asStateFlow()
+
     private val _dailyWodRecordsState = MutableStateFlow<PerformanceState>(PerformanceState.Idle)
     val dailyWodRecordsState = _dailyWodRecordsState.asStateFlow()
+
     private val _achievementsState = MutableStateFlow<AchievementState>(AchievementState.Idle)
     val achievementsState = _achievementsState.asStateFlow()
+
     private val _attendanceChartState = MutableStateFlow(AttendanceChartUiState())
     val attendanceChartState = _attendanceChartState.asStateFlow()
+
     private val _saveResultState = MutableStateFlow<SaveResultState>(SaveResultState.Idle)
     val saveResultState = _saveResultState.asStateFlow()
 
-    // NUEVOS ESTADOS AÑADIDOS
     private val _saveBenchmarkState = MutableStateFlow<BenchmarkSaveState>(BenchmarkSaveState.Idle)
     val saveBenchmarkState: StateFlow<BenchmarkSaveState> = _saveBenchmarkState.asStateFlow()
+
     private val _availableBenchmarks = MutableStateFlow<List<BenchmarkWod>>(emptyList())
     val availableBenchmarks: StateFlow<List<BenchmarkWod>> = _availableBenchmarks.asStateFlow()
 
+    // Variable local para caché de asistencia
     private var fullAttendanceHistory: List<AttendanceRecord> = emptyList()
 
+    /**
+     * Carga inicial de datos.
+     * IMPORTANTE: Resetea los estados para evitar mostrar datos del usuario anterior.
+     */
     fun loadInitialData() {
         val user = UserSession.currentUser.value
         val userId = user?.id
         val gymId = user?.gym_id
+
+        // 1. LIMPIEZA OBLIGATORIA: Borrar datos en memoria del usuario anterior
+        fullAttendanceHistory = emptyList()
+        _attendanceChartState.value = AttendanceChartUiState(isLoading = true)
+        _benchmarkRecordsState.value = PerformanceState.Loading
+        _dailyWodRecordsState.value = PerformanceState.Loading
+        _achievementsState.value = AchievementState.Loading
 
         if (userId.isNullOrBlank() || gymId.isNullOrBlank()) {
             val errorMsg = "Usuario no autenticado."
@@ -106,6 +127,8 @@ class PerformanceViewModel : ViewModel() {
             _attendanceChartState.update { it.copy(isLoading = false) }
             return
         }
+
+        // 2. Cargar datos frescos
         loadBenchmarkRecords(userId, gymId)
         loadDailyWodRecords(userId, gymId)
         checkAndAwardAchievements(user)
@@ -113,10 +136,9 @@ class PerformanceViewModel : ViewModel() {
     }
 
     private fun loadAttendanceHistory(userId: String, gymId: String) {
-        if (fullAttendanceHistory.isNotEmpty()) {
-            processAttendanceData(_attendanceChartState.value.selectedRange)
-            return
-        }
+        // CORRECCIÓN: Eliminado el chequeo "if (fullAttendanceHistory.isNotEmpty())"
+        // para obligar a recargar los datos correctos del usuario actual.
+
         viewModelScope.launch {
             _attendanceChartState.update { it.copy(isLoading = true) }
             try {
@@ -124,7 +146,11 @@ class PerformanceViewModel : ViewModel() {
                     .whereEqualTo("gym_id", gymId)
                     .whereEqualTo("userId", userId)
                     .get().await()
+
+                // Filtramos solo los que tienen fecha válida
                 fullAttendanceHistory = snapshot.toObjects(AttendanceRecord::class.java).filter { it.classDate != null }
+
+                // Procesamos con el rango seleccionado actualmente
                 processAttendanceData(_attendanceChartState.value.selectedRange)
             } catch (e: Exception) {
                 Log.e("PerformanceViewModel", "Error cargando historial de asistencia", e)
@@ -135,7 +161,15 @@ class PerformanceViewModel : ViewModel() {
 
     fun onTimeRangeSelected(range: TimeRange) {
         _attendanceChartState.update { it.copy(selectedRange = range) }
-        processAttendanceData(range)
+        // Si ya tenemos historial cargado, solo reprocesamos localmente
+        if (fullAttendanceHistory.isNotEmpty()) {
+            processAttendanceData(range)
+        } else {
+            // Si por alguna razón está vacío, intentamos recargar (fail-safe)
+            val uid = currentUserId
+            val gid = currentUserGymId
+            if (uid != null && gid != null) loadAttendanceHistory(uid, gid)
+        }
     }
 
     private fun processAttendanceData(range: TimeRange) {
@@ -150,6 +184,8 @@ class PerformanceViewModel : ViewModel() {
     private fun processForLast7Days(records: List<AttendanceRecord>): AttendanceData.WeeklySummaryData {
         val today = LocalDate.now()
         val days = mutableListOf<WeeklyAttendanceDay>()
+
+        // Mapeamos las fechas a conteos
         val recordsByDate = records.groupingBy {
             it.classDate!!.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
         }.eachCount()
@@ -157,6 +193,7 @@ class PerformanceViewModel : ViewModel() {
         for (i in 6 downTo 0) {
             val date = today.minusDays(i.toLong())
             val attended = recordsByDate[date] != null && recordsByDate[date]!! > 0
+            // Locale seguro
             val dayName = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")).uppercase()
             days.add(WeeklyAttendanceDay(dayName = dayName, attended = attended))
         }
@@ -196,7 +233,8 @@ class PerformanceViewModel : ViewModel() {
             val monthDate = today.minusMonths(i.toLong())
             val key = Pair(monthDate.year, monthDate.month)
             data.add(recordsByMonth[key]?.toFloat() ?: 0f)
-            labels.add(monthDate.month.getDisplayName(TextStyle.SHORT, Locale("es", "ES")).replace(".","").uppercase())
+            val label = monthDate.month.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")).replace(".","").uppercase()
+            labels.add(label)
         }
         return AttendanceData.BarChartData(data, labels)
     }
@@ -221,7 +259,6 @@ class PerformanceViewModel : ViewModel() {
         }
     }
 
-    // --- CORRECCIÓN CRÍTICA 1: La función usa BenchmarkResult y el estado correcto ---
     fun saveBenchmarkResult(result: BenchmarkResult) {
         viewModelScope.launch {
             _saveBenchmarkState.value = BenchmarkSaveState.Loading
@@ -239,7 +276,6 @@ class PerformanceViewModel : ViewModel() {
     fun resetSaveResultState() { _saveResultState.value = SaveResultState.Idle }
     fun resetSaveState() { _saveBenchmarkState.value = BenchmarkSaveState.Idle }
 
-    // --- NUEVA FUNCIÓN AÑADIDA ---
     fun loadAvailableBenchmarks(gymId: String) {
         viewModelScope.launch {
             try {
@@ -254,7 +290,6 @@ class PerformanceViewModel : ViewModel() {
         }
     }
 
-    // --- CORRECCIÓN CRÍTICA 2: Cargar y parsear BenchmarkResult correctamente ---
     fun loadBenchmarkRecords(userId: String, gymId: String) {
         viewModelScope.launch {
             _benchmarkRecordsState.value = PerformanceState.Loading
@@ -326,8 +361,11 @@ class PerformanceViewModel : ViewModel() {
     fun checkAndAwardAchievements(user: User) {
         val userId = user.id
         val gymId = user.gym_id
+
+        // CORRECCIÓN: Reseteamos estado para que no se vea el del usuario anterior mientras carga
+        _achievementsState.value = AchievementState.Loading
+
         viewModelScope.launch {
-            _achievementsState.value = AchievementState.Loading
             try {
                 val achievementsRef = firestore.collection("achievements")
                 val unlockedAchievementsSnapshot = achievementsRef
@@ -350,6 +388,7 @@ class PerformanceViewModel : ViewModel() {
                 val batch = firestore.batch()
                 var newAchievementsAwarded = false
 
+                // Si el usuario es nuevo (clases=0), este bucle no hará nada, lo cual es correcto
                 for ((requiredClasses, achievementData) in classCountAchievements) {
                     if (user.totalClassesAttended >= requiredClasses && achievementData.id !in unlockedAchievementIds) {
                         val newAchievement = Achievement(
@@ -361,7 +400,8 @@ class PerformanceViewModel : ViewModel() {
                             userId = userId,
                             gym_id = gymId
                         )
-                        val docRef = achievementsRef.document("${userId}_${achievementData.id}") // ID único
+                        // Usamos un ID que combine userId + achievementId para evitar duplicados
+                        val docRef = achievementsRef.document("${userId}_${achievementData.id}")
                         batch.set(docRef, newAchievement)
                         newAchievementsAwarded = true
                     }
@@ -371,6 +411,7 @@ class PerformanceViewModel : ViewModel() {
                     batch.commit().await()
                 }
 
+                // Cargar la lista actualizada (o vacía si es nuevo)
                 val allAchievementsSnapshot = achievementsRef
                     .whereEqualTo("gym_id", gymId)
                     .whereEqualTo("userId", userId)
@@ -386,7 +427,6 @@ class PerformanceViewModel : ViewModel() {
         }
     }
 
-    // --- CORRECCIÓN CRÍTICA 3: Borrar récords de forma segura y correcta ---
     fun deleteRecord(record: PerformanceRecord, isBenchmark: Boolean) {
         viewModelScope.launch {
             try {

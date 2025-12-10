@@ -1,6 +1,3 @@
-// RUTA: presentation/viewmodel/CreditsViewModel.kt
-// VERSIÓN CON CORRECCIÓN DE BLOQUEO DE HILO PRINCIPAL (UI THREAD)
-
 package com.aquiles.crosschapp.presentation.viewmodel
 
 import android.net.Uri
@@ -38,6 +35,7 @@ sealed class CreditRequestOperationState {
 }
 
 data class PaymentDetails(val bankTransferInfo: String = "", val mercadoPagoInfo: String = "")
+
 sealed class PaymentDetailsState {
     object Loading : PaymentDetailsState()
     data class Success(val details: PaymentDetails) : PaymentDetailsState()
@@ -66,6 +64,7 @@ class CreditsViewModel : ViewModel() {
         loadPaymentDetails()
     }
 
+    // Carga los packs y verifica si hay recargo en 'payment_info'
     fun loadAvailablePacks() {
         viewModelScope.launch {
             _offeringsState.value = OfferingsState.Loading
@@ -76,8 +75,12 @@ class CreditsViewModel : ViewModel() {
             }
 
             try {
-                val rulesSnapshot = firestore.collection("settings").document("billing_rules").get().await()
-                val rules = rulesSnapshot.toObject(BillingRules::class.java) ?: BillingRules()
+                // UNIFICADO: Todo en 'payment_info'
+                val configSnapshot = firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("payment_info")
+                    .get().await()
+
+                val isSurchargeActive = configSnapshot.getBoolean("isSurchargeActive") ?: false
 
                 val packsSnapshot = firestore.collection("creditPacks")
                     .whereEqualTo("gym_id", gymId)
@@ -86,10 +89,42 @@ class CreditsViewModel : ViewModel() {
                     .get().await()
 
                 val activePacks = packsSnapshot.documents.mapNotNull { it.toObject(CreditPack::class.java)?.copy(id = it.id) }
-                val finalPacks = if (rules.isSurchargeActive) activePacks.map { it.copy(price = it.surchargePrice) } else activePacks
-                _offeringsState.value = OfferingsState.Success(finalPacks, rules.isSurchargeActive)
+
+                // Aplica precio con recargo o normal
+                val finalPacks = if (isSurchargeActive) activePacks.map { it.copy(price = it.surchargePrice) } else activePacks
+
+                _offeringsState.value = OfferingsState.Success(finalPacks, isSurchargeActive)
             } catch (e: Exception) {
                 _offeringsState.value = OfferingsState.Error("No se pudieron cargar los packs.")
+            }
+        }
+    }
+
+    // Carga los textos de CBU/Alias desde 'payment_info'
+    fun loadPaymentDetails() {
+        viewModelScope.launch {
+            _paymentDetailsState.value = PaymentDetailsState.Loading
+            val gymId = currentUserGymId
+            if (gymId.isNullOrBlank()) {
+                _paymentDetailsState.value = PaymentDetailsState.Error("No se identificó el gimnasio.")
+                return@launch
+            }
+
+            try {
+                // UNIFICADO: Todo en 'payment_info'
+                val doc = firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("payment_info")
+                    .get().await()
+
+                if (doc.exists()) {
+                    val bankInfo = doc.getString("bankTransferInfo") ?: ""
+                    val mpInfo = doc.getString("mercadoPagoInfo") ?: ""
+                    _paymentDetailsState.value = PaymentDetailsState.Success(PaymentDetails(bankInfo, mpInfo))
+                } else {
+                    _paymentDetailsState.value = PaymentDetailsState.Success(PaymentDetails("Consultar en recepción", "Consultar en recepción"))
+                }
+            } catch (e: Exception) {
+                _paymentDetailsState.value = PaymentDetailsState.Error(e.localizedMessage ?: "Error al cargar información de pago.")
             }
         }
     }
@@ -103,12 +138,11 @@ class CreditsViewModel : ViewModel() {
             val gymId = user?.gym_id
 
             if (user == null || userId.isNullOrBlank() || gymId.isNullOrBlank()) {
-                _creditRequestOperationState.value = CreditRequestOperationState.Error("Sesión inválida. Vuelve a iniciar sesión.")
+                _creditRequestOperationState.value = CreditRequestOperationState.Error("Sesión inválida.")
                 return@launch
             }
 
             try {
-                // --- CAMBIO CLAVE: Mover toda la operación de red a un hilo de I/O ---
                 withContext(Dispatchers.IO) {
                     val newRequestRef = firestore.collection("creditRequests").document()
                     val requestId = newRequestRef.id
@@ -137,12 +171,8 @@ class CreditsViewModel : ViewModel() {
                     newRequestRef.set(newCreditRequest).await()
                     createUserConfirmationNotification(userId, pack.name, gymId)
                 }
-
-                // Al volver al hilo principal, actualizamos la UI con el éxito
                 _creditRequestOperationState.value = CreditRequestOperationState.Success("¡Solicitud enviada con éxito!")
-
             } catch (e: Exception) {
-                Log.e("CreditsViewModel", "Error en requestCredit", e)
                 _creditRequestOperationState.value = CreditRequestOperationState.Error(e.localizedMessage ?: "Error al enviar la solicitud.")
             }
         }
@@ -152,83 +182,21 @@ class CreditsViewModel : ViewModel() {
         val storagePath = "payment_proofs/$gymId/$userId/$fileName"
         val storageRef = storage.reference.child(storagePath)
 
-        Log.d("STORAGE_UPLOAD", "Iniciando subida a: $storagePath")
-
         return suspendCancellableCoroutine { continuation ->
             val uploadTask = storageRef.putFile(imageUri)
-
-            uploadTask
-                .addOnProgressListener { taskSnapshot ->
-                    val progress = (100.0 * taskSnapshot.bytesTransferred) / taskSnapshot.totalByteCount
-                    Log.d("STORAGE_UPLOAD", "Progreso: ${progress.toInt()}%")
-                }
-                .addOnSuccessListener {
-                    Log.d("STORAGE_UPLOAD", "¡Subida exitosa! Obteniendo URL de descarga...")
-                    storageRef.downloadUrl
-                        .addOnSuccessListener { uri ->
-                            Log.d("STORAGE_UPLOAD", "URL de descarga obtenida: $uri")
-                            if (continuation.isActive) {
-                                continuation.resume(uri.toString())
-                            }
-                        }
-                        .addOnFailureListener { exception ->
-                            Log.e("STORAGE_UPLOAD", "Error al obtener la URL de descarga", exception)
-                            if (continuation.isActive) {
-                                continuation.resumeWithException(exception)
-                            }
-                        }
-                }
-                .addOnFailureListener { exception ->
-                    Log.e("STORAGE_UPLOAD", "Error durante la subida del archivo", exception)
-                    if (continuation.isActive) {
-                        continuation.resumeWithException(exception)
-                    }
-                }
-                .addOnCanceledListener {
-                    Log.w("STORAGE_UPLOAD", "La subida fue cancelada")
-                    continuation.cancel()
-                }
-
-            continuation.invokeOnCancellation {
-                uploadTask.cancel()
-            }
+            uploadTask.addOnSuccessListener {
+                storageRef.downloadUrl.addOnSuccessListener { uri ->
+                    if (continuation.isActive) continuation.resume(uri.toString())
+                }.addOnFailureListener { e -> if (continuation.isActive) continuation.resumeWithException(e) }
+            }.addOnFailureListener { e -> if (continuation.isActive) continuation.resumeWithException(e) }
+                .addOnCanceledListener { continuation.cancel() }
         }
     }
 
     private suspend fun createUserConfirmationNotification(userId: String, comboName: String, gymId: String) {
-        val notification = Notification(
-            userId = userId,
-            gym_id = gymId,
-            title = "Solicitud Enviada",
-            message = "Tu pedido del combo \"$comboName\" está pendiente de aprobación.",
-            type = "CREDIT_PENDING"
-        )
-        try {
-            firestore.collection("notifications").add(notification).await()
-        } catch (e: Exception) {
-            Log.e("CreditsViewModel", "Error creating user notification", e)
-        }
+        val notification = Notification(userId = userId, gym_id = gymId, title = "Solicitud Enviada", message = "Tu pedido del combo \"$comboName\" está pendiente.", type = "CREDIT_PENDING")
+        try { firestore.collection("notifications").add(notification).await() } catch (e: Exception) { e.printStackTrace() }
     }
 
-    fun resetCreditRequestOperationState() {
-        _creditRequestOperationState.value = CreditRequestOperationState.Idle
-    }
-
-    fun loadPaymentDetails() {
-        viewModelScope.launch {
-            _paymentDetailsState.value = PaymentDetailsState.Loading
-            try {
-                val doc = firestore.collection("settings").document("payment_info").get().await()
-                if (doc.exists()) {
-                    val bankInfo = doc.getString("bankTransferInfo") ?: "No disponible."
-                    val mpInfo = doc.getString("mercadoPagoInfo") ?: "No disponible."
-                    _paymentDetailsState.value = PaymentDetailsState.Success(PaymentDetails(bankInfo, mpInfo))
-                } else {
-                    _paymentDetailsState.value = PaymentDetailsState.Error("Información de pago no configurada.")
-                }
-            } catch (e: Exception) {
-                _paymentDetailsState.value = PaymentDetailsState.Error(e.localizedMessage ?: "Error al cargar información.")
-            }
-        }
-    }
+    fun resetCreditRequestOperationState() { _creditRequestOperationState.value = CreditRequestOperationState.Idle }
 }

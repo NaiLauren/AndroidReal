@@ -131,6 +131,15 @@ private fun ManagementToolsSection(navController: NavController) {
             onClick = { navController.navigate("admin_manage_packs_screen") }
         )
 
+        // --- NUEVA OPCIÓN AÑADIDA AQUÍ ---
+        AdminOptionCardGlass(
+            title = "Métodos de Pago",
+            subtitle = "Configurar CBU, Alias y MP",
+            icon = Icons.Default.Payments,
+            onClick = { navController.navigate("admin_payment_config") }
+        )
+        // ---------------------------------
+
         AdminOptionCardGlass(
             title = "Benchmarks",
             subtitle = "WODs de referencia (Fran, Murph...)",

@@ -12,14 +12,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
@@ -27,13 +28,11 @@ import java.util.Calendar
 import java.util.Locale
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorBackgroundGradientStart = Color(0xFF000000)
-private val ColorBackgroundGradientEnd = Color(0xFF121212)
+private val ColorBorder = Color.White.copy(alpha = 0.15f)
 private val ColorError = Color(0xFFEF5350)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,22 +59,11 @@ fun AdminManageSchedulesScreen(
         }
     }
 
-    val timePickerDialog = TimePickerDialog(
-        context,
-        { _, hourOfDay, minute ->
-            val formattedTime = String.format(Locale.US, "%02d:%02d", hourOfDay, minute)
-            adminViewModel.addTimeToTemplate(formattedTime)
-        },
-        Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
-        Calendar.getInstance().get(Calendar.MINUTE),
-        true
-    )
-
     // --- UI STRUCTURE ---
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            .background(Color.Black) // Fondo sólido negro para evitar problemas visuales
     ) {
         Scaffold(
             topBar = {
@@ -91,7 +79,20 @@ fun AdminManageSchedulesScreen(
             },
             floatingActionButton = {
                 FloatingActionButton(
-                    onClick = { timePickerDialog.show() },
+                    onClick = {
+                        // Crear el dialogo AQUÍ dentro del onClick para evitar crash de contexto
+                        val cal = Calendar.getInstance()
+                        TimePickerDialog(
+                            context,
+                            { _, hourOfDay, minute ->
+                                val formattedTime = String.format(Locale.US, "%02d:%02d", hourOfDay, minute)
+                                adminViewModel.addTimeToTemplate(formattedTime)
+                            },
+                            cal.get(Calendar.HOUR_OF_DAY),
+                            cal.get(Calendar.MINUTE),
+                            true
+                        ).show()
+                    },
                     containerColor = ColorPrimaryAction,
                     contentColor = Color.White
                 ) {
@@ -105,17 +106,21 @@ fun AdminManageSchedulesScreen(
                     modifier = Modifier.fillMaxSize().padding(localPadding),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "No hay horarios configurados.\nPulsa + para añadir uno.",
-                        color = ColorTextSecondary,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.AccessTime, null, tint = ColorTextSecondary, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "No hay horarios base.\nPulsa + para añadir horas fijas.",
+                            color = ColorTextSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(
                         top = localPadding.calculateTopPadding() + 16.dp,
-                        bottom = innerPadding.calculateBottomPadding() + 80.dp, // Espacio para FAB
+                        bottom = innerPadding.calculateBottomPadding() + 80.dp,
                         start = 16.dp,
                         end = 16.dp
                     ),
@@ -133,10 +138,11 @@ fun AdminManageSchedulesScreen(
         }
     }
 
+    // Dialogo de confirmación Glass
     timeToDelete?.let { time ->
         AlertDialog(
             onDismissRequest = { timeToDelete = null },
-            containerColor = ColorGlassSurface, // Usando superficie glass para el diálogo también
+            containerColor = Color(0xFF1C1C1E),
             title = { Text("Eliminar Horario", color = ColorTextPrimary) },
             text = { Text("¿Eliminar $time de la plantilla?", color = ColorTextSecondary) },
             confirmButton = {
@@ -146,7 +152,7 @@ fun AdminManageSchedulesScreen(
                         timeToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorError)
-                ) { Text("Eliminar") }
+                ) { Text("Eliminar", color = Color.White) }
             },
             dismissButton = {
                 TextButton(onClick = { timeToDelete = null }) {
@@ -169,16 +175,20 @@ fun ScheduleTemplateItemGlass(
         colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = time,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = ColorTextPrimary
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AccessTime, null, tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = time,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorTextPrimary
+                )
+            }
             IconButton(onClick = onDeleteClick) {
                 Icon(Icons.Default.Delete, "Eliminar", tint = ColorError.copy(alpha = 0.8f))
             }

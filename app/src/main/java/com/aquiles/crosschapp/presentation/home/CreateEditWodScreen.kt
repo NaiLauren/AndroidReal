@@ -241,11 +241,12 @@ private fun CreateEditWodContent(
             Button(
                 onClick = {
                     date?.let {
+                        // CORRECCIÓN: Nombres de parámetros actualizados
                         adminViewModel.saveWod(
-                            originalWodId = wodId,
+                            originalId = wodId, // Antes: originalWodId
                             title = title.trim(),
                             type = type,
-                            description = description.trim(),
+                            desc = description.trim(), // Antes: description
                             date = it,
                             scoreType = scoreType,
                             notes = notes.trim()

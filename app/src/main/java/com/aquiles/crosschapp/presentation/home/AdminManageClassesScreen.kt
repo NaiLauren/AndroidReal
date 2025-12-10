@@ -14,10 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -30,14 +28,12 @@ import com.aquiles.crosschapp.presentation.viewmodel.ClassOperationState
 import java.text.SimpleDateFormat
 import java.util.*
 
-// --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+// --- CONSTANTS ---
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorBackgroundGradientStart = Color(0xFF000000)
-private val ColorBackgroundGradientEnd = Color(0xFF121212)
+private val ColorBorder = Color.White.copy(alpha = 0.15f)
 private val ColorError = Color(0xFFEF5350)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +62,7 @@ fun AdminManageClassesScreen(
                 adminViewModel.resetClassOperationState()
             }
             is ClassOperationState.Error -> {
+                // Solo mostramos el Toast, NO cerramos la pantalla
                 Toast.makeText(context, state.message, Toast.LENGTH_LONG).show()
                 adminViewModel.resetClassOperationState()
             }
@@ -73,11 +70,10 @@ fun AdminManageClassesScreen(
         }
     }
 
-    // --- UI STRUCTURE ---
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            .background(Color.Black)
     ) {
         Scaffold(
             topBar = {
@@ -104,11 +100,21 @@ fun AdminManageClassesScreen(
         ) { localScaffoldPadding ->
             when (val state = classListState) {
                 is ClassListState.Loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) }
-                is ClassListState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Error: ${state.message}", color = ColorError) }
+
+                is ClassListState.Error -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.ErrorOutline, null, tint = ColorError)
+                            Text("Error: ${state.message}", color = ColorTextSecondary, modifier = Modifier.padding(16.dp))
+                            Button(onClick = { adminViewModel.loadFutureClasses() }) { Text("Reintentar") }
+                        }
+                    }
+                }
+
                 is ClassListState.Success -> {
                     if (state.classes.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No hay clases programadas.", color = ColorTextSecondary)
+                            Text("No hay clases futuras programadas.", color = ColorTextSecondary)
                         }
                     } else {
                         LazyColumn(
@@ -140,11 +146,11 @@ fun AdminManageClassesScreen(
     classToDelete?.let { gymClass ->
         AlertDialog(
             onDismissRequest = { classToDelete = null },
-            containerColor = ColorGlassSurface,
+            containerColor = Color(0xFF1C1C1E),
             title = { Text("Eliminar Clase", color = ColorTextPrimary) },
             text = {
                 Text(
-                    "¿Eliminar '${gymClass.name}'?\nEsta acción es irreversible.",
+                    "¿Eliminar '${gymClass.name}'?\nEsta acción es irreversible y cancelará las reservas.",
                     color = ColorTextSecondary
                 )
             },
@@ -153,7 +159,7 @@ fun AdminManageClassesScreen(
                     onClick = { adminViewModel.deleteClass(gymClass.id); classToDelete = null },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorError)
                 ) {
-                    Text("Eliminar")
+                    Text("Eliminar", color = Color.White)
                 }
             },
             dismissButton = {
@@ -176,10 +182,13 @@ fun ClassManagementItemGlass(
     val classDate = gymClass.dateTime?.let { dateFormat.format(it) }?.uppercase() ?: "N/A"
     val occupancy = "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}"
 
+    // Determinar color del borde según el tipo o color de la clase
+    val customColor = try { Color(android.graphics.Color.parseColor(gymClass.hexColor)) } catch(e: Exception) { ColorPrimaryAction }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
+        border = BorderStroke(1.dp, customColor.copy(alpha = 0.3f)),
         colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -197,12 +206,11 @@ fun ClassManagementItemGlass(
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(classDate, style = MaterialTheme.typography.bodySmall, color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
+                    Text(classDate, style = MaterialTheme.typography.bodySmall, color = customColor, fontWeight = FontWeight.Bold)
                 }
 
-                // Badge de ocupación
                 Surface(
-                    color = Color.Black.copy(alpha = 0.1f),
+                    color = Color.Black.copy(alpha = 0.3f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Row(
@@ -227,11 +235,10 @@ fun ClassManagementItemGlass(
 
         HorizontalDivider(color = ColorBorder)
 
-        // Action Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {

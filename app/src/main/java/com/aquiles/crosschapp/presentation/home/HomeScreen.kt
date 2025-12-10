@@ -313,7 +313,7 @@ fun WelcomeGuideCardGlass() {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Default.RocketLaunch, contentDescription = null, tint = ColorPrimaryAction, modifier = Modifier.size(28.dp))
                 Text(
-                    text = "¡Bienvenido a TribeOnMove!",
+                    text = "¡Bienvenido a Real Fitness!",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = ColorTextPrimary

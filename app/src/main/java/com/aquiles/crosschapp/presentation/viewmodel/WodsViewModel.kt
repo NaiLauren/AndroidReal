@@ -3,20 +3,31 @@ package com.aquiles.crosschapp.presentation.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.aquiles.crosschapp.data.model.GymClass
 import com.aquiles.crosschapp.data.model.Wod
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.Calendar
 import java.util.Date
 
-// Estado de la UI para WODs
+// Estado para el Pager de Clases
+data class DailyClassesState(
+    val classes: List<GymClass> = emptyList(),
+    val initialScrollIndex: Int = 0,
+    val isLoading: Boolean = false
+)
+
+// Estado general
 sealed class WodsState {
     data object Loading : WodsState()
-    data class Success(val wods: List<Wod>) : WodsState() // Lista de WODs (como en iOS)
+    data class Success(val wods: List<Wod>) : WodsState()
     data class Error(val message: String) : WodsState()
 }
 
@@ -24,96 +35,133 @@ class WodsViewModel : ViewModel() {
 
     private val firestore = FirebaseFirestore.getInstance()
 
-    // Estado principal (Igual que @Published var wods en iOS)
+    // Estado principal
     private val _wodsState = MutableStateFlow<WodsState>(WodsState.Loading)
     val wodsState: StateFlow<WodsState> = _wodsState.asStateFlow()
 
-    // Listener para limpieza (Igual que private var listener en iOS)
-    private var listener: ListenerRegistration? = null
+    // Pager de Clases
+    private val _dailyClassesState = MutableStateFlow(DailyClassesState())
+    val dailyClassesState = _dailyClassesState.asStateFlow()
 
-    // Variable calculada para la UI del Dashboard (Hoy y Mañana)
-    // Esto ayuda a tu WodsScreen a saber cuál es cuál
+    // --- CORRECCIÓN: Reintegrado todayWod para la UI ---
     private val _todayWod = MutableStateFlow<Wod?>(null)
     val todayWod = _todayWod.asStateFlow()
 
     private val _tomorrowWod = MutableStateFlow<Wod?>(null)
     val tomorrowWod = _tomorrowWod.asStateFlow()
 
-    // MARK: - Fetch WODs (Espejo de iOS fetchWods)
-    // En iOS pides una fecha. En Android, como tu Dashboard muestra HOY y MAÑANA,
-    // vamos a hacer que esta función escuche un RANGO desde hoy.
+    private var listener: ListenerRegistration? = null
+
     fun listenForDashboardWods() {
-        listener?.remove()
-        _wodsState.value = WodsState.Loading
+        // 1. Cargar Clases para el carrusel
+        loadClassesForTodayPager()
+        // 2. Cargar WODs (Hoy y Mañana) para info general y compartir
+        loadWodsForDashboard()
+    }
 
-        // 1. Obtener gym_id (Igual que iOS UserSession.shared.currentUser?.gym_id)
-        val gymId = UserSession.currentUserGymId.value
-        if (gymId.isNullOrBlank()) {
-            _wodsState.value = WodsState.Error("No se pudo identificar el gimnasio.")
-            return
+    private fun loadClassesForTodayPager() {
+        val gymId = UserSession.currentUserGymId.value ?: return
+
+        viewModelScope.launch {
+            _dailyClassesState.update { it.copy(isLoading = true) }
+
+            try {
+                val calendar = Calendar.getInstance()
+                val startOfToday = getStartOfDay(calendar.time)
+                val endOfToday = getEndOfDay(calendar.time)
+
+                val snapshot = firestore.collection("gymClasses")
+                    .whereEqualTo("gym_id", gymId)
+                    .whereGreaterThanOrEqualTo("dateTime", startOfToday)
+                    .whereLessThan("dateTime", endOfToday)
+                    .orderBy("dateTime", Query.Direction.ASCENDING)
+                    .get().await()
+
+                val classes = snapshot.toObjects(GymClass::class.java)
+
+                val now = Date()
+                var scrollIndex = classes.indexOfFirst { gymClass ->
+                    // --- CORRECCIÓN: Null Safety para Date? ---
+                    val startTime = gymClass.dateTime?.time ?: return@indexOfFirst false
+                    val endTime = Date(startTime + (gymClass.durationMinutes * 60 * 1000))
+                    endTime.after(now)
+                }
+
+                if (scrollIndex == -1) {
+                    scrollIndex = if(classes.isNotEmpty()) classes.lastIndex else 0
+                }
+
+                _dailyClassesState.update {
+                    it.copy(classes = classes, initialScrollIndex = scrollIndex, isLoading = false)
+                }
+
+                _wodsState.value = WodsState.Success(emptyList())
+
+            } catch (e: Exception) {
+                Log.e("WodsViewModel", "Error cargando clases", e)
+                _dailyClassesState.update { it.copy(isLoading = false) }
+            }
         }
+    }
 
-        // 2. Calcular rangos de fecha (Start of Day)
+    private fun loadWodsForDashboard() {
+        val gymId = UserSession.currentUserGymId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                val calendar = Calendar.getInstance()
+                val startOfToday = getStartOfDay(calendar.time)
+
+                // Buscamos hasta el final de mañana
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
+                val endOfTomorrow = getEndOfDay(calendar.time)
+
+                // Reseteamos el calendario para comparar abajo
+                val todayCal = Calendar.getInstance()
+                val dayOfYearToday = todayCal.get(Calendar.DAY_OF_YEAR)
+
+                val snapshot = firestore.collection("wods")
+                    .whereEqualTo("gym_id", gymId)
+                    .whereGreaterThanOrEqualTo("date", startOfToday)
+                    .whereLessThan("date", endOfTomorrow)
+                    .get().await()
+
+                val wods = snapshot.toObjects(Wod::class.java)
+
+                // Separar Hoy y Mañana
+                _todayWod.value = wods.find { wod ->
+                    val wCal = Calendar.getInstance().apply { time = wod.date ?: Date() }
+                    wCal.get(Calendar.DAY_OF_YEAR) == dayOfYearToday
+                }
+
+                _tomorrowWod.value = wods.find { wod ->
+                    val wCal = Calendar.getInstance().apply { time = wod.date ?: Date() }
+                    wCal.get(Calendar.DAY_OF_YEAR) != dayOfYearToday // Si no es hoy, es mañana (por el filtro de query)
+                }
+
+            } catch (e: Exception) {
+                Log.e("WodsViewModel", "Error cargando WODs generales", e)
+            }
+        }
+    }
+
+    private fun getStartOfDay(date: Date): Date {
         val calendar = Calendar.getInstance()
+        calendar.time = date
         calendar.set(Calendar.HOUR_OF_DAY, 0)
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
-
-        val startOfToday = calendar.time
-
-        // Queremos ver hasta el final de MAÑANA (48 horas de rango)
-        calendar.add(Calendar.DAY_OF_YEAR, 2)
-        val endOfTomorrow = calendar.time
-
-        // Resetear calendario para comparaciones abajo
-        calendar.add(Calendar.DAY_OF_YEAR, -2)
-
-        // 3. Query con Listener (Igual que iOS addSnapshotListener)
-        listener = firestore.collection("wods")
-            .whereEqualTo("gym_id", gymId) // REGLA 1
-            .whereGreaterThanOrEqualTo("date", startOfToday)
-            .whereLessThan("date", endOfTomorrow)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    _wodsState.value = WodsState.Error(error.localizedMessage ?: "Error cargando WODs")
-                    return@addSnapshotListener
-                }
-
-                if (snapshot != null) {
-                    val wods = snapshot.toObjects(Wod::class.java)
-                    _wodsState.value = WodsState.Success(wods)
-
-                    // Lógica extra para separar Hoy vs Mañana en la UI de Android
-                    processWodsForDashboard(wods, startOfToday)
-                } else {
-                    _wodsState.value = WodsState.Success(emptyList())
-                }
-            }
+        return calendar.time
     }
 
-    private fun processWodsForDashboard(wods: List<Wod>, todayStart: Date) {
+    private fun getEndOfDay(date: Date): Date {
         val calendar = Calendar.getInstance()
-        calendar.time = todayStart
-        val dayOfYearToday = calendar.get(Calendar.DAY_OF_YEAR)
-
-        calendar.add(Calendar.DAY_OF_YEAR, 1)
-        val dayOfYearTomorrow = calendar.get(Calendar.DAY_OF_YEAR)
-
-        // Buscar WOD de hoy
-        val today = wods.find { wod ->
-            val wodCal = Calendar.getInstance().apply { time = wod.date }
-            wodCal.get(Calendar.DAY_OF_YEAR) == dayOfYearToday
-        }
-
-        // Buscar WOD de mañana
-        val tomorrow = wods.find { wod ->
-            val wodCal = Calendar.getInstance().apply { time = wod.date }
-            wodCal.get(Calendar.DAY_OF_YEAR) == dayOfYearTomorrow
-        }
-
-        _todayWod.value = today
-        _tomorrowWod.value = tomorrow
+        calendar.time = date
+        calendar.set(Calendar.HOUR_OF_DAY, 23)
+        calendar.set(Calendar.MINUTE, 59)
+        calendar.set(Calendar.SECOND, 59)
+        return calendar.time
     }
 
     override fun onCleared() {
