@@ -64,6 +64,16 @@ fun ProfileScreen(
 ) {
     val profileState by profileViewModel.userState.collectAsState()
     val profileUpdateState by profileViewModel.profileUpdateState.collectAsState()
+
+    // --- CORRECCIÓN: Leemos el estado del historial para contar las asistencias reales ---
+    val attendanceState by profileViewModel.attendanceHistoryState.collectAsState()
+    val realAttendanceCount = if (attendanceState is AttendanceHistoryState.Success) {
+        (attendanceState as AttendanceHistoryState.Success).records.size
+    } else {
+        0
+    }
+    // -----------------------------------------------------------------------------------
+
     val context = LocalContext.current
 
     // --- Lógica de permisos e imagen (Sin cambios) ---
@@ -127,6 +137,7 @@ fun ProfileScreen(
                             ProfileHeaderIOSStyle(
                                 user = state.user,
                                 activeBookingsCount = state.activeBookings.size,
+                                attendanceCount = realAttendanceCount, // <--- Pasamos el conteo real aquí
                                 onImageClick = { launchImagePicker() },
                                 onEditClick = onEditProfileClicked, // Pasamos la acción
                                 isLoadingImage = profileUpdateState is ProfileUpdateState.Loading
@@ -214,6 +225,7 @@ fun ProfileScreen(
 fun ProfileHeaderIOSStyle(
     user: User,
     activeBookingsCount: Int,
+    attendanceCount: Int, // <--- NUEVO PARÁMETRO
     onImageClick: () -> Unit,
     onEditClick: () -> Unit,
     isLoadingImage: Boolean
@@ -308,7 +320,9 @@ fun ProfileHeaderIOSStyle(
 
         // ESTADÍSTICAS (Igual que antes pero separadas visualmente)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            ProfileStatCard(user.totalClassesAttended.toString(), "Asistencias", Icons.AutoMirrored.Filled.DirectionsRun, Modifier.weight(1f))
+            // USAMOS EL VALOR CALCULADO AQUÍ
+            ProfileStatCard(attendanceCount.toString(), "Asistencias", Icons.AutoMirrored.Filled.DirectionsRun, Modifier.weight(1f))
+
             ProfileStatCard(activeBookingsCount.toString(), "Reservas", Icons.Default.Event, Modifier.weight(1f))
             ProfileStatCard(user.credits.toString(), "Créditos", Icons.Default.ConfirmationNumber, Modifier.weight(1f))
         }

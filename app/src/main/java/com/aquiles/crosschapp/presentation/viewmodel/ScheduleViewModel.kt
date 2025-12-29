@@ -288,4 +288,84 @@ class ScheduleViewModel : ViewModel() {
         classDetailsListener?.remove()
         super.onCleared()
     }
+
+    // ========================================================================
+    // CHECK-IN CON QR
+    // ========================================================================
+
+    private val _checkInResult = MutableStateFlow<CheckInState>(CheckInState.Idle)
+    val checkInResult = _checkInResult.asStateFlow()
+
+    fun resetCheckInState() { _checkInResult.value = CheckInState.Idle }
+
+    fun validateCheckIn(scannedGymId: String) {
+        val currentUser = UserSession.currentUser.value ?: return
+
+        // 1. Validar que sea el gimnasio correcto
+        if (scannedGymId != currentUser.gym_id) {
+            _checkInResult.value = CheckInState.Error("Este código QR no es de tu gimnasio.")
+            return
+        }
+
+        viewModelScope.launch {
+            _checkInResult.value = CheckInState.Loading
+            try {
+                // 2. Buscar una clase ACTIVA ahora (+/- 30 min) donde el usuario esté inscripto
+                val now = Date()
+                val calendar = Calendar.getInstance()
+
+                calendar.time = now
+                calendar.add(Calendar.MINUTE, -30)
+                val timeStart = calendar.time
+
+                calendar.time = now
+                calendar.add(Calendar.MINUTE, 30) // Tolerancia hasta 30 min después de inicio
+                val timeEnd = calendar.time
+
+                // Nota: Esta consulta requiere un índice en Firestore (gym_id + enrolledUserIds + dateTime)
+                val querySnapshot = firestore.collection("gymClasses")
+                    .whereEqualTo("gym_id", currentUser.gym_id)
+                    .whereArrayContains("enrolledUserIds", currentUser.id)
+                    .whereGreaterThan("dateTime", timeStart)
+                    .whereLessThan("dateTime", timeEnd)
+                    .get().await()
+
+                if (querySnapshot.isEmpty) {
+                    _checkInResult.value = CheckInState.Error("No tienes clase agendada en este horario (+/- 30min).")
+                    return@launch
+                }
+
+                // Tomamos la primera coincidencia
+                val classDoc = querySnapshot.documents.first()
+
+                // 3. Verificar si ya dio presente
+                val currentAttendees = classDoc.get("checkedInUserIds") as? List<String> ?: emptyList()
+                if (currentAttendees.contains(currentUser.id)) {
+                    _checkInResult.value = CheckInState.Success("¡Ya habías dado el presente!")
+                    return@launch
+                }
+
+                // 4. Actualizar Firebase
+                firestore.collection("gymClasses").document(classDoc.id)
+                    .update("checkedInUserIds", FieldValue.arrayUnion(currentUser.id))
+                    .await()
+
+                // (Opcional) Aquí llamaríamos a la lógica de logros si la integramos
+                // checkAndAwardAchievements(...)
+
+                _checkInResult.value = CheckInState.Success("¡Bienvenido! Presente registrado.")
+
+            } catch (e: Exception) {
+                _checkInResult.value = CheckInState.Error("Error al validar: ${e.message}")
+            }
+        }
+    }
+}
+
+// Coloca esto FUERA de la clase ScheduleViewModel (al final del archivo)
+sealed class CheckInState {
+    data object Idle : CheckInState()
+    data object Loading : CheckInState()
+    data class Success(val message: String) : CheckInState()
+    data class Error(val message: String) : CheckInState()
 }

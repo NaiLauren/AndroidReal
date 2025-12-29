@@ -1,8 +1,14 @@
 package com.aquiles.crosschapp.presentation.home
 
+import android.app.Activity
+import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -30,6 +36,7 @@ import com.aquiles.crosschapp.data.model.GymClass
 import com.aquiles.crosschapp.data.model.User
 import com.aquiles.crosschapp.data.model.Wod
 import com.aquiles.crosschapp.presentation.viewmodel.*
+import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -90,7 +97,27 @@ private fun ClassDetailsContent(
     var attendedUserIds by remember { mutableStateOf(setOf<String>()) }
     val adminOperationState by adminViewModel.classOperationState.collectAsState()
 
-    // Toasts
+    // --- NUEVO ESTADO: Verificación independiente de asistencia ---
+    var hasLocalAttendance by remember { mutableStateOf(false) }
+    // -----------------------------------------------------------
+
+    // Estado del CheckIn local
+    val checkInState by scheduleViewModel.checkInResult.collectAsState()
+
+    // Cuando volvemos del escáner, forzamos una re-verificación local
+    val scannerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        if (detailsState is ClassDetailsState.Success) {
+            val classId = (detailsState as ClassDetailsState.Success).gymClass.id
+            // CONSULTA CON GYM_ID
+            checkAttendanceInFirestore(classId, currentUser.id, currentUser.gym_id) { exists ->
+                hasLocalAttendance = exists
+            }
+        }
+    }
+
+    // Feedback
     LaunchedEffect(bookingState) {
         if (bookingState is BookingState.Success) {
             Toast.makeText(context, (bookingState as BookingState.Success).message, Toast.LENGTH_SHORT).show()
@@ -100,17 +127,20 @@ private fun ClassDetailsContent(
             scheduleViewModel.resetBookingState()
         }
     }
-    LaunchedEffect(adminOperationState) {
-        if (adminOperationState is ClassOperationState.Success) {
-            Toast.makeText(context, (adminOperationState as ClassOperationState.Success).message, Toast.LENGTH_SHORT).show()
-            adminViewModel.resetClassOperationState()
+
+    // Verificación inicial cuando carga la clase
+    LaunchedEffect(detailsState) {
+        if (detailsState is ClassDetailsState.Success) {
+            val classId = (detailsState as ClassDetailsState.Success).gymClass.id
+            // CONSULTA CON GYM_ID
+            checkAttendanceInFirestore(classId, currentUser.id, currentUser.gym_id) { exists ->
+                hasLocalAttendance = exists
+            }
         }
     }
 
     Scaffold(
         containerColor = Color.Transparent,
-        // IMPORTANTE: contentWindowInsets = WindowInsets(0) evita que el scaffold aplique padding automático
-        // en la parte inferior, ya que lo manejaremos nosotros en GlassBottomBar.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
@@ -160,6 +190,17 @@ private fun ClassDetailsContent(
                 val wod = state.wod
                 val hasAccessToList = currentUser.hasValidCredits || currentUser.isAdmin
 
+                // LÓGICA DE VISUALIZACIÓN
+                val isEnrolled = gymClass.enrolledUserIds.contains(currentUser.id)
+
+                // COMBINAMOS: El dato del documento de clase O nuestra verificación local en attendance_history
+                val alreadyCheckedIn = (gymClass.checkedInUserIds?.contains(currentUser.id) == true) || hasLocalAttendance
+
+                val now = Date()
+                val classTime = gymClass.dateTime ?: now
+                val diffMinutes = (now.time - classTime.time) / (60 * 1000)
+                val isCheckInTime = diffMinutes in -30..30
+
                 LaunchedEffect(gymClass.enrolledUserIds) {
                     adminViewModel.loadAttendeesDetails(gymClass.enrolledUserIds)
                     attendedUserIds = if (gymClass.attendanceTaken) gymClass.attendedUserIds.toSet() else gymClass.enrolledUserIds.toSet()
@@ -169,7 +210,6 @@ private fun ClassDetailsContent(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         top = localPaddingValues.calculateTopPadding() + 16.dp,
-                        // Ajustamos el padding inferior para que la lista scrollee por encima de la barra
                         bottom = localPaddingValues.calculateBottomPadding() + 100.dp,
                         start = 16.dp,
                         end = 16.dp
@@ -178,6 +218,49 @@ private fun ClassDetailsContent(
                 ) {
                     // 1. HEADER & STATS
                     item { ClassHeaderSection(gymClass) }
+
+                    // --- BOTÓN DAR PRESENTE ---
+                    if (isEnrolled && isCheckInTime && !currentUser.isAdmin) {
+                        item {
+                            if (alreadyCheckedIn) {
+                                // YA DIO PRESENTE (Verde)
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = ColorSuccess.copy(alpha = 0.2f)),
+                                    border = BorderStroke(1.dp, ColorSuccess),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, null, tint = ColorSuccess)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("¡Presente Registrado!", color = ColorSuccess, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            } else {
+                                // BOTÓN PARA ESCANEAR (Naranja)
+                                Button(
+                                    onClick = {
+                                        val intent = Intent(context, QrScannerActivity::class.java)
+                                        intent.putExtra("CLASS_ID_PARAM", gymClass.id)
+                                        scannerLauncher.launch(intent)
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction),
+                                    shape = RoundedCornerShape(12.dp),
+                                    elevation = ButtonDefaults.buttonElevation(8.dp)
+                                ) {
+                                    Icon(Icons.Default.QrCodeScanner, null, tint = Color.White)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text("DAR PRESENTE AHORA", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                    // ----------------------------------
 
                     // 2. WOD / DESCRIPCIÓN
                     item { ClassDescriptionSection(gymClass, wod) }
@@ -199,7 +282,6 @@ private fun ClassDetailsContent(
                                         Text("Nadie se ha inscrito aún.", style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                                     }
                                 } else {
-                                    // Lista en tarjeta Glass
                                     item {
                                         Card(
                                             colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
@@ -208,15 +290,22 @@ private fun ClassDetailsContent(
                                         ) {
                                             Column(Modifier.padding(16.dp)) {
                                                 attendeesState.attendees.forEachIndexed { index, user ->
+
+                                                    // Chequeo visual en la lista también
+                                                    val hasCheckedIn = (gymClass.checkedInUserIds?.contains(user.id) == true) ||
+                                                            (user.id == currentUser.id && hasLocalAttendance)
+
                                                     val isClassInThePast = gymClass.dateTime?.before(Date()) == true
                                                     val isAttendanceMode = currentUser.isAdmin && isClassInThePast && !gymClass.attendanceTaken
+
                                                     AttendeeItemRow(
                                                         attendee = user,
                                                         isAttendanceMode = isAttendanceMode,
-                                                        isChecked = attendedUserIds.contains(user.id),
+                                                        isChecked = if (currentUser.isAdmin) attendedUserIds.contains(user.id) else hasCheckedIn,
                                                         onCheckChanged = { isChecked ->
                                                             attendedUserIds = if (isChecked) attendedUserIds + user.id else attendedUserIds - user.id
-                                                        }
+                                                        },
+                                                        showCheckIcon = hasCheckedIn
                                                     )
                                                     if (index < attendeesState.attendees.size - 1) {
                                                         HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 12.dp))
@@ -236,6 +325,23 @@ private fun ClassDetailsContent(
         }
     }
 }
+
+// --- FUNCIÓN AUXILIAR CORREGIDA CON GYM_ID ---
+private fun checkAttendanceInFirestore(classId: String, userId: String, gymId: String, onResult: (Boolean) -> Unit) {
+    FirebaseFirestore.getInstance().collection("attendance_history")
+        .whereEqualTo("gym_id", gymId) // <--- ESTO ES LO IMPORTANTE
+        .whereEqualTo("userId", userId)
+        .whereEqualTo("classId", classId)
+        .limit(1)
+        .get()
+        .addOnSuccessListener { documents ->
+            onResult(!documents.isEmpty)
+        }
+        .addOnFailureListener {
+            onResult(false)
+        }
+}
+
 
 // --- COMPONENTES VISUALES ---
 
@@ -340,7 +446,8 @@ fun AttendeeItemRow(
     attendee: User,
     isAttendanceMode: Boolean,
     isChecked: Boolean,
-    onCheckChanged: (Boolean) -> Unit
+    onCheckChanged: (Boolean) -> Unit,
+    showCheckIcon: Boolean = false
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         SubcomposeAsyncImage(
@@ -352,8 +459,18 @@ fun AttendeeItemRow(
             error = { Icon(Icons.Default.Person, null, tint = Color.White) }
         )
         Spacer(Modifier.width(12.dp))
-        Text(attendee.fullName, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, modifier = Modifier.weight(1f))
 
+        Column(modifier = Modifier.weight(1f)) {
+            Text(attendee.fullName, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary)
+            // Aquí podríamos mostrar los iconos de logros en el futuro
+        }
+
+        // Si dio presente con QR, mostramos el check verde
+        if (showCheckIcon) {
+            Icon(Icons.Default.CheckCircle, null, tint = ColorSuccess, modifier = Modifier.size(20.dp))
+        }
+
+        // Modo Admin: Checkbox manual
         if (isAttendanceMode) {
             Checkbox(
                 checked = isChecked,
@@ -372,8 +489,6 @@ fun GlassBottomBar(content: @Composable RowScope.() -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF121212).copy(alpha = 0.9f))
-            // --- CORRECCIÓN CLAVE ---
-            // navigationBarsPadding() empuja el contenido hacia arriba la altura exacta de la barra de gestos
             .navigationBarsPadding()
             .padding(16.dp)
     ) {

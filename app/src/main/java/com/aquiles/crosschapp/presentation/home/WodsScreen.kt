@@ -66,7 +66,6 @@ fun WodsScreen(
     adminViewModel: AdminViewModel = viewModel(),
     scheduleViewModel: ScheduleViewModel = viewModel(),
     performanceViewModel: PerformanceViewModel,
-    // Eliminados parámetros no usados para limpiar warnings
     onNavigateToClassDetail: (String) -> Unit,
     onNavigateToScheduleAtDate: (LocalDate) -> Unit,
     onNavigateToWodHistory: () -> Unit,
@@ -187,7 +186,6 @@ fun WodsScreen(
                 }
 
                 // IMAGEN DEL DIA
-                // --- CORRECCIÓN: Locale actualizado ---
                 val spanishLocale = remember { Locale.forLanguageTag("es-ES") }
                 val todayNameRaw = remember { LocalDate.now().dayOfWeek.getDisplayName(TextStyle.FULL, spanishLocale) }
                 val todayKey = remember(todayNameRaw) { todayNameRaw.uppercase(spanishLocale) }
@@ -289,7 +287,6 @@ fun WodsScreen(
                 Spacer(modifier = Modifier.height(80.dp))
             }
 
-            // BOTÓN CÁMARA
             if (todayWod != null) {
                 FloatingCameraButton(
                     modifier = Modifier
@@ -303,7 +300,7 @@ fun WodsScreen(
 }
 
 // =====================================================
-// COMPONENTES UI (Incluyendo Pager)
+// COMPONENTES UI
 // =====================================================
 
 @Composable
@@ -364,12 +361,7 @@ fun WodPagerCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color(0xFF1C1C1E)),
-                                startY = 200f
-                            )
-                        )
+                        .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color(0xFF1C1C1E)), startY = 200f))
                 )
 
                 Row(
@@ -391,11 +383,18 @@ fun WodPagerCard(
                 }
             }
 
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Box(modifier = Modifier.heightIn(min = 60.dp, max = 120.dp).verticalScroll(rememberScrollState())) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(modifier = Modifier.heightIn(min = 40.dp)) {
                     Text(text = gymClass.description, color = ColorTextSecondary, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp)
                 }
+
                 HorizontalDivider(color = ColorBorder, thickness = 1.dp)
+
                 GlassTextField(value = userResult, onValueChange = { userResult = it }, label = "Resultado (Tiempo/Reps)")
                 GlassTextField(value = userNotes, onValueChange = { userNotes = it }, label = "Notas")
 
@@ -419,7 +418,6 @@ fun WodPagerCard(
     }
 }
 
-// Helpers
 @Composable
 fun FloatingCameraButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(modifier = modifier.size(50.dp).clip(CircleShape).background(Brush.linearGradient(colors = listOf(ColorPrimaryAction, Color(0xFFFF8A50)))).clickable(onClick = onClick).border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape), contentAlignment = Alignment.Center) {
@@ -457,7 +455,7 @@ fun RestDayWodCard(imageUrl: String?) {
 @Composable
 fun NextBookingCardSmall(gymClass: GymClass, onClick: () -> Unit) {
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val dayFormatter = remember { SimpleDateFormat("EEE dd", Locale.forLanguageTag("es-ES")) } // Fixed Locale
+    val dayFormatter = remember { SimpleDateFormat("EEE dd", Locale.forLanguageTag("es-ES")) }
     GlassCard(modifier = Modifier.height(140.dp), onClick = onClick) {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             Column {
@@ -559,11 +557,13 @@ fun BenchmarkLogger(
     var notes by remember { mutableStateOf("") }
     var isRx by remember { mutableStateOf(true) }
     val saveState by performanceViewModel.saveBenchmarkState.collectAsState()
+
     LaunchedEffect(saveState) {
         if (saveState is BenchmarkSaveState.Success) {
             selectedWod = null; score = ""; notes = ""; isRx = true
         }
     }
+
     GlassCard {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
@@ -584,24 +584,50 @@ fun BenchmarkLogger(
                     }
                 }
             }
+
             AnimatedVisibility(visible = selectedWod != null) {
                 selectedWod?.let { wod ->
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(text = wod.description, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
-                        GlassTextField(value = score, onValueChange = { score = it }, label = "Tu Marca")
-                        GlassTextField(value = notes, onValueChange = { notes = it }, label = "Notas")
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.FitnessCenter, null, tint = ColorTextSecondary, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = "ESQUEMA DEL WOD", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(text = wod.description, style = MaterialTheme.typography.bodyMedium, color = Color.White, lineHeight = 24.sp, fontWeight = FontWeight.Medium)
+                        }
+
+                        if (wod.strategy.isNotBlank()) {
+                            Box(modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(1.dp, ColorBorder.copy(alpha = 0.1f), RoundedCornerShape(12.dp)).padding(12.dp)) {
+                                Column {
+                                    Text(text = "ESTRATEGIA / SCALING", style = MaterialTheme.typography.labelSmall, color = ColorPrimaryAction, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(text = wod.strategy, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f), lineHeight = 20.sp)
+                                }
+                            }
+                        }
+
+                        GlassTextField(value = score, onValueChange = { score = it }, label = "Tu Marca (Tiempo/Reps)")
+                        GlassTextField(value = notes, onValueChange = { notes = it }, label = "Notas personales")
+
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { isRx = !isRx }) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { isRx = !isRx }.padding(end = 8.dp)) {
                                 Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White))
-                                Text("RX", color = ColorTextPrimary)
+                                Text(text = "RX", color = if (isRx) ColorTextPrimary else ColorTextSecondary, fontWeight = FontWeight.Bold)
                             }
                             Button(
-                                onClick = { currentUser?.let { user -> performanceViewModel.saveBenchmarkResult(BenchmarkResult(userId = user.id, gym_id = user.gym_id, benchmarkId = wod.id, benchmarkName = wod.name, score = score.trim(), isRx = isRx, notes = notes.trim())) } },
+                                onClick = {
+                                    currentUser?.let { user ->
+                                        performanceViewModel.saveBenchmarkResult(BenchmarkResult(userId = user.id, gym_id = user.gym_id, benchmarkId = wod.id, benchmarkName = wod.name, score = score.trim(), isRx = isRx, notes = notes.trim()))
+                                    }
+                                },
                                 enabled = score.isNotBlank() && !isSaving,
-                                colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction),
-                                shape = RoundedCornerShape(12.dp)
+                                colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction, disabledContainerColor = ColorPrimaryAction.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
                             ) {
-                                if (isSaving) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White) else Text("Guardar")
+                                if (isSaving) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp) else Text("Guardar Marca", fontWeight = FontWeight.ExtraBold)
                             }
                         }
                     }

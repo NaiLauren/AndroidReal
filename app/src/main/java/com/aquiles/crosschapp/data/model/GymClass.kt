@@ -17,16 +17,17 @@ data class GymClass(
     val wodId: String? = null,
 
     val enrolledUserIds: List<String> = emptyList(),
-    // val enrolledUsers: List<EnrolledUser> = emptyList(), // Comentado si no se usa para evitar errores de parseo
 
     val isCancelled: Boolean = false,
     val attendanceTaken: Boolean = false,
-    val attendedUserIds: List<String> = emptyList(),
+    val attendedUserIds: List<String> = emptyList(), // Lista manual del admin
+
+    // --- AGREGAR ESTA LÍNEA (Es para el QR) ---
+    val checkedInUserIds: List<String> = emptyList(),
+    // ------------------------------------------
 
     val classType: String = "WOD",
 
-    // --- CAMBIO CLAVE: Renombramos a hexColor para coincidir con iOS ---
-    // @PropertyName asegura que Firestore busque el campo "hexColor" aunque la variable se llame igual
     @PropertyName("hexColor")
-    val hexColor: String = "#FC5200" // Default Naranja
+    val hexColor: String = "#FC5200"
 )
