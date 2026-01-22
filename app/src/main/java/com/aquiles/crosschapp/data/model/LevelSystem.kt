@@ -24,4 +24,26 @@ object LevelSystem {
     
     // XP Rewards Constants
     const val XP_ATTENDANCE = 10
+
+    // Gamification Helpers
+    fun getAvatarDecoration(level: String): String? {
+        return when (level) {
+            "Novato" -> null // Sin decoración
+            "Constante" -> "military_tech" // Medalla Bronce
+            "Atleta" -> "fitness_center" // Pesas
+            "RX" -> "workspace_premium" // Medalla Oro / Trofeo
+            "Elite" -> "emoji_events" // Corona / Trofeo Elite
+            else -> null
+        }
+    }
+
+    fun getPreviousLevelLimit(xp: Int): Int {
+        return when {
+            xp < 100 -> 0
+            xp < 500 -> 100
+            xp < 1500 -> 500
+            xp < 5000 -> 1500
+            else -> 5000
+        }
+    }
 }

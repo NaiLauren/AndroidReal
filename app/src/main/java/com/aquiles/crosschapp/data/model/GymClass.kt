@@ -20,6 +20,7 @@ data class GymClass(
 
     val enrolledUserIds: List<String> = emptyList(),
 
+    @PropertyName("cancelled")
     val isCancelled: Boolean = false,
     val attendanceTaken: Boolean = false,
     val attendedUserIds: List<String> = emptyList(), // Lista manual del admin

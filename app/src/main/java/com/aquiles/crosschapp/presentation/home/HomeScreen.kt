@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.*
 import coil.compose.rememberAsyncImagePainter
 import com.aquiles.crosschapp.data.model.PersonalMessage
 import com.aquiles.crosschapp.data.model.User
@@ -144,6 +145,8 @@ private fun HomeScreenContent(
     onNavigateToAdminCreditRequests: () -> Unit,
     localScaffoldPadding: PaddingValues
 ) {
+    var showRulesDialog by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -156,19 +159,43 @@ private fun HomeScreenContent(
     ) {
         item {
             Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "¡Hola, ${user.name.split(" ").first()}!",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorTextPrimary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        color = ColorPrimaryAction,
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.clickable { showRulesDialog = true }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = user.level.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorTextPrimary
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Default.Info, null, tint = ColorTextPrimary, modifier = Modifier.size(12.dp))
+                        }
+                    }
+                }
                 Text(
-                    text = "¡Hola, ${user.name.split(" ").first()}!",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorTextPrimary
-                )
-                Text(
-                    text = "¿Listo para entrenar hoy?",
+                    text = "A darle duro hoy. \uD83D\uDCAA",
                     style = MaterialTheme.typography.bodyLarge,
                     color = ColorTextSecondary
                 )
             }
         }
+
+
 
         when (user.role) {
             "owner", "coach" -> {
@@ -202,6 +229,10 @@ private fun HomeScreenContent(
                 }
             }
         }
+    }
+
+    if (showRulesDialog) {
+        GamificationRulesScreen(onDismiss = { showRulesDialog = false })
     }
 }
 

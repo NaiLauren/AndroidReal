@@ -1,11 +1,64 @@
 // RUTA: functions/index.js
-// VERSIÓN CON NOTIFICACIONES DE CRÉDITO Y MENSAJES PERSONALES
+// VERSIÓN ACTUALIZADA: API FCM v1 + Limpieza de Tokens
 
 const { onDocumentUpdated, onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
 const db = admin.firestore();
+
+/**
+ * Función auxiliar para enviar notificaciones multicast y limpiar tokens inválidos.
+ */
+async function sendMulticastAndCleanup(tokens, title, body, data, userId) {
+    if (!tokens || tokens.length === 0) return;
+
+    // Estructura para enviarlo con sendEachForMulticast
+    // Nota: 'data' debe contener solo strings.
+    const message = {
+        tokens: tokens,
+        notification: {
+            title: title,
+            body: body,
+        },
+        data: data || {},
+        // Configuración específica para Android (opcional pero recomendada)
+        android: {
+            notification: {
+                sound: "default",
+                priority: "high"
+            }
+        }
+    };
+
+    try {
+        const response = await admin.messaging().sendEachForMulticast(message);
+        console.log(`FCM Multicast enviado. Éxitos: ${response.successCount}, Fallos: ${response.failureCount}`);
+
+        if (response.failureCount > 0) {
+            const tokensToRemove = [];
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success) {
+                    const error = resp.error;
+                    // Chequear si el error indica que el token ya no es válido
+                    if (error.code === 'messaging/registration-token-not-registered' ||
+                        error.code === 'messaging/invalid-argument') { // invalid-argument a veces sale con tokens corruptos
+                        tokensToRemove.push(tokens[idx]);
+                    }
+                }
+            });
+
+            if (tokensToRemove.length > 0 && userId) {
+                console.log(`Eliminando ${tokensToRemove.length} tokens inválidos para el usuario ${userId}`);
+                await db.collection("users").doc(userId).update({
+                    fcmTokens: admin.firestore.FieldValue.arrayRemove(...tokensToRemove)
+                });
+            }
+        }
+    } catch (error) {
+        console.error("Error crítico enviando FCM multicast:", error);
+    }
+}
 
 /**
  * Crea una notificación en la colección de nivel superior 'notifications'.
@@ -19,7 +72,7 @@ async function createInAppNotification(userId, gymId, title, message, type) {
         userId: userId,
         gym_id: gymId,
         title: title,
-        body: message, // Cambiado 'message' por 'body' para consistencia con el resto de la app
+        body: message, 
         isRead: false,
         type: type,
         timestamp: admin.firestore.FieldValue.serverTimestamp(),
@@ -43,10 +96,9 @@ exports.onCreditRequestUpdate = onDocumentUpdated({
     const afterData = event.data.after.data();
     const isApproved = beforeData.status !== "APPROVED" && afterData.status === "APPROVED";
     const isRejected = beforeData.status !== "REJECTED" && afterData.status === "REJECTED";
-    if (!isApproved && !isRejected) {
-        console.log("Actualización de estado no relevante para notificación. Saliendo.");
-        return null;
-    }
+    
+    if (!isApproved && !isRejected) return null;
+
     const userId = afterData.userId;
     const gymId = afterData.gym_id;
     const title = isApproved ? "¡Créditos Aprobados! ✅" : "Solicitud Rechazada ❌";
@@ -55,32 +107,15 @@ exports.onCreditRequestUpdate = onDocumentUpdated({
         `Tu solicitud del pack '${afterData.comboName}' fue rechazada. Contacta con un administrador.`;
     const type = isApproved ? "CREDIT_APPROVED" : "CREDIT_REJECTED";
     
-    // La creación de la notificación interna sigue igual
     await createInAppNotification(userId, gymId, title, body, type);
     
     const userDoc = await db.collection("users").doc(userId).get();
-    if (!userDoc.exists) {
-        console.log(`Usuario ${userId} no encontrado para enviar push.`);
-        return null;
-    }
+    if (!userDoc.exists) return null;
+
     const fcmTokens = userDoc.data().fcmTokens;
     if (fcmTokens && Array.isArray(fcmTokens) && fcmTokens.length > 0) {
-        
-        const payload = {
-            notification: {
-                title: title,
-                body: body,
-                sound: "default",
-                badge: "1"
-            },
-            data: { 
-                type: type 
-            }
-        };
-        console.log("Enviando payload COMPLETO (notification + data) a FCM:", payload);
-        return admin.messaging().sendToDevice(fcmTokens, payload);
+        await sendMulticastAndCleanup(fcmTokens, title, body, { type: type }, userId);
     }
-    console.log(`Usuario ${userId} no tiene tokens FCM para notificar.`);
     return null;
 });
 
@@ -96,49 +131,42 @@ exports.onNewCreditRequest = onDocumentCreated({
     const title = "Nueva Solicitud de Créditos ⚠️";
     const body = `${newRequest.userName} ha solicitado el pack '${newRequest.comboName}'.`;
     const type = "NEW_CREDIT_REQUEST";
+    
     const adminQuery = await db.collection("users")
         .where("gym_id", "==", gymId)
         .where("role", "in", ["owner", "coach"])
         .get();
-    if (adminQuery.empty) {
-        console.log(`No se encontraron administradores para el gym ${gymId}.`);
-        return null;
-    }
+
+    if (adminQuery.empty) return null;
+
     const allAdminTokens = [];
     const adminUserIds = [];
+    
+    // Primera pasada: recolectar IDs y crear notificaciones in-app
+    // NOTA: Para admins es difícil hacer cleanup grupal porque los tokens están dispersos en varios docs.
+    // Haremos un best-effort enviando individualmente o agrupando, pero por simplicidad aquí 
+    // enviaremos multicast a la lista plana de tokens. El cleanup NO se hará para admins en este bloque simple
+    // para evitar lógica compleja de mapear token -> adminId.
+    
+    const promises = [];
+    
     adminQuery.forEach((doc) => {
         adminUserIds.push(doc.id);
         const adminTokens = doc.data().fcmTokens;
         if (adminTokens && Array.isArray(adminTokens) && adminTokens.length > 0) {
             allAdminTokens.push(...adminTokens);
         }
+        promises.push(createInAppNotification(doc.id, gymId, title, body, type));
     });
-    const inAppNotificationsPromises = adminUserIds.map(adminId =>
-        createInAppNotification(adminId, gymId, title, body, type)
-    );
-    await Promise.all(inAppNotificationsPromises);
+
+    await Promise.all(promises);
     
     if (allAdminTokens.length > 0) {
-        const payload = {
-            notification: {
-                title: title,
-                body: body,
-                sound: "default",
-                badge: "1",
-            },
-            data: { 
-                type: type 
-            }
-        };
-        console.log(`Enviando payload COMPLETO a ${allAdminTokens.length} tokens de admin del gym ${gymId}:`, payload);
-        return admin.messaging().sendToDevice(allAdminTokens, payload);
+        // Pasamos null como userId para evitar intentar borrar tokens de un usuario inexistente "global"
+        await sendMulticastAndCleanup(allAdminTokens, title, body, { type: type }, null);
     }
-    console.log(`No se encontraron tokens FCM en ninguna cuenta de admin para el gym ${gymId}.`);
     return null;
 });
-
-
-// --- INICIO DE LA NUEVA FUNCIÓN AÑADIDA ---
 
 /**
  * Se activa cuando se crea un nuevo mensaje personal para notificar al destinatario.
@@ -148,24 +176,14 @@ exports.sendNewMessageNotification = onDocumentCreated({
     region: "southamerica-east1"
 }, async (event) => {
     const messageData = event.data.data();
-    if (!messageData) {
-        console.log("No se encontraron datos en el nuevo mensaje.");
-        return null;
-    }
+    if (!messageData) return null;
 
     const recipientId = messageData.userId;
     const senderName = messageData.sender_name || "Un administrador";
     let messageContent = messageData.content;
 
-    // Evita enviar una notificación push si te envías un mensaje a ti mismo.
-    if (recipientId === messageData.sender_id) {
-        console.log(`Auto-mensaje detectado para ${recipientId}. No se enviará notificación PUSH.`);
-        // Creamos la notificación interna para que aparezca en la bandeja de entrada, pero no enviamos el PUSH.
-        await createInAppNotification(recipientId, messageData.gym_id, `Nuevo mensaje de ${senderName}`, messageContent, "NEW_PERSONAL_MESSAGE");
-        return null;
-    }
+    if (recipientId === messageData.sender_id) return null;
 
-    // Crea un texto genérico si el mensaje solo tiene un adjunto.
     if (!messageContent || messageContent.trim() === "") {
         if (messageData.attachmentType && messageData.attachmentType.includes("image")) {
             messageContent = "Te ha enviado una imagen.";
@@ -174,70 +192,46 @@ exports.sendNewMessageNotification = onDocumentCreated({
         }
     }
     
-    // Creamos la notificación in-app para la bandeja de entrada
     await createInAppNotification(recipientId, messageData.gym_id, `Nuevo mensaje de ${senderName}`, messageContent, "NEW_PERSONAL_MESSAGE");
 
     console.log(`Preparando notificación PUSH de mensaje para ${recipientId} de ${senderName}`);
 
     const userDoc = await db.collection("users").doc(recipientId).get();
-    if (!userDoc.exists) {
-        console.log(`Destinatario ${recipientId} no encontrado.`);
-        return null;
-    }
+    if (!userDoc.exists) return null;
     
     const fcmTokens = userDoc.data().fcmTokens;
     if (fcmTokens && Array.isArray(fcmTokens) && fcmTokens.length > 0) {
-        const payload = {
-            notification: {
-                title: `Nuevo mensaje de ${senderName}`,
-                body: messageContent,
-                sound: "default",
-                badge: "1"
-            },
-            data: { 
-                type: "NEW_PERSONAL_MESSAGE",
-                senderId: messageData.sender_id
-            }
-        };
-        console.log("Enviando payload de nuevo mensaje a FCM:", payload);
-        return admin.messaging().sendToDevice(fcmTokens, payload);
+        await sendMulticastAndCleanup(fcmTokens, `Nuevo mensaje de ${senderName}`, messageContent, { 
+            type: "NEW_PERSONAL_MESSAGE",
+            senderId: messageData.sender_id
+        }, recipientId);
     }
-    console.log(`Usuario ${recipientId} no tiene tokens FCM para notificar.`);
     return null;
 });
-
-// --- FIN DE LA NUEVA FUNCIÓN AÑADIDA ---
-
 
 /**
  * Se activa cuando se crea o actualiza un documento de usuario.
  * Lee el campo 'role' y asigna un "custom claim" de autenticación 'isAdmin'.
- * Este claim se usa en las reglas de seguridad de Storage para dar permisos de admin.
  */
 exports.setUserAdminClaim = onDocumentWritten({
     document: "users/{userId}",
     region: "southamerica-east1"
 }, async (event) => {
-    // ... esta función está bien y no necesita cambios ...
     const userData = event.data.after.data();
     const userId = event.params.userId;
-    if (!userData) {
-        console.log(`Usuario ${userId} borrado, no se actualizan claims.`);
-        return null;
-    }
+    if (!userData) return null;
+
     const role = userData.role;
     const isAdmin = role === "owner" || role === "coach";
     try {
         const user = await admin.auth().getUser(userId);
         const currentClaims = user.customClaims;
-        if (currentClaims && currentClaims.isAdmin === isAdmin) {
-            console.log(`Claim 'isAdmin' para ${userId} ya está correcto (${isAdmin}). Sin cambios.`);
-            return null;
-        }
+        if (currentClaims && currentClaims.isAdmin === isAdmin) return null;
+
         console.log(`Asignando claim 'isAdmin: ${isAdmin}' al usuario ${userId}`);
         return admin.auth().setCustomUserClaims(userId, { isAdmin: isAdmin });
     } catch (error) {
-        console.error(`Error al obtener usuario o asignar claims para ${userId}:`, error);
+        console.error(`Error al asignar claims para ${userId}:`, error);
         return null;
     }
 });

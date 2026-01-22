@@ -193,6 +193,7 @@ class QrScannerActivity : AppCompatActivity() {
         }.addOnFailureListener {
              finishWithSuccess("¡Presente Registrado! ✅")
         }
+    }
 
     private fun saveUnlockedAchievements(
         userId: String,

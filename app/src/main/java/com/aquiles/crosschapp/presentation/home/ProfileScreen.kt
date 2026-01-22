@@ -280,6 +280,26 @@ fun ProfileHeaderIOSStyle(
                     Box(
                         modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape).padding(4.dp)
                     ) { Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
+                    
+                    // --- DECORACIÓN DE NIVEL ---
+                    val decorationName = LevelSystem.getAvatarDecoration(user.level)
+                    if (decorationName != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 4.dp, y = (-4).dp)
+                        ) {
+                            Icon(
+                                imageVector = getIconByName(decorationName),
+                                contentDescription = "Rango ${user.level}",
+                                tint = if(user.level == "Elite") Color(0xFFFFD700) else ColorPrimaryAction,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .shadow(8.dp, CircleShape)
+                                    .background(Color.White.copy(alpha=0.1f), CircleShape) // Small glow
+                            )
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -311,6 +331,34 @@ fun ProfileHeaderIOSStyle(
                             color = ColorTextSecondary,
                             textAlign = TextAlign.Center
                         )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // LEVEL BADGE
+                        Surface(
+                            color = ColorPrimaryAction.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(50),
+                            border = BorderStroke(1.dp, ColorPrimaryAction)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = ColorPrimaryAction,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = user.level.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ColorPrimaryAction
+                                )
+                            }
+                        }
                     }
                 }
             }

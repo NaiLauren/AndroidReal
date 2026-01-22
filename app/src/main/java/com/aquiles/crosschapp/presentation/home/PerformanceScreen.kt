@@ -438,29 +438,40 @@ fun RecordCardGlass(
 
                         Spacer(Modifier.weight(1f))
 
-                        // Score Display (Big)
+                        // Score Display (Adjusted for better fit)
                         currentData?.let { data ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                                 Text(
                                     text = data.score,
-                                    style = MaterialTheme.typography.headlineMedium,
+                                    style = MaterialTheme.typography.titleLarge, // Reduced from headlineMedium
                                     fontWeight = FontWeight.Black,
-                                    color = ColorPrimaryAction
+                                    color = ColorPrimaryAction,
+                                    modifier = Modifier.weight(1f, fill = false), // Allow text to shrink/wrap
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    lineHeight = 28.sp
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 if (data.isRx) {
-                                    Text("RX", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = ColorTextSecondary, modifier = Modifier.padding(bottom = 4.dp))
+                                    Text(
+                                        "RX", 
+                                        style = MaterialTheme.typography.titleMedium, 
+                                        fontWeight = FontWeight.Bold, 
+                                        color = ColorTextSecondary, 
+                                        modifier = Modifier.padding(bottom = 2.dp)
+                                    )
                                 }
                             }
                             if (data.notes.isNotBlank()) {
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(Modifier.height(6.dp))
                                 Text(
                                     "\"${data.notes}\"",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontStyle = FontStyle.Italic,
                                     color = ColorTextSecondary.copy(alpha = 0.7f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    lineHeight = 14.sp
                                 )
                             }
                         }
@@ -542,8 +553,9 @@ fun AchievementsSectionGlass(state: AchievementState) {
 }
 
 @Composable
-fun AchievementItem(achievement: Achievement) {
+fun AchievementItem(achievement: AchievementUiModel) {
     var showDialog by remember { mutableStateOf(false) }
+    val isUnlocked = achievement.isUnlocked
 
     val icon = when (achievement.iconName) {
         // Iconos Numéricos existentes
@@ -564,22 +576,30 @@ fun AchievementItem(achievement: Achievement) {
         else -> Icons.Default.EmojiEvents
     }
 
+    // Estilos según estado
+    val iconTint = if (isUnlocked) ColorPrimaryAction else Color.White.copy(alpha = 0.2f)
+    val bgBorder = if (isUnlocked) ColorPrimaryAction.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.1f)
+    val bgAlpha = if (isUnlocked) 0.4f else 0.1f
+
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp).clickable { showDialog = true }) {
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-                .border(1.dp, ColorPrimaryAction.copy(alpha = 0.5f), CircleShape),
+                .background(Color.Black.copy(alpha = bgAlpha), CircleShape)
+                .border(1.dp, bgBorder, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = ColorPrimaryAction, modifier = Modifier.size(28.dp))
+            Icon(icon, null, tint = iconTint, modifier = Modifier.size(28.dp))
+            if (!isUnlocked) {
+                Icon(Icons.Default.Lock, null, tint = ColorTextSecondary.copy(alpha = 0.5f), modifier = Modifier.size(12.dp).align(Alignment.BottomEnd).padding(4.dp))
+            }
         }
         Spacer(Modifier.height(6.dp))
         Text(
             achievement.title,
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
             textAlign = TextAlign.Center,
-            color = ColorTextSecondary,
+            color = if(isUnlocked) ColorTextSecondary else ColorTextSecondary.copy(alpha = 0.5f),
             lineHeight = 12.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -590,12 +610,37 @@ fun AchievementItem(achievement: Achievement) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
             containerColor = ColorDialogSurface,
-            icon = { Icon(icon, null, tint = ColorPrimaryAction) },
-            title = { Text(achievement.title, color = ColorTextPrimary) },
-            text = { Text(achievement.description, color = ColorTextSecondary, textAlign = TextAlign.Center) },
+            icon = { Icon(icon, null, tint = iconTint) },
+            title = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(achievement.title, color = ColorTextPrimary)
+                    if (!isUnlocked) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "BLOQUEADO",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ColorError,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(achievement.description, color = ColorTextSecondary, textAlign = TextAlign.Center)
+                    if (isUnlocked && achievement.unlockedAt != null) {
+                        Spacer(Modifier.height(8.dp))
+                        val dateStr = SimpleDateFormat("dd MMM yyyy", Locale("es")).format(achievement.unlockedAt)
+                        Text("Conseguido el: $dateStr", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50))
+                    } else if (!isUnlocked) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Gana +${achievement.xpReward} XP", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFD700))
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = { showDialog = false }) {
-                    Text("Genial", color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
+                    Text(if (isUnlocked) "Genial" else "Entendido", color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
                 }
             }
         )
