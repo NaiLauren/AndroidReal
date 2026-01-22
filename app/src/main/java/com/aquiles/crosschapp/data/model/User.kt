@@ -23,6 +23,11 @@ data class User(
     var creditValidUntil: Date? = null,
     var totalClassesAttended: Int = 0,
     var currentClassesReserved: Int = 0,
+    
+    // --- GAMIFICACIÓN ---
+    var xp: Int = 0,
+    var level: String = "Novato",
+    
     @ServerTimestamp
     val registrationDate: Date? = null,
 

@@ -2,8 +2,7 @@ package com.aquiles.crosschapp.presentation.viewmodel
 
 import android.app.Application
 import android.net.Uri
-import android.os.Build // IMPORTANTE: Para capturar el modelo del celular
-import android.util.Log
+import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aquiles.crosschapp.data.model.AttendanceRecord
@@ -23,8 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.util.Date
 import java.util.Calendar
+import java.util.Date
 
 // --- ESTADOS (Iguales que antes) ---
 sealed class ProfileState {
@@ -79,7 +78,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     private val _profileUpdateState = MutableStateFlow<ProfileUpdateState>(ProfileUpdateState.Idle)
     val profileUpdateState: StateFlow<ProfileUpdateState> = _profileUpdateState.asStateFlow()
 
-    // Estados de historiales (sin cambios)
+    // Estados de historiales
     private val _transactionHistoryState = MutableStateFlow<TransactionHistoryState>(TransactionHistoryState.Loading)
     val transactionHistoryState = _transactionHistoryState.asStateFlow()
 
@@ -89,10 +88,12 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     private val _attendanceHistoryState = MutableStateFlow<AttendanceHistoryState>(AttendanceHistoryState.Loading)
     val attendanceHistoryState = _attendanceHistoryState.asStateFlow()
 
+    // LISTENERS (Para limpieza)
     private var userListener: ListenerRegistration? = null
     private var bookingsListener: ListenerRegistration? = null
     private var transactionsListener: ListenerRegistration? = null
     private var requestsListener: ListenerRegistration? = null
+    private var attendanceListener: ListenerRegistration? = null // NUEVO LISTENER
 
     private var currentListeningUserId: String? = null
 
@@ -100,13 +101,12 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         listenToUserProfile()
     }
 
-    // --- HELPER PARA SABER SI EL WAIVER ESTÁ ACTIVO (VIGENTE) ---
+    // --- HELPER PARA SABER SI EL WAIVER ESTÁ ACTIVO ---
     fun isWaiverActive(user: User): Boolean {
         val signedDate = user.waiverDate ?: return false
         val accepted = user.waiverAccepted ?: false
         if (!accepted) return false
 
-        // Calcular si pasó menos de 1 año (365 días)
         val cal = Calendar.getInstance()
         cal.add(Calendar.YEAR, -1)
         val oneYearAgo = cal.time
@@ -172,8 +172,8 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                 _creditHistoryState.value = if (sortedList.isEmpty()) CreditHistoryState.Empty else CreditHistoryState.Success(sortedList)
             }
 
-        // 4. Attendance
-        loadAttendanceHistory(userId, gymId)
+        // 4. Attendance (AHORA EN TIEMPO REAL)
+        loadAttendanceHistoryRealtime(userId, gymId)
     }
 
     private fun listenToActiveBookings(user: User) {
@@ -199,44 +199,50 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             }
     }
 
-    private fun loadAttendanceHistory(userId: String, gymId: String) {
-        viewModelScope.launch {
-            _attendanceHistoryState.value = AttendanceHistoryState.Loading
-            try {
-                val snapshot = firestore.collection("attendance_history")
-                    .whereEqualTo("gym_id", gymId)
-                    .whereEqualTo("userId", userId)
-                    .limit(50)
-                    .get().await()
+    // --- CAMBIO IMPORTANTE: AHORA USA SNAPSHOT LISTENER ---
+    private fun loadAttendanceHistoryRealtime(userId: String, gymId: String) {
+        attendanceListener?.remove()
+        _attendanceHistoryState.value = AttendanceHistoryState.Loading
 
-                val rawRecords = snapshot.toObjects(AttendanceRecord::class.java)
-                val sortedRecords = rawRecords.sortedByDescending { it.classDate }
-
-                if (sortedRecords.isEmpty()) {
+        attendanceListener = firestore.collection("attendance_history")
+            .whereEqualTo("gym_id", gymId)
+            .whereEqualTo("userId", userId)
+            // Opcional: ordenar por fecha si tienes el índice compuesto en Firebase
+            // .orderBy("classDate", Query.Direction.DESCENDING)
+            .limit(50)
+            .addSnapshotListener { snapshots, e ->
+                if (e != null) {
                     _attendanceHistoryState.value = AttendanceHistoryState.Empty
-                    return@launch
+                    return@addSnapshotListener
                 }
 
-                val enrichedDeferred = sortedRecords.map { record ->
-                    async {
-                        var classDetails: GymClass? = null
-                        if (record.classId.isNotBlank()) {
-                            try {
-                                val classDoc = firestore.collection("gymClasses").document(record.classId).get().await()
-                                classDetails = classDoc.toObject(GymClass::class.java)
-                            } catch (e: Exception) { }
+                if (snapshots != null && !snapshots.isEmpty) {
+                    val rawRecords = snapshots.toObjects(AttendanceRecord::class.java)
+                    // Ordenamos en memoria si no hay índice
+                    val sortedRecords = rawRecords.sortedByDescending { it.classDate }
+
+                    // Como necesitamos buscar el nombre de la clase (async), lanzamos corrutina
+                    viewModelScope.launch {
+                        val enrichedDeferred = sortedRecords.map { record ->
+                            async {
+                                var classDetails: GymClass? = null
+                                if (record.classId.isNotBlank()) {
+                                    try {
+                                        // Esto es rápido porque Firestore cachea lecturas recientes
+                                        val classDoc = firestore.collection("gymClasses").document(record.classId).get().await()
+                                        classDetails = classDoc.toObject(GymClass::class.java)
+                                    } catch (e: Exception) { }
+                                }
+                                EnrichedAttendanceRecord(record, classDetails)
+                            }
                         }
-                        EnrichedAttendanceRecord(record, classDetails)
+                        val enrichedList = enrichedDeferred.awaitAll()
+                        _attendanceHistoryState.value = AttendanceHistoryState.Success(enrichedList)
                     }
+                } else {
+                    _attendanceHistoryState.value = AttendanceHistoryState.Empty
                 }
-
-                val enrichedList = enrichedDeferred.awaitAll()
-                _attendanceHistoryState.value = if (enrichedList.isEmpty()) AttendanceHistoryState.Empty else AttendanceHistoryState.Success(enrichedList)
-
-            } catch (e: Exception) {
-                _attendanceHistoryState.value = AttendanceHistoryState.Empty
             }
-        }
     }
 
     // --- SUBIDA DE IMAGEN ---
@@ -265,14 +271,13 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // --- UPDATE PERFIL (ACTUALIZADO CON LEGALES) ---
+    // --- UPDATE PERFIL ---
     fun updateUserProfile(
         name: String,
         lastName: String,
         phoneNumber: String?,
         emergencyContact: String?,
         birthDate: Date?,
-        // Parámetros Médicos/Legales
         hasHeartCondition: Boolean,
         hasInjuries: Boolean,
         medicalNotes: String,
@@ -289,26 +294,19 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                     "phoneNumber" to phoneNumber,
                     "emergencyContact" to emergencyContact,
                     "birthDate" to birthDate,
-                    // Datos médicos siempre se guardan
                     "hasHeartCondition" to hasHeartCondition,
                     "hasInjuries" to hasInjuries,
                     "medicalNotes" to medicalNotes
                 )
 
-                // --- LÓGICA DE FIRMA LEGAL ---
-                // Si el usuario marcó "Acepto" Y (antes no había aceptado O estaba vencido/no activo)
                 val wasActive = isWaiverActive(user)
-
                 if (waiverAccepted && (! (user.waiverAccepted ?: false) || !wasActive)) {
                     updates["waiverAccepted"] = true
-                    updates["waiverDate"] = Date() // Fecha actual del servidor/celular
+                    updates["waiverDate"] = Date()
                     updates["waiverVersion"] = currentTermsVersion
-
-                    // Capturar Dispositivo (Ej: "Samsung SM-S901B (Android 13)")
                     val deviceInfo = "${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})"
                     updates["waiverDevice"] = deviceInfo
                 }
-                // -----------------------------
 
                 firestore.collection("users").document(user.id).update(updates).await()
                 _profileUpdateState.value = ProfileUpdateState.Success
@@ -341,6 +339,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         bookingsListener?.remove()
         transactionsListener?.remove()
         requestsListener?.remove()
+        attendanceListener?.remove() // Limpiamos el nuevo listener
     }
 
     override fun onCleared() {

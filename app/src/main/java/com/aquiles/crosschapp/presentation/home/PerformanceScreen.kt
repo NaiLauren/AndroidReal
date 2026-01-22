@@ -546,10 +546,21 @@ fun AchievementItem(achievement: Achievement) {
     var showDialog by remember { mutableStateOf(false) }
 
     val icon = when (achievement.iconName) {
+        // Iconos Numéricos existentes
         "flag" -> Icons.Default.Flag
         "local_fire_department" -> Icons.Default.LocalFireDepartment
         "star" -> Icons.Default.Star
         "military_tech" -> Icons.Default.MilitaryTech
+        "shield" -> Icons.Default.Shield
+        "workspace_premium" -> Icons.Default.WorkspacePremium
+        "auto_awesome" -> Icons.Default.AutoAwesome
+        "weekend" -> Icons.Default.Weekend
+
+        // --- NUEVOS ICONOS INTELIGENTES ---
+        "wb_sunny" -> Icons.Default.WbSunny
+        "dark_mode" -> Icons.Default.DarkMode
+        "whatshot" -> Icons.Default.Whatshot
+
         else -> Icons.Default.EmojiEvents
     }
 

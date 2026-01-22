@@ -14,6 +14,8 @@ data class GymClass(
     val durationMinutes: Int = 0,
     val maxCapacity: Int = 0,
     val coachName: String = "",
+    
+    @PropertyName("wod_id")
     val wodId: String? = null,
 
     val enrolledUserIds: List<String> = emptyList(),

@@ -9,6 +9,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.aquiles.crosschapp.R
+import com.aquiles.crosschapp.data.model.Achievement
+import com.aquiles.crosschapp.data.model.AchievementSystem
 import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import com.budiyev.android.codescanner.AutoFocusMode
 import com.budiyev.android.codescanner.CodeScanner
@@ -17,24 +19,21 @@ import com.budiyev.android.codescanner.DecodeCallback
 import com.budiyev.android.codescanner.ErrorCallback
 import com.budiyev.android.codescanner.ScanMode
 import com.google.firebase.firestore.FirebaseFirestore
+import java.util.Calendar
 import java.util.Date
 
 class QrScannerActivity : AppCompatActivity() {
 
     private lateinit var codeScanner: CodeScanner
     private val db = FirebaseFirestore.getInstance()
-
-    // Esta variable guardará el ID "RnCC..." que viene de la pantalla de detalles
     private var realClassId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_qr_scanner)
 
-        // 1. RECUPERAMOS EL ID REAL DE LA CLASE
         realClassId = intent.getStringExtra("CLASS_ID_PARAM")
 
-        // Verificación de seguridad
         if (realClassId.isNullOrEmpty()) {
             Toast.makeText(this, "Error: No se recibió el ID de la clase.", Toast.LENGTH_LONG).show()
             finish()
@@ -44,7 +43,6 @@ class QrScannerActivity : AppCompatActivity() {
         val scannerView = findViewById<CodeScannerView>(R.id.scanner_view)
         codeScanner = CodeScanner(this, scannerView)
 
-        // Configuración de cámara
         codeScanner.camera = CodeScanner.CAMERA_BACK
         codeScanner.formats = CodeScanner.ALL_FORMATS
         codeScanner.autoFocusMode = AutoFocusMode.SAFE
@@ -52,12 +50,9 @@ class QrScannerActivity : AppCompatActivity() {
         codeScanner.isAutoFocusEnabled = true
         codeScanner.isFlashEnabled = false
 
-        // AL ESCANEAR EL QR
         codeScanner.decodeCallback = DecodeCallback {
             runOnUiThread {
-                val gymIdFromQr = it.text // Esto será "IC46..." (El QR de la pared)
-
-                // Llamamos a la función pasando AMBOS datos
+                val gymIdFromQr = it.text
                 processAttendance(gymIdFromQr, realClassId!!)
             }
         }
@@ -74,18 +69,16 @@ class QrScannerActivity : AppCompatActivity() {
     private fun processAttendance(scannedGymId: String, classIdToSave: String) {
         val currentUser = UserSession.currentUser.value ?: return
 
-        // 1. VALIDACIÓN: ¿El QR de la pared coincide con el gimnasio del usuario?
         if (scannedGymId != currentUser.gym_id) {
             Toast.makeText(this, "❌ QR Incorrecto. Ese código no es de tu gimnasio.", Toast.LENGTH_LONG).show()
-            codeScanner.startPreview() // Reiniciar para intentar de nuevo
+            codeScanner.startPreview()
             return
         }
 
         val attendanceRef = db.collection("attendance_history")
 
-        // 2. CONSULTA CORREGIDA: Agregamos el filtro de gym_id para cumplir con las reglas
         attendanceRef
-            .whereEqualTo("gym_id", currentUser.gym_id) // <--- ESTA LÍNEA ES OBLIGATORIA
+            .whereEqualTo("gym_id", currentUser.gym_id)
             .whereEqualTo("userId", currentUser.id)
             .whereEqualTo("classId", classIdToSave)
             .get()
@@ -94,14 +87,12 @@ class QrScannerActivity : AppCompatActivity() {
                     Toast.makeText(this, "⚠️ Ya tenías el presente registrado.", Toast.LENGTH_SHORT).show()
                     finish()
                 } else {
-                    // Si no existe, lo creamos
                     saveToFirebase(currentUser.id, currentUser.gym_id, currentUser.name, currentUser.lastName, classIdToSave)
                 }
             }
             .addOnFailureListener { e ->
-                // Ahora mostramos el error real por si acaso
                 Log.e("QrScanner", "Error al consultar: ", e)
-                Toast.makeText(this, "Error de permisos o red: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Error de conexión", Toast.LENGTH_LONG).show()
                 finish()
             }
     }
@@ -110,7 +101,7 @@ class QrScannerActivity : AppCompatActivity() {
         val data = hashMapOf(
             "userId" to userId,
             "gym_id" to gymId,
-            "classId" to classId, // Guardamos "RnCC..."
+            "classId" to classId,
             "classDate" to Date(),
             "status" to "PRESENT",
             "userName" to name,
@@ -120,17 +111,164 @@ class QrScannerActivity : AppCompatActivity() {
         db.collection("attendance_history")
             .add(data)
             .addOnSuccessListener {
-                Toast.makeText(this, "¡Presente Registrado! ✅", Toast.LENGTH_LONG).show()
-                // IMPORTANTE: Devolvemos RESULT_OK para que la pantalla anterior se actualice
-                setResult(RESULT_OK)
-                finish()
+                // AQUÍ OCURRE EL CAMBIO: En vez de cerrar directo, verificamos logros
+                checkSmartAchievements(userId, gymId)
             }
             .addOnFailureListener { e ->
                 Toast.makeText(this, "Error al guardar: ${e.message}", Toast.LENGTH_LONG).show()
             }
     }
 
-    // --- Permisos de Cámara (Igual que antes) ---
+    // --- LÓGICA DE LOGROS INTELIGENTES ---
+    private fun checkSmartAchievements(userId: String, gymId: String) {
+        // Obtenemos todo el historial para calcular rachas
+        db.collection("attendance_history")
+            .whereEqualTo("gym_id", gymId)
+            .whereEqualTo("userId", userId)
+            .get()
+            .addOnSuccessListener { documents ->
+
+                val earnedDefinitions = mutableListOf<com.aquiles.crosschapp.data.model.AchievementDefinition>()
+
+                // Análisis de Contexto
+                val now = Calendar.getInstance()
+                val currentHour = now.get(Calendar.HOUR_OF_DAY)
+
+                // 1. MADRUGADOR (< 9 AM)
+                if (currentHour < 9) {
+                    AchievementSystem.getById("early_bird")?.let { earnedDefinitions.add(it) }
+                }
+
+                // 2. AVE NOCTURNA (>= 20 PM)
+                if (currentHour >= 20) {
+                    AchievementSystem.getById("night_owl")?.let { earnedDefinitions.add(it) }
+                }
+
+                // 3. SEMANA DE FUEGO (5 clases en últimos 7 días)
+                val oneWeekAgo = Calendar.getInstance()
+                oneWeekAgo.add(Calendar.DAY_OF_YEAR, -7)
+
+                // Contamos documentos recientes (incluyendo el que acabamos de guardar)
+                val classesThisWeek = documents.count { doc ->
+                    val timestamp = doc.getTimestamp("classDate")
+                    timestamp != null && timestamp.toDate().after(oneWeekAgo.time)
+                }
+
+                if (classesThisWeek >= 5) {
+                    AchievementSystem.getById("week_fire")?.let { earnedDefinitions.add(it) }
+                }
+
+                // Si ganó algo, lo guardamos (y sumamos su XP)
+                if (earnedDefinitions.isNotEmpty()) {
+                    saveUnlockedAchievements(userId, gymId, earnedDefinitions)
+                } else {
+                    // Si no ganó logros, igual sumamos la XP de asistencia (+10)
+                    updateUserXpOnly(userId)
+                }
+            }
+            .addOnFailureListener {
+                // Si falla el chequeo de logros, cerramos igual porque el presente ya se guardó
+                finishWithSuccess("¡Presente Registrado! ✅")
+            }
+    }
+    
+    private fun updateUserXpOnly(userId: String) {
+        val userRef = db.collection("users").document(userId)
+        val xpGain = com.aquiles.crosschapp.data.model.LevelSystem.XP_ATTENDANCE
+        
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(userRef)
+            val currentXp = snapshot.getLong("xp")?.toInt() ?: 0
+            val newTotalXp = currentXp + xpGain
+            val newLevel = com.aquiles.crosschapp.data.model.LevelSystem.getLevelName(newTotalXp)
+            
+            transaction.update(userRef, "xp", newTotalXp)
+            transaction.update(userRef, "level", newLevel)
+            
+            return@runTransaction newLevel
+        }.addOnSuccessListener { newLevel ->
+             // Podríamos chequear si subió de nivel comparando con UserSession local, 
+             // pero por simplicidad mostramos solo XP ganada
+             finishWithSuccess("¡Presente (+${xpGain} XP)! ✅")
+        }.addOnFailureListener {
+             finishWithSuccess("¡Presente Registrado! ✅")
+        }
+
+    private fun saveUnlockedAchievements(
+        userId: String,
+        gymId: String,
+        achievements: List<com.aquiles.crosschapp.data.model.AchievementDefinition>
+    ) {
+        val batch = db.batch()
+        var newUnlockTitle = ""
+        var totalXpGained = 0
+        
+        // 1. Sumar XP de logros
+        achievements.forEach { def ->
+            val docRef = db.collection("achievements").document("${userId}_${def.id}")
+            val newAchievement = Achievement(
+                id = def.id,
+                title = def.title,
+                description = def.description,
+                iconName = def.iconName,
+                type = "smart",
+                userId = userId,
+                gym_id = gymId,
+                unlockedAt = Date()
+            )
+            batch.set(docRef, newAchievement)
+            newUnlockTitle = def.title
+            
+            // Sumar XP del logro
+            totalXpGained += def.xpReward
+        }
+
+        // 2. Sumar XP de Asistencia (que ya se guardó)
+        // Nota: saveToFirebase guardó la asistencia, aquí sumamos su XP al usuario
+        totalXpGained += com.aquiles.crosschapp.data.model.LevelSystem.XP_ATTENDANCE
+
+        // 3. Actualizar Usuario (XP y Nivel)
+        val userRef = db.collection("users").document(userId)
+        
+        // Leemos el usuario actual para saber su XP base
+        // (Podríamos usar FieldValue.increment pero necesitamos calcular el nuevo nivel)
+        userRef.get().addOnSuccessListener { snapshot ->
+            val currentXp = snapshot.getLong("xp")?.toInt() ?: 0
+            val newTotalXp = currentXp + totalXpGained
+            val newLevel = com.aquiles.crosschapp.data.model.LevelSystem.getLevelName(newTotalXp)
+            val oldLevel = snapshot.getString("level") ?: "Novato"
+            
+            batch.update(userRef, "xp", newTotalXp)
+            batch.update(userRef, "level", newLevel)
+            
+            batch.commit().addOnSuccessListener {
+                var message = "¡Presente (+10 XP)!"
+                if (achievements.isNotEmpty()) {
+                    message = if (achievements.size > 1) "¡Múltiples Logros (+${totalXpGained} XP)!" else "¡Logro: $newUnlockTitle (+${totalXpGained} XP)!"
+                }
+                
+                if (newLevel != oldLevel) {
+                    message += "\n🚀 ¡SUBISTE A NIVEL $newLevel! 🚀"
+                }
+                
+                finishWithSuccess("🎉 $message")
+            }.addOnFailureListener {
+                finishWithSuccess("¡Presente Registrado! ✅")
+            }
+        }.addOnFailureListener {
+            // Si falla leer el usuario, al menos comiteamos los logros
+            batch.commit()
+            finishWithSuccess("¡Presente Registrado! ✅")
+        }
+    }
+
+    private fun finishWithSuccess(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        setResult(RESULT_OK)
+        finish()
+    }
+
+    // --- Permisos (Sin cambios) ---
     private fun checkPermissions() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             codeScanner.startPreview()

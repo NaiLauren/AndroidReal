@@ -63,10 +63,10 @@ fun ClassDetailsScreen(
         scheduleViewModel.loadClassDetails(classId)
     }
 
-    // --- UI STRUCTURE ---
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .padding(bottom = innerPadding.calculateBottomPadding())
             .background(Color.Black.copy(alpha = 0.4f))
     ) {
         currentUser?.let { user ->
@@ -94,30 +94,30 @@ private fun ClassDetailsContent(
     val detailsState by scheduleViewModel.classDetailsState.collectAsState()
     val bookingState by scheduleViewModel.bookingState.collectAsState()
     val attendeeListState by adminViewModel.attendeeListState.collectAsState()
-    var attendedUserIds by remember { mutableStateOf(setOf<String>()) }
     val adminOperationState by adminViewModel.classOperationState.collectAsState()
 
-    // --- NUEVO ESTADO: Verificación independiente de asistencia ---
+    // Lista de IDs seleccionados manualmente o detectados
+    var attendedUserIds by remember { mutableStateOf(setOf<String>()) }
+
+    // --- NUEVO: Lista de IDs que REALMENTE tienen registro en history (para el Admin) ---
+    var verifiedIdsFromHistory by remember { mutableStateOf(setOf<String>()) }
+    // -----------------------------------------------------------------------------------
+
+    // Verificación local para el alumno (tuerca vieja pero funcional)
     var hasLocalAttendance by remember { mutableStateOf(false) }
-    // -----------------------------------------------------------
 
-    // Estado del CheckIn local
-    val checkInState by scheduleViewModel.checkInResult.collectAsState()
-
-    // Cuando volvemos del escáner, forzamos una re-verificación local
     val scannerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { _ ->
         if (detailsState is ClassDetailsState.Success) {
             val classId = (detailsState as ClassDetailsState.Success).gymClass.id
-            // CONSULTA CON GYM_ID
             checkAttendanceInFirestore(classId, currentUser.id, currentUser.gym_id) { exists ->
                 hasLocalAttendance = exists
             }
+            scheduleViewModel.loadClassDetails(classId)
         }
     }
 
-    // Feedback
     LaunchedEffect(bookingState) {
         if (bookingState is BookingState.Success) {
             Toast.makeText(context, (bookingState as BookingState.Success).message, Toast.LENGTH_SHORT).show()
@@ -128,13 +128,21 @@ private fun ClassDetailsContent(
         }
     }
 
-    // Verificación inicial cuando carga la clase
     LaunchedEffect(detailsState) {
         if (detailsState is ClassDetailsState.Success) {
-            val classId = (detailsState as ClassDetailsState.Success).gymClass.id
-            // CONSULTA CON GYM_ID
-            checkAttendanceInFirestore(classId, currentUser.id, currentUser.gym_id) { exists ->
+            val gymClass = (detailsState as ClassDetailsState.Success).gymClass
+
+            // 1. Chequeo para el Alumno (Soy yo?)
+            checkAttendanceInFirestore(gymClass.id, currentUser.id, currentUser.gym_id) { exists ->
                 hasLocalAttendance = exists
+            }
+
+            // 2. NUEVO: Si soy Admin, busco la verdad absoluta en el historial
+            // Esto soluciona el problema de que el documento de Class no esté actualizado
+            if (currentUser.isAdmin) {
+                fetchRealTimeAttendance(gymClass.id, currentUser.gym_id) { realIds ->
+                    verifiedIdsFromHistory = realIds
+                }
             }
         }
     }
@@ -189,11 +197,9 @@ private fun ClassDetailsContent(
                 val gymClass = state.gymClass
                 val wod = state.wod
                 val hasAccessToList = currentUser.hasValidCredits || currentUser.isAdmin
-
-                // LÓGICA DE VISUALIZACIÓN
                 val isEnrolled = gymClass.enrolledUserIds.contains(currentUser.id)
 
-                // COMBINAMOS: El dato del documento de clase O nuestra verificación local en attendance_history
+                // Lógica combinada para saber si YO ya di el presente
                 val alreadyCheckedIn = (gymClass.checkedInUserIds?.contains(currentUser.id) == true) || hasLocalAttendance
 
                 val now = Date()
@@ -203,7 +209,24 @@ private fun ClassDetailsContent(
 
                 LaunchedEffect(gymClass.enrolledUserIds) {
                     adminViewModel.loadAttendeesDetails(gymClass.enrolledUserIds)
-                    attendedUserIds = if (gymClass.attendanceTaken) gymClass.attendedUserIds.toSet() else gymClass.enrolledUserIds.toSet()
+                }
+
+                // Sincronización de Checkboxes para el Admin
+                LaunchedEffect(gymClass.checkedInUserIds, gymClass.attendedUserIds, verifiedIdsFromHistory) {
+                    val initialSet = mutableSetOf<String>()
+
+                    // Si ya se cerró la asistencia antes
+                    if (gymClass.attendanceTaken) {
+                        initialSet.addAll(gymClass.attendedUserIds)
+                    }
+
+                    // Sumamos los que están en la lista oficial de la clase
+                    gymClass.checkedInUserIds?.let { initialSet.addAll(it) }
+
+                    // SUMAMOS LOS RECUPERADOS DEL HISTORIAL (El arreglo "mágico")
+                    initialSet.addAll(verifiedIdsFromHistory)
+
+                    attendedUserIds = initialSet
                 }
 
                 LazyColumn(
@@ -216,14 +239,12 @@ private fun ClassDetailsContent(
                     ),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    // 1. HEADER & STATS
                     item { ClassHeaderSection(gymClass) }
 
-                    // --- BOTÓN DAR PRESENTE ---
+                    // BOTÓN ALUMNO
                     if (isEnrolled && isCheckInTime && !currentUser.isAdmin) {
                         item {
                             if (alreadyCheckedIn) {
-                                // YA DIO PRESENTE (Verde)
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(containerColor = ColorSuccess.copy(alpha = 0.2f)),
@@ -241,7 +262,6 @@ private fun ClassDetailsContent(
                                     }
                                 }
                             } else {
-                                // BOTÓN PARA ESCANEAR (Naranja)
                                 Button(
                                     onClick = {
                                         val intent = Intent(context, QrScannerActivity::class.java)
@@ -260,12 +280,9 @@ private fun ClassDetailsContent(
                             }
                         }
                     }
-                    // ----------------------------------
 
-                    // 2. WOD / DESCRIPCIÓN
                     item { ClassDescriptionSection(gymClass, wod) }
 
-                    // 3. ASISTENTES
                     item {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = ColorBorder)
                         Text("Asistentes (${gymClass.enrolledUserIds.size})", style = MaterialTheme.typography.titleMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
@@ -291,21 +308,31 @@ private fun ClassDetailsContent(
                                             Column(Modifier.padding(16.dp)) {
                                                 attendeesState.attendees.forEachIndexed { index, user ->
 
-                                                    // Chequeo visual en la lista también
-                                                    val hasCheckedIn = (gymClass.checkedInUserIds?.contains(user.id) == true) ||
-                                                            (user.id == currentUser.id && hasLocalAttendance)
+                                                    // 1. ¿Está en la lista oficial de la clase?
+                                                    val inClassList = gymClass.checkedInUserIds?.contains(user.id) == true
 
-                                                    val isClassInThePast = gymClass.dateTime?.before(Date()) == true
-                                                    val isAttendanceMode = currentUser.isAdmin && isClassInThePast && !gymClass.attendanceTaken
+                                                    // 2. ¿Está en el historial recuperado (Admin)?
+                                                    val inHistoryList = verifiedIdsFromHistory.contains(user.id)
+
+                                                    // 3. ¿Soy yo y mi local dice que sí?
+                                                    val isMeAndLocal = (user.id == currentUser.id && hasLocalAttendance)
+
+                                                    // DETERMINAR PRESENCIA VISUAL
+                                                    val isPresent = inClassList || inHistoryList || isMeAndLocal
+
+                                                    // DETERMINAR CHECKBOX DEL ADMIN
+                                                    // Si el admin lo marcó manual O si el sistema detectó presencia
+                                                    val isCheckedForAdmin = attendedUserIds.contains(user.id) || isPresent
 
                                                     AttendeeItemRow(
                                                         attendee = user,
-                                                        isAttendanceMode = isAttendanceMode,
-                                                        isChecked = if (currentUser.isAdmin) attendedUserIds.contains(user.id) else hasCheckedIn,
-                                                        onCheckChanged = { isChecked ->
-                                                            attendedUserIds = if (isChecked) attendedUserIds + user.id else attendedUserIds - user.id
+                                                        isAttendanceMode = currentUser.isAdmin,
+                                                        isChecked = if (currentUser.isAdmin) isCheckedForAdmin else isPresent,
+                                                        onCheckChanged = { shouldCheck ->
+                                                            attendedUserIds = if (shouldCheck) attendedUserIds + user.id else attendedUserIds - user.id
                                                         },
-                                                        showCheckIcon = hasCheckedIn
+                                                        showCheckIcon = isPresent,
+                                                        showQrLabel = inClassList || inHistoryList // Mostrar QR si el sistema lo detectó
                                                     )
                                                     if (index < attendeesState.attendees.size - 1) {
                                                         HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 12.dp))
@@ -326,10 +353,10 @@ private fun ClassDetailsContent(
     }
 }
 
-// --- FUNCIÓN AUXILIAR CORREGIDA CON GYM_ID ---
+// --- FUNCIÓN INDIVIDUAL (Para alumno) ---
 private fun checkAttendanceInFirestore(classId: String, userId: String, gymId: String, onResult: (Boolean) -> Unit) {
     FirebaseFirestore.getInstance().collection("attendance_history")
-        .whereEqualTo("gym_id", gymId) // <--- ESTO ES LO IMPORTANTE
+        .whereEqualTo("gym_id", gymId)
         .whereEqualTo("userId", userId)
         .whereEqualTo("classId", classId)
         .limit(1)
@@ -337,13 +364,24 @@ private fun checkAttendanceInFirestore(classId: String, userId: String, gymId: S
         .addOnSuccessListener { documents ->
             onResult(!documents.isEmpty)
         }
-        .addOnFailureListener {
-            onResult(false)
-        }
+        .addOnFailureListener { onResult(false) }
 }
 
-
-// --- COMPONENTES VISUALES ---
+// --- NUEVA FUNCIÓN GRUPAL (Para Admin) ---
+// Busca TODAS las asistencias de esta clase para mostrarlas aunque el documento de Class esté desactualizado
+private fun fetchRealTimeAttendance(classId: String, gymId: String, onResult: (Set<String>) -> Unit) {
+    FirebaseFirestore.getInstance().collection("attendance_history")
+        .whereEqualTo("gym_id", gymId)
+        .whereEqualTo("classId", classId)
+        .get()
+        .addOnSuccessListener { documents ->
+            val ids = documents.mapNotNull { it.getString("userId") }.toSet()
+            onResult(ids)
+        }
+        .addOnFailureListener {
+            onResult(emptySet())
+        }
+}
 
 @Composable
 fun ClassHeaderSection(gymClass: GymClass) {
@@ -447,7 +485,8 @@ fun AttendeeItemRow(
     isAttendanceMode: Boolean,
     isChecked: Boolean,
     onCheckChanged: (Boolean) -> Unit,
-    showCheckIcon: Boolean = false
+    showCheckIcon: Boolean = false,
+    showQrLabel: Boolean = false
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         SubcomposeAsyncImage(
@@ -461,16 +500,45 @@ fun AttendeeItemRow(
         Spacer(Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(attendee.fullName, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary)
-            // Aquí podríamos mostrar los iconos de logros en el futuro
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(attendee.fullName, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary)
+                if (showQrLabel) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("(QR)", style = MaterialTheme.typography.labelSmall, color = ColorSuccess, fontWeight = FontWeight.Bold)
+                }
+            }
+            
+            // Gamification Level Badge
+            val level = attendee.level ?: "Novato"
+            val badgeColor = getLevelColor(level)
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .background(badgeColor.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Star, 
+                    contentDescription = null, 
+                    tint = badgeColor, 
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = level.uppercase(), 
+                    style = MaterialTheme.typography.labelSmall, 
+                    fontWeight = FontWeight.Bold, 
+                    color = badgeColor
+                )
+            }
         }
 
-        // Si dio presente con QR, mostramos el check verde
         if (showCheckIcon) {
             Icon(Icons.Default.CheckCircle, null, tint = ColorSuccess, modifier = Modifier.size(20.dp))
         }
 
-        // Modo Admin: Checkbox manual
         if (isAttendanceMode) {
             Checkbox(
                 checked = isChecked,
@@ -480,8 +548,6 @@ fun AttendeeItemRow(
         }
     }
 }
-
-// --- BARRAS DE ACCIÓN ---
 
 @Composable
 fun GlassBottomBar(content: @Composable RowScope.() -> Unit) {
@@ -508,7 +574,6 @@ fun StudentActionButtons(
     var buttonText by remember { mutableStateOf("") }
     var isEnabled by remember { mutableStateOf(true) }
 
-    // Logic check
     val now = Date()
     val classTime = gymClass.dateTime ?: now
     val thirtyMinutesBefore = Date(classTime.time - (30 * 60 * 1000))
@@ -536,9 +601,8 @@ fun StudentActionButtons(
 
 @Composable
 fun AdminActionButtons(gymClass: GymClass, isLoading: Boolean, onSaveAttendance: () -> Unit) {
-    val isPast = gymClass.dateTime?.before(Date()) == true
-
-    if (isPast && !gymClass.attendanceTaken && gymClass.enrolledUserIds.isNotEmpty()) {
+    if (gymClass.enrolledUserIds.isNotEmpty()) {
+        val buttonText = if (gymClass.attendanceTaken) "ACTUALIZAR ASISTENCIA" else "CONFIRMAR ASISTENCIA"
         Button(
             onClick = onSaveAttendance,
             modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -547,23 +611,10 @@ fun AdminActionButtons(gymClass: GymClass, isLoading: Boolean, onSaveAttendance:
             shape = RoundedCornerShape(12.dp)
         ) {
             if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-            else Text("CONFIRMAR ASISTENCIA", fontWeight = FontWeight.Bold)
+            else Text(buttonText, fontWeight = FontWeight.Bold)
         }
-    } else if (gymClass.attendanceTaken) {
-        Text(
-            "Asistencia Registrada",
-            color = ColorSuccess,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
     } else {
-        Text(
-            "Gestión habilitada al finalizar la clase",
-            color = ColorTextSecondary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text("No hay alumnos inscritos", color = ColorTextSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -593,5 +644,17 @@ private fun AccessDeniedCard(onRequestCredits: () -> Unit) {
                 Text("Recargar Créditos", color = Color.White)
             }
         }
+    }
+}
+
+@Composable
+fun getLevelColor(level: String): Color {
+    return when (level) {
+        "Novato" -> Color(0xFF4CAF50) // Green
+        "Constante" -> Color(0xFF2196F3) // Blue
+        "Atleta" -> Color(0xFFFF9800) // Orange
+        "RX" -> Color(0xFFF44336) // Red
+        "Elite" -> Color(0xFF9C27B0) // Purple
+        else -> Color.Gray
     }
 }

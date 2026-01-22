@@ -1,26 +1,22 @@
-// RUTA: presentation/viewmodel/HomeViewModel.kt
-// VERSIÓN ACTUALIZADA PARA NUEVA LÓGICA DE MENSAJERÍA (isRead)
-
 package com.aquiles.crosschapp.presentation.viewmodel
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.aquiles.crosschapp.data.common.Resource
 import com.aquiles.crosschapp.data.model.Notification
 import com.aquiles.crosschapp.data.model.PersonalMessage
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.Query
+import com.aquiles.crosschapp.data.repository.MessageRepository
+import com.aquiles.crosschapp.data.repository.NotificationRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import java.util.Date
 
-// --- Los Sealed Class se mantienen igual ---
+// --- Los Sealed Class se mantienen igual por ahora (se podrían mapear o reemplazar) ---
 sealed class PersonalMessageState {
     object Loading : PersonalMessageState()
     data class Success(val message: PersonalMessage) : PersonalMessageState()
@@ -35,7 +31,10 @@ sealed class NotificationsState {
 
 class HomeViewModel : ViewModel() {
 
-    private val firestore = FirebaseFirestore.getInstance()
+    // Inyección manual de dependencias (TODO: Usar Hilt en el futuro)
+    private val notificationRepository = NotificationRepository()
+    private val messageRepository = MessageRepository()
+    
     private val TAG = "HomeViewModel_DEBUG"
 
     private val _notificationsState = MutableStateFlow<NotificationsState>(NotificationsState.Loading)
@@ -43,8 +42,8 @@ class HomeViewModel : ViewModel() {
     private val _personalMessageState = MutableStateFlow<PersonalMessageState>(PersonalMessageState.Loading)
     val personalMessageState: StateFlow<PersonalMessageState> = _personalMessageState.asStateFlow()
 
-    private var notificationsListener: ListenerRegistration? = null
-    private var personalMessageListener: ListenerRegistration? = null
+    private var notificationsJob: Job? = null
+    private var personalMessageJob: Job? = null
 
     init {
         Log.d(TAG, "ViewModel inicializado.")
@@ -64,94 +63,65 @@ class HomeViewModel : ViewModel() {
     }
 
     private fun listenForUnreadNotifications(userId: String, gymId: String) {
-        notificationsListener?.remove()
-        notificationsListener = firestore.collection("notifications")
-            .whereEqualTo("gym_id", gymId)
-            .whereEqualTo("userId", userId)
-            .whereEqualTo("isRead", false)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(10)
-            .addSnapshotListener { snapshots, e ->
-                if (e != null) {
-                    _notificationsState.value = NotificationsState.Error(e.localizedMessage ?: "Error")
-                    return@addSnapshotListener
+        notificationsJob?.cancel()
+        notificationsJob = notificationRepository.getUnreadNotifications(userId, gymId)
+            .onEach { result ->
+                when(result) {
+                    is Resource.Success -> {
+                        _notificationsState.value = NotificationsState.Success(result.data ?: emptyList())
+                    }
+                    is Resource.Error -> {
+                        _notificationsState.value = NotificationsState.Error(result.message ?: "Error desconocido")
+                    }
+                    is Resource.Loading -> {
+                        // Opcional: _notificationsState.value = NotificationsState.Loading
+                    }
                 }
-                val notifications = snapshots?.toObjects(Notification::class.java) ?: emptyList()
-                _notificationsState.value = NotificationsState.Success(notifications)
             }
+            .launchIn(viewModelScope)
     }
 
     private fun listenForPersonalMessage(userId: String, gymId: String) {
-        Log.d(TAG, "-> listenForPersonalMessage llamado con userId: $userId, gymId: $gymId")
-        personalMessageListener?.remove()
-
-        // --- CAMBIO 1: La consulta ahora busca 'isRead' en lugar de '_archived' ---
-        // Esto nos mostrará el último mensaje NO LEÍDO como una notificación.
-        personalMessageListener = firestore.collection("personal_messages")
-            .whereEqualTo("gym_id", gymId)
-            .whereEqualTo("userId", userId)
-            .whereEqualTo("isRead", false) // <-- El cambio clave
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(1)
-            .addSnapshotListener { snapshots, e ->
-                Log.d(TAG, "-> Listener de mensajes personales DISPARADO.")
-                if (e != null) {
-                    Log.e(TAG, "-> ERROR en el listener: ", e)
-                    _personalMessageState.value = PersonalMessageState.Error(e.localizedMessage ?: "Error al cargar mensaje")
-                    return@addSnapshotListener
-                }
-
-                if (snapshots == null || snapshots.isEmpty) {
-                    Log.d(TAG, "-> El Snapshot es NULO o VACÍO. No se encontraron mensajes no leídos.")
-                    _personalMessageState.value = PersonalMessageState.Empty
-                } else {
-                    Log.d(TAG, "-> Snapshot recibido con ${snapshots.size()} documento(s).")
-                    val document = snapshots.documents.first()
-                    Log.d(TAG, "-> Datos del documento: ${document.data}")
-                    val message = try {
-                        document.toObject(PersonalMessage::class.java)
-                    } catch (ex: Exception) {
-                        Log.e(TAG, "-> EXCEPCIÓN durante toObject():", ex)
-                        null
+        personalMessageJob?.cancel()
+        personalMessageJob = messageRepository.getUnreadPersonalMessage(userId, gymId)
+            .onEach { result ->
+                when(result) {
+                    is Resource.Success -> {
+                        val msg = result.data
+                        if (msg != null) {
+                            _personalMessageState.value = PersonalMessageState.Success(msg)
+                        } else {
+                            _personalMessageState.value = PersonalMessageState.Empty
+                        }
                     }
-
-                    if (message != null) {
-                        Log.d(TAG, "-> CONVERSIÓN A OBJETO EXITOSA. Objeto: $message")
-                        _personalMessageState.value = PersonalMessageState.Success(message)
-                    } else {
-                        Log.e(TAG, "-> ¡FALLO CRÍTICO! La conversión a objeto devolvió NULL.")
-                        _personalMessageState.value = PersonalMessageState.Empty
+                    is Resource.Error -> {
+                        _personalMessageState.value = PersonalMessageState.Error(result.message ?: "Error desconocido")
+                    }
+                    is Resource.Loading -> {
+                        _personalMessageState.value = PersonalMessageState.Loading
                     }
                 }
             }
+            .launchIn(viewModelScope)
     }
 
     fun markNotificationAsRead(notificationId: String) {
         if (notificationId.isBlank()) return
         viewModelScope.launch {
-            try {
-                firestore.collection("notifications").document(notificationId).update("isRead", true).await()
-            } catch (e: Exception) { Log.e(TAG, "Error al marcar notif como leída", e) }
+            notificationRepository.markAsRead(notificationId)
         }
     }
 
-    // --- CAMBIO 2: Renombramos la función y cambiamos su lógica ---
-    // Ya no archivamos, solo marcamos como leído.
     fun markPersonalMessageAsRead(messageId: String) {
         if (messageId.isBlank()) return
         viewModelScope.launch {
-            try {
-                firestore.collection("personal_messages").document(messageId).update("isRead", true).await()
-                Log.d(TAG, "Mensaje $messageId marcado como leído.")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error al marcar mensaje como leído", e)
-            }
+            messageRepository.markAsRead(messageId)
         }
     }
 
     private fun clearListenersAndSetEmptyState() {
-        notificationsListener?.remove()
-        personalMessageListener?.remove()
+        notificationsJob?.cancel()
+        personalMessageJob?.cancel()
         _notificationsState.value = NotificationsState.Success(emptyList())
         _personalMessageState.value = PersonalMessageState.Empty
     }
