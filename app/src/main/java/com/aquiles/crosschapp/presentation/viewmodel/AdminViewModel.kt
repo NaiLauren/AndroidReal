@@ -202,6 +202,23 @@ class AdminViewModel : ViewModel() {
             }
         }
     }
+
+    // --- NEW: Dynamic Theming Update (Sync with iOS) ---
+    fun updateGymPrimaryColor(hexColor: String, onResult: (Boolean) -> Unit) {
+        executeAdminAction({ onResult(false) }) { _, gymId ->
+            try {
+                firestore.collection("gyms").document(gymId)
+                    .update("primaryColor", hexColor)
+                    .await()
+                
+                // Update local session if needed (optional, assuming UserSession re-fetches or observes)
+                onResult(true)
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error updating primary color", e)
+                onResult(false)
+            }
+        }
+    }
     // =================================================================
     // 1. GESTIÓN DE HORARIOS (CORREGIDO PARA IGUALAR IOS)
     // =================================================================

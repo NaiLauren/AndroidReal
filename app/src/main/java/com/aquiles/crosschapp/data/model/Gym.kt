@@ -8,5 +8,6 @@ data class Gym(
     val state: String = "",
     val city: String = "",
     val logoUrl: String? = null,
-    val address: String = ""
+    val address: String = "",
+    val primaryColor: String? = null // Hex Color for Dynamic Theming
 )

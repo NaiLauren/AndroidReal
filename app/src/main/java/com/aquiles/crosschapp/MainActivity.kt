@@ -360,6 +360,23 @@ fun NavGraphBuilder.mainGraph(
                 adminViewModel = viewModel()
             )
         }
+        
+        // --- NEW: THEMED & PLANNER ROUTES ---
+        composable("admin_gym_settings") {
+            AdminGymSettingsScreen(
+                navController = navController,
+                adminViewModel = viewModel(),
+                innerPadding = innerPadding
+            )
+        }
+        composable("admin_schedule_planner") {
+            AdminSchedulePlannerScreen(
+                navController = navController,
+                innerPadding = innerPadding
+            )
+        }
+        // ------------------------------------
+        
         composable(
             route = "create_edit_class_screen?classId={classId}",
             arguments = listOf(navArgument("classId") { type = NavType.StringType; nullable = true })

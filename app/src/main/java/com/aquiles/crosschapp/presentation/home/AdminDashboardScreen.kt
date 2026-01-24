@@ -116,6 +116,14 @@ private fun ManagementToolsSection(navController: NavController) {
             onClick = { navController.navigate("admin_manage_classes") }
         )
 
+        // NEW: Batch Planner
+        AdminOptionCardGlass(
+            title = "Planificador Masivo",
+            subtitle = "Autocompletar mes/semana",
+            icon = Icons.Default.Schedule,
+            onClick = { navController.navigate("admin_schedule_planner") }
+        )
+
         Text(
             "CONFIGURACIÓN",
             style = MaterialTheme.typography.labelLarge,
@@ -131,14 +139,19 @@ private fun ManagementToolsSection(navController: NavController) {
             onClick = { navController.navigate("admin_manage_packs_screen") }
         )
 
-        // --- NUEVA OPCIÓN AÑADIDA AQUÍ ---
         AdminOptionCardGlass(
             title = "Métodos de Pago",
             subtitle = "Configurar CBU, Alias y MP",
             icon = Icons.Default.Payments,
             onClick = { navController.navigate("admin_payment_config") }
         )
-        // ---------------------------------
+
+        AdminOptionCardGlass(
+            title = "Personalización",
+            subtitle = "Color de marca y apariencia",
+            icon = Icons.Default.Palette,
+            onClick = { navController.navigate("admin_gym_settings") }
+        )
 
         AdminOptionCardGlass(
             title = "Benchmarks",
