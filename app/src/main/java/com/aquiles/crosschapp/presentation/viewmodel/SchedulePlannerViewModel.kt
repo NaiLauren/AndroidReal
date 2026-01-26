@@ -125,7 +125,7 @@ class SchedulePlannerViewModel : ViewModel() {
                 if (createWod) {
                     val newWodRef = db.collection("wods").document()
                     val newWod = hashMapOf(
-                        "id" to newWodRef.id,
+                        // "id" REMOVED: Managed by @DocumentId in Wod model
                         "title" to className, // Using class name as WOD title
                         "type" to "Daily",
                         "description" to description,
@@ -155,7 +155,7 @@ class SchedulePlannerViewModel : ViewModel() {
                         
                         val newClassRef = db.collection("gymClasses").document()
                         val newClass = hashMapOf(
-                            "id" to newClassRef.id,
+                            // "id" REMOVED: Managed by @DocumentId annotation in GymClass
                             "gym_id" to gid,
                             "name" to className,
                             "description" to description,

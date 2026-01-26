@@ -208,7 +208,7 @@ class AdminViewModel : ViewModel() {
         executeAdminAction({ onResult(false) }) { _, gymId ->
             try {
                 firestore.collection("gyms").document(gymId)
-                    .update("primaryColor", hexColor)
+                    .update("primary_color", hexColor)
                     .await()
                 
                 // Update local session if needed (optional, assuming UserSession re-fetches or observes)
@@ -349,7 +349,7 @@ class AdminViewModel : ViewModel() {
                         val finalName = if (isWodType) wodTitle.ifBlank { "WOD" } else otherClassName
 
                         val newClass = GymClass(
-                            id = classRef.id,
+                            documentId = classRef.id,
                             gym_id = gymId,
                             name = finalName,
                             description = if (isWodType) wodDescription else otherClassDescription,
@@ -732,6 +732,11 @@ class AdminViewModel : ViewModel() {
                     transaction.update(classRef, mapOf("attendanceTaken" to true, "attendedUserIds" to attendedUserIds))
                 }.await()
                 _classOperationState.value = ClassOperationState.Success("Asistencia guardada.")
+                
+                // Iniciar proceso de gamificación en segundo plano para cada alumno
+                attendedUserIds.forEach { userId ->
+                    processGamificationForUser(userId, gymId)
+                }
             } catch (e: Exception) {
                 _classOperationState.value = ClassOperationState.Error(e.localizedMessage ?: "Error.")
             }
@@ -888,7 +893,7 @@ class AdminViewModel : ViewModel() {
                     .whereGreaterThanOrEqualTo("dateTime", Date())
                     .orderBy("dateTime", Query.Direction.ASCENDING)
                     .get().await()
-                val classes = snapshot.documents.mapNotNull { it.toObject(GymClass::class.java)?.copy(id = it.id) }
+                val classes = snapshot.documents.mapNotNull { it.toObject(GymClass::class.java)?.copy(documentId = it.id) }
                 _classListState.value = ClassListState.Success(classes)
             } catch (e: Exception) {
                 _classListState.value = ClassListState.Error(e.message ?: "Error")
@@ -955,7 +960,7 @@ class AdminViewModel : ViewModel() {
             _classForEditState.value = ClassForEditState.Loading
             try {
                 val doc = firestore.collection("gymClasses").document(classId).get().await()
-                val cls = doc.toObject(GymClass::class.java)?.copy(id = doc.id) ?: throw Exception("Clase no encontrada")
+                val cls = doc.toObject(GymClass::class.java)?.copy(documentId = doc.id) ?: throw Exception("Clase no encontrada")
                 var wod: Wod? = null
                 if (!cls.wodId.isNullOrBlank()) {
                     val wDoc = firestore.collection("wods").document(cls.wodId!!).get().await()
@@ -1123,6 +1128,134 @@ class AdminViewModel : ViewModel() {
                 FileProvider.getUriForFile(context, "${context.packageName}.provider", f)
 
             } catch(e: Exception) { null }
+        }
+    }
+
+    private fun processGamificationForUser(userId: String, gymId: String) {
+        viewModelScope.launch {
+            try {
+                // 1. Obtener historial para contexto (rachas, horarios)
+                val snapshot = firestore.collection("attendance_history")
+                    .whereEqualTo("gym_id", gymId)
+                    .whereEqualTo("userId", userId)
+                    .get().await()
+
+                val documents = snapshot.documents
+                val earnedDefinitions = mutableListOf<com.aquiles.crosschapp.data.model.AchievementDefinition>()
+
+                // 2. Análisis de Contexto
+                val now = Calendar.getInstance()
+                val currentHour = now.get(Calendar.HOUR_OF_DAY)
+                val dayOfWeek = now.get(Calendar.DAY_OF_WEEK) // Dom=1, Lun=2, ..., Sab=7
+
+                // - MADRUGADOR (< 9 AM)
+                if (currentHour < 9) AchievementSystem.getById("early_bird")?.let { earnedDefinitions.add(it) }
+
+                // - AVE NOCTURNA (>= 20 PM)
+                if (currentHour >= 20) AchievementSystem.getById("night_owl")?.let { earnedDefinitions.add(it) }
+
+                // - GUERRERO DE FINDE (Sab=7, Dom=1)
+                if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
+                    AchievementSystem.getById("weekend_warrior")?.let { earnedDefinitions.add(it) }
+                }
+
+                // - LUNES SAGRADO (Lun=2)
+                if (dayOfWeek == Calendar.MONDAY) {
+                    AchievementSystem.getById("never_skip_monday")?.let { earnedDefinitions.add(it) }
+                }
+
+                // - HORA DEL ALMUERZO (12 a 14)
+                if (currentHour in 12..14) {
+                    AchievementSystem.getById("lunch_crew")?.let { earnedDefinitions.add(it) }
+                }
+
+                // ANÁLISIS HISTÓRICO (Requiere documentos)
+                // - DOBLE TURNO (Más de 1 clase hoy)
+                val todayStart = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
+                val classesToday = documents.count { doc ->
+                    val timestamp = doc.getTimestamp("classDate")
+                    timestamp != null && timestamp.toDate().after(todayStart.time)
+                }
+                // Si classesToday >= 2 (contando la actual que ya se guardó)
+                if (classesToday >= 2) {
+                    AchievementSystem.getById("double_trouble")?.let { earnedDefinitions.add(it) }
+                }
+
+                // - HAT TRICK (3 días seguidos)
+                // Buscamos clases de ayer y anteayer
+                val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0) }
+                val dayBeforeYesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -2); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0) }
+                val endOfYesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1); set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59) }
+                
+                val hasClassYesterday = documents.any { doc ->
+                     val d = doc.getTimestamp("classDate")?.toDate()
+                     d != null && d.after(yesterday.time) && d.before(endOfYesterday.time)
+                }
+                
+                val hasClassDayBefore = documents.any { doc ->
+                     val d = doc.getTimestamp("classDate")?.toDate()
+                     d != null && d.after(dayBeforeYesterday.time) && d.before(yesterday.time)
+                }
+
+                if (hasClassYesterday && hasClassDayBefore) {
+                    AchievementSystem.getById("hat_trick")?.let { earnedDefinitions.add(it) }
+                }
+
+                // - SEMANA DE FUEGO (5 clases en últimos 7 días)
+                val oneWeekAgo = Calendar.getInstance()
+                oneWeekAgo.add(Calendar.DAY_OF_YEAR, -7)
+
+                val classesThisWeek = documents.count { doc ->
+                    val timestamp = doc.getTimestamp("classDate")
+                    timestamp != null && timestamp.toDate().after(oneWeekAgo.time)
+                }
+
+                if (classesThisWeek >= 5) {
+                    AchievementSystem.getById("week_fire")?.let { earnedDefinitions.add(it) }
+                }
+
+                // 3. Guardar y dar XP
+                val batch = firestore.batch()
+                var totalXpGained = 0
+
+                // Logros desbloqueados
+                earnedDefinitions.forEach { def ->
+                    val docRef = firestore.collection("achievements").document("${userId}_${def.id}")
+                    val newAchievement = Achievement(
+                        id = def.id,
+                        title = def.title,
+                        description = def.description,
+                        iconName = def.iconName,
+                        type = "smart",
+                        userId = userId,
+                        gym_id = gymId,
+                        unlockedAt = Date()
+                    )
+                    batch.set(docRef, newAchievement)
+                    totalXpGained += def.xpReward
+                }
+
+                // XP Base por Asistencia
+                totalXpGained += com.aquiles.crosschapp.data.model.LevelSystem.XP_ATTENDANCE
+
+                // Actualizar Usuario
+                val userRef = firestore.collection("users").document(userId)
+                val userDoc = userRef.get().await()
+                val currentXp = userDoc.getLong("xp")?.toInt() ?: 0
+                val newTotalXp = currentXp + totalXpGained
+                val newLevel = com.aquiles.crosschapp.data.model.LevelSystem.getLevelName(newTotalXp)
+
+                batch.update(userRef, "xp", newTotalXp)
+                batch.update(userRef, "level", newLevel)
+                
+                // NOTA: No incrementamos 'totalClassesAttended' aquí porque ya lo hizo saveAttendance en su transacción principal.
+
+                batch.commit().await()
+                Log.d("AdminViewModel", "Gamification processed for $userId: +$totalXpGained XP")
+
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error processing gamification for $userId", e)
+            }
         }
     }
 

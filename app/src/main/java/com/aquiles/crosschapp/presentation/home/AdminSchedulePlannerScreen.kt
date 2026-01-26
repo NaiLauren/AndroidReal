@@ -222,7 +222,7 @@ fun AdminSchedulePlannerScreen(
                     Text(
                         "${selectedTimes.size} horarios seleccionados",
                         color = ColorTextSecondary,
-                        style = MaterialTheme.typography.caption
+                        style = MaterialTheme.typography.labelSmall
                     )
                 }
                 

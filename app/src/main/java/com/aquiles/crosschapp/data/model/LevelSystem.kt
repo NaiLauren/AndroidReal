@@ -4,20 +4,20 @@ object LevelSystem {
 
     fun getLevelName(xp: Int): String {
         return when {
-            xp < 100 -> "Novato"
-            xp < 500 -> "Constante"
-            xp < 1500 -> "Atleta"
-            xp < 5000 -> "RX"
+            xp < 350 -> "Novato"
+            xp < 1000 -> "Constante"
+            xp < 3000 -> "Atleta"
+            xp < 10000 -> "RX"
             else -> "Elite"
         }
     }
 
     fun getNextLevelXp(xp: Int): Int {
         return when {
-            xp < 100 -> 100
-            xp < 500 -> 500
-            xp < 1500 -> 1500
-            xp < 5000 -> 5000
+            xp < 350 -> 350
+            xp < 1000 -> 1000
+            xp < 3000 -> 3000
+            xp < 10000 -> 10000
             else -> 100000 // Elite max
         }
     }
@@ -39,11 +39,11 @@ object LevelSystem {
 
     fun getPreviousLevelLimit(xp: Int): Int {
         return when {
-            xp < 100 -> 0
-            xp < 500 -> 100
-            xp < 1500 -> 500
-            xp < 5000 -> 1500
-            else -> 5000
+            xp < 350 -> 0
+            xp < 1000 -> 350
+            xp < 3000 -> 1000
+            xp < 10000 -> 3000
+            else -> 10000
         }
     }
 }

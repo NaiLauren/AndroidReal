@@ -348,11 +348,11 @@ fun DateSelector(
             val isSelected = date == selectedDate
             val isEnabled = isDateEnabled(date, user)
 
-            val containerColor = when {
-                isSelected -> ColorPrimaryAction
-                isEnabled -> ColorGlassSurface
-                else -> ColorGlassSurface.copy(alpha = 0.3f)
-            }
+                val containerColor = when {
+                    isSelected -> MaterialTheme.colorScheme.primary
+                    isEnabled -> ColorGlassSurface
+                    else -> ColorGlassSurface.copy(alpha = 0.3f)
+                }
 
             val textColor = if (isSelected) Color.White else ColorTextSecondary.copy(alpha = if(isEnabled) 1f else 0.5f)
             val border = if (isSelected) null else BorderStroke(1.dp, ColorBorder)
@@ -423,7 +423,7 @@ fun AccessBlockedView(onNavigate: () -> Unit) {
         Icon(
             imageVector = Icons.Default.LockClock,
             contentDescription = null,
-            tint = ColorPrimaryAction,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(64.dp)
         )
         Spacer(modifier = Modifier.height(24.dp))
@@ -443,7 +443,7 @@ fun AccessBlockedView(onNavigate: () -> Unit) {
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = onNavigate,
-            colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = RoundedCornerShape(12.dp),
             contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp)
         ) {

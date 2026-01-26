@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -162,7 +164,7 @@ fun AttendanceChartSectionGlass(
             ) {
                 Text("Asistencia", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
                 // Icono decorativo pequeño
-                Icon(Icons.Default.BarChart, null, tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.BarChart, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
 
             Spacer(Modifier.height(16.dp))
@@ -176,7 +178,7 @@ fun AttendanceChartSectionGlass(
 
             Box(Modifier.fillMaxWidth().height(160.dp), Alignment.Center) {
                 if (state.isLoading) {
-                    CircularProgressIndicator(color = ColorPrimaryAction)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 } else {
                     when(val data = state.data) {
                         is AttendanceData.BarChartData -> {
@@ -238,7 +240,7 @@ fun GlassSegmentedControl(
 @Composable
 fun GlassBarChart(data: List<Float>, labels: List<String>, modifier: Modifier = Modifier) {
     val textMeasurer = rememberTextMeasurer()
-    val barColor = ColorPrimaryAction
+    val barColor = MaterialTheme.colorScheme.primary
     val axisColor = ColorTextSecondary
 
     Canvas(modifier = modifier) {
@@ -296,7 +298,7 @@ fun WeeklyAttendanceSummary(days: List<WeeklyAttendanceDay>) {
                     modifier = Modifier
                         .size(30.dp)
                         .clip(CircleShape)
-                        .background(if (day.attended) ColorPrimaryAction else Color.White.copy(alpha = 0.05f))
+                        .background(if (day.attended) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.05f))
                         .border(1.dp, if (day.attended) Color.Transparent else ColorBorder, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
@@ -305,7 +307,7 @@ fun WeeklyAttendanceSummary(days: List<WeeklyAttendanceDay>) {
                 Text(
                     text = day.dayName.take(1),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (day.attended) ColorPrimaryAction else ColorTextSecondary
+                    color = if (day.attended) MaterialTheme.colorScheme.primary else ColorTextSecondary
                 )
             }
         }
@@ -327,174 +329,126 @@ fun RecordCardGlass(
     viewModel: PerformanceViewModel,
     isBenchmark: Boolean
 ) {
-    var selectedRecord by remember { mutableStateOf<PerformanceRecord?>(null) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    val dateFormatter = remember { SimpleDateFormat("dd MMM", Locale("es")) }
+    var showHistory by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state) {
-        if (state is PerformanceState.Success && selectedRecord == null) {
-            selectedRecord = state.records.firstOrNull()
-        }
+    if (showHistory && state is PerformanceState.Success) {
+        RecordHistoryDialog(
+            records = state.records,
+            label = label,
+            onDismiss = { showHistory = false },
+            onDelete = { record ->
+                viewModel.deleteRecord(record, isBenchmark)
+                // If list becomes empty, dialog stays but shows empty state
+            }
+        )
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth().height(180.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(140.dp) // Slightly reduced height as it's just a summary now
+            .clickable { 
+                if (state is PerformanceState.Success && state.records.isNotEmpty()) {
+                    showHistory = true 
+                }
+            },
         shape = RoundedCornerShape(20.dp),
         border = BorderStroke(1.dp, ColorBorder),
         colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorTextSecondary,
+                    letterSpacing = 1.sp
+                )
+                
+                if (state is PerformanceState.Success && state.records.isNotEmpty()) {
+                    Icon(
+                        imageVector = Icons.Default.History, 
+                        contentDescription = "Ver Historial",
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Content
             when (state) {
-                is PerformanceState.Loading, PerformanceState.Idle -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) }
-                is PerformanceState.Error -> Box(Modifier.fillMaxSize(), Alignment.Center) { Icon(Icons.Default.ErrorOutline, null, tint = ColorError) }
+                is PerformanceState.Loading, PerformanceState.Idle -> {
+                    Box(Modifier.fillMaxWidth(), Alignment.Center) { 
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp)) 
+                    }
+                }
+                is PerformanceState.Error -> {
+                    Text(
+                        text = "Error al cargar",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ColorError,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
                 is PerformanceState.Success -> {
                     if (state.records.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), Alignment.Center) {
-                            Text("Sin $label", color = ColorTextSecondary.copy(alpha = 0.5f), fontStyle = FontStyle.Italic)
-                        }
+                        Text(
+                            text = "Sin marcas registradas",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ColorTextSecondary.copy(alpha = 0.5f),
+                            fontStyle = FontStyle.Italic,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
                     } else {
-                        // Header con Dropdown
-                        // Header con Dropdown (CORREGIDO)
-                        var menuExpanded by remember { mutableStateOf(false) }
-                        val currentData = selectedRecord?.let { extractRecordData(it) }
-
-                        // 1. Envolvemos todo en ExposedDropdownMenuBox
-                        ExposedDropdownMenuBox(
-                            expanded = menuExpanded,
-                            onExpandedChange = { menuExpanded = !menuExpanded }
-                        ) {
-                            // 2. La Fila es el "Anchor" (Ancla)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor() // <--- IMPORTANTE: Esto vincula el menú a esta fila
-                                    .clickable { menuExpanded = true },
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = currentData?.name ?: label,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = ColorTextPrimary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Icon(Icons.Default.ArrowDropDown, null, tint = ColorTextSecondary)
-                                    }
-                                    currentData?.date?.let {
-                                        Text(
-                                            dateFormatter.format(it),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = ColorTextSecondary
-                                        )
-                                    }
-                                }
-
-                                // Delete Action (z-index alto para que funcione el click sobre el anchor)
-                                IconButton(onClick = { showDeleteDialog = true }, modifier = Modifier.size(24.dp)) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        null,
-                                        tint = ColorError.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-
-                            // 3. El Menú (Dentro del Box, ya no da error)
-                            ExposedDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false },
-                                modifier = Modifier.background(ColorDialogSurface)
-                            ) {
-                                state.records.forEach { record ->
-                                    val data = extractRecordData(record)
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text(
-                                                    data.name,
-                                                    color = ColorTextPrimary,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                                Text(
-                                                    data.score,
-                                                    color = ColorTextSecondary,
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                            }
-                                        },
-                                        onClick = {
-                                            selectedRecord = record
-                                            menuExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        // Score Display (Adjusted for better fit)
-                        currentData?.let { data ->
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                        // Show Latest Record
+                        val latestRecord = state.records.first()
+                        val data = extractRecordData(latestRecord)
+                        
+                        Column {
+                            Text(
+                                text = data.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorTextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
                                     text = data.score,
-                                    style = MaterialTheme.typography.titleLarge, // Reduced from headlineMedium
+                                    style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.Black,
-                                    color = ColorPrimaryAction,
-                                    modifier = Modifier.weight(1f, fill = false), // Allow text to shrink/wrap
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    lineHeight = 28.sp
+                                    color = MaterialTheme.colorScheme.primary
                                 )
-                                Spacer(Modifier.width(8.dp))
                                 if (data.isRx) {
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        "RX", 
-                                        style = MaterialTheme.typography.titleMedium, 
-                                        fontWeight = FontWeight.Bold, 
-                                        color = ColorTextSecondary, 
-                                        modifier = Modifier.padding(bottom = 2.dp)
+                                        text = "RX",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ColorTextSecondary,
+                                        modifier = Modifier.padding(bottom = 6.dp)
                                     )
                                 }
-                            }
-                            if (data.notes.isNotBlank()) {
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    "\"${data.notes}\"",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontStyle = FontStyle.Italic,
-                                    color = ColorTextSecondary.copy(alpha = 0.7f),
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    lineHeight = 14.sp
-                                )
                             }
                         }
                     }
                 }
             }
+            Spacer(modifier = Modifier.weight(1f))
         }
-    }
-
-    if (showDeleteDialog && selectedRecord != null) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            containerColor = ColorDialogSurface,
-            title = { Text("Eliminar Registro", color = ColorTextPrimary) },
-            text = { Text("¿Estás seguro?", color = ColorTextSecondary) },
-            confirmButton = {
-                Button(
-                    onClick = { viewModel.deleteRecord(selectedRecord!!, isBenchmark); showDeleteDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = ColorError)
-                ) { Text("Eliminar") }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancelar", color = ColorTextSecondary) } }
-        )
     }
 }
 
@@ -526,7 +480,7 @@ fun AchievementsSectionGlass(state: AchievementState) {
         colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
     ) {
         when (state) {
-            is AchievementState.Loading, AchievementState.Idle -> Box(Modifier.padding(24.dp).fillMaxWidth(), Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) }
+            is AchievementState.Loading, AchievementState.Idle -> Box(Modifier.padding(24.dp).fillMaxWidth(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             is AchievementState.Error -> Text(state.message, color = ColorError, modifier = Modifier.padding(16.dp))
             is AchievementState.Success -> {
                 if (state.achievements.isEmpty()) {
@@ -577,8 +531,8 @@ fun AchievementItem(achievement: AchievementUiModel) {
     }
 
     // Estilos según estado
-    val iconTint = if (isUnlocked) ColorPrimaryAction else Color.White.copy(alpha = 0.2f)
-    val bgBorder = if (isUnlocked) ColorPrimaryAction.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.1f)
+    val iconTint = if (isUnlocked) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.2f)
+    val bgBorder = if (isUnlocked) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.1f)
     val bgAlpha = if (isUnlocked) 0.4f else 0.1f
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp).clickable { showDialog = true }) {
@@ -640,9 +594,160 @@ fun AchievementItem(achievement: AchievementUiModel) {
             },
             confirmButton = {
                 TextButton(onClick = { showDialog = false }) {
-                    Text(if (isUnlocked) "Genial" else "Entendido", color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
+                    Text(if (isUnlocked) "Genial" else "Entendido", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
             }
         )
+    }
+}
+
+// --- HISTORY COMPONENTS (NEW) ---
+
+@Composable
+fun RecordHistoryDialog(
+    records: List<PerformanceRecord>,
+    label: String,
+    onDismiss: () -> Unit,
+    onDelete: (PerformanceRecord) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = ColorDialogSurface,
+        title = {
+            Text(
+                text = "Historial de $label",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = ColorTextPrimary
+            )
+        },
+        text = {
+            if (records.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                    Text("No hay registros guardados.", color = ColorTextSecondary)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp), // Limit height
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(records) { record ->
+                        RecordHistoryItem(record = record, onDelete = { onDelete(record) })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cerrar", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+fun RecordHistoryItem(
+    record: PerformanceRecord,
+    onDelete: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val data = extractRecordData(record)
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale("es")) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded },
+        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+        border = BorderStroke(1.dp, ColorBorder),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = data.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorTextPrimary
+                    )
+                    data.date?.let {
+                        Text(
+                            text = dateFormat.format(it),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ColorTextSecondary
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = data.score,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (data.isRx) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "RX",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Expanded Details
+            AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    HorizontalDivider(color = ColorBorder)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    if (data.description.isNotBlank()) {
+                         Text(
+                            text = data.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ColorTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    if (data.notes.isNotBlank()) {
+                        Text(
+                            text = "Notas: ${data.notes}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontStyle = FontStyle.Italic,
+                            color = ColorTextSecondary.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    // Delete Button
+                   Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                       TextButton(
+                           onClick = onDelete,
+                           colors = ButtonDefaults.textButtonColors(contentColor = ColorError)
+                       ) {
+                           Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                           Spacer(modifier = Modifier.width(4.dp))
+                           Text("Eliminar registro")
+                       }
+                   }
+                }
+            }
+        }
     }
 }

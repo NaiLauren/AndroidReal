@@ -148,7 +148,7 @@ private fun UserProfileContent(
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Lesiones:", color = ColorTextSecondary)
-                Text(if (user.hasInjuries == true) "SÍ" else "NO", color = if (user.hasInjuries == true) Color(0xFFFFA500) else ColorSuccess, fontWeight = FontWeight.Bold)
+                Text(if (user.hasInjuries == true) "SÍ" else "NO", color = if (user.hasInjuries == true) MaterialTheme.colorScheme.primary else ColorSuccess, fontWeight = FontWeight.Bold)
             }
 
             if (!user.medicalNotes.isNullOrBlank()) {

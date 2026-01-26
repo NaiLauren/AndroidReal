@@ -36,9 +36,36 @@ private val AppDarkColorScheme = darkColorScheme(
 fun CrossChAppTheme(
     darkTheme: Boolean = true,
     dynamicColor: Boolean = false,
+    overridePrimaryColor: Color? = null, // NEW: Dynamic Theming
     content: @Composable () -> Unit
 ) {
-    val colorScheme = AppDarkColorScheme
+    // Si hay un color personalizado, creamos un esquema en base a él
+    // Si no, usamos el por defecto (Orange)
+    val colorScheme = if (overridePrimaryColor != null) {
+        darkColorScheme(
+            primary = overridePrimaryColor,
+            onPrimary = NeutralWhite,
+            secondary = NeutralLightGrey,
+            onSecondary = NeutralBlack,
+            primaryContainer = overridePrimaryColor,
+            onPrimaryContainer = NeutralWhite,
+            secondaryContainer = NeutralMediumGrey,
+            onSecondaryContainer = NeutralWhite,
+            error = ErrorRed,
+            onError = NeutralWhite,
+            background = NeutralBlack,
+            onBackground = NeutralWhite,
+            surface = NeutralDarkGrey,
+            onSurface = NeutralWhite,
+            surfaceVariant = NeutralMediumGrey,
+            onSurfaceVariant = NeutralLightGrey,
+            outline = NeutralMediumGrey,
+            surfaceTint = overridePrimaryColor
+        )
+    } else {
+        AppDarkColorScheme
+    }
+
     val view = LocalView.current
 
     if (!view.isInEditMode) {

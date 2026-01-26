@@ -1,12 +1,14 @@
 package com.aquiles.crosschapp.data.model
 
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.IgnoreExtraProperties
 import com.google.firebase.firestore.PropertyName
 import java.util.Date
 
+@IgnoreExtraProperties
 data class GymClass(
     @DocumentId
-    val id: String = "",
+    val documentId: String = "",
     val name: String = "",
     val gym_id: String = "",
     val description: String = "",
@@ -33,4 +35,8 @@ data class GymClass(
 
     @PropertyName("hexColor")
     val hexColor: String = "#FC5200"
-)
+) {
+    // Backward compatibility for reads
+    val id: String
+        get() = documentId
+}

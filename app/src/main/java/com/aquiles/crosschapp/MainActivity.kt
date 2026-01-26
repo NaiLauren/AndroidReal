@@ -27,6 +27,7 @@ import androidx.navigation.navArgument
 import androidx.navigation.navigation
 import com.aquiles.crosschapp.presentation.VideoSplashScreen
 import com.aquiles.crosschapp.presentation.home.AdminManageBenchmarksScreen
+import com.aquiles.crosschapp.presentation.home.GamificationRulesScreen
 import com.aquiles.crosschapp.presentation.auth.GymFinderScreen
 import com.aquiles.crosschapp.presentation.auth.LoginScreen
 import com.aquiles.crosschapp.presentation.auth.RegisterScreen
@@ -68,7 +69,28 @@ class MainActivity : ComponentActivity() {
         askNotificationPermission()
         val shouldOpenNotifications = intent.getBooleanExtra("open_notifications_screen", false)
         setContent {
-            CrossChAppTheme {
+            val currentGym by UserSession.currentGym.collectAsState()
+            
+            // Convertir Hex String a Color (Robust)
+            val primaryColor = remember(currentGym?.primaryColor) {
+                try {
+                    var hex = currentGym?.primaryColor?.trim()
+                    if (!hex.isNullOrBlank()) {
+                        if (!hex.startsWith("#")) hex = "#$hex"
+                        if (hex.length == 4) { // #F00 -> #FF0000
+                             val r = hex[1]; val g = hex[2]; val b = hex[3]
+                             hex = "#$r$r$g$g$b$b"
+                        }
+                        Color(android.graphics.Color.parseColor(hex))
+                    } else {
+                        null
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+
+            CrossChAppTheme(overridePrimaryColor = primaryColor) {
                 MainApp(shouldOpenNotifications = shouldOpenNotifications)
             }
         }
@@ -218,6 +240,7 @@ fun NavGraphBuilder.mainGraph(
                 onEditProfileClicked = { navController.navigate("edit_profile_screen") },
                 onNavigateToRequestCredits = { navController.navigate("request_credits_screen") },
                 onNavigateToAdminDashboard = { navController.navigate("admin_dashboard_screen") },
+                onNavigateToRules = { navController.navigate("gamification_rules_screen") },
                 onLogout = onLogout
             )
         }
@@ -373,6 +396,11 @@ fun NavGraphBuilder.mainGraph(
             AdminSchedulePlannerScreen(
                 navController = navController,
                 innerPadding = innerPadding
+            )
+        }
+        composable("gamification_rules_screen") {
+            GamificationRulesScreen(
+                onDismiss = { navController.popBackStack() }
             )
         }
         // ------------------------------------

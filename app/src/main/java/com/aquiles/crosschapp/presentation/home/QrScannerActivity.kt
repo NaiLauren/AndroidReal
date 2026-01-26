@@ -133,18 +133,61 @@ class QrScannerActivity : AppCompatActivity() {
                 // Análisis de Contexto
                 val now = Calendar.getInstance()
                 val currentHour = now.get(Calendar.HOUR_OF_DAY)
+                val dayOfWeek = now.get(Calendar.DAY_OF_WEEK)
 
-                // 1. MADRUGADOR (< 9 AM)
-                if (currentHour < 9) {
-                    AchievementSystem.getById("early_bird")?.let { earnedDefinitions.add(it) }
+                // - MADRUGADOR (< 9 AM)
+                if (currentHour < 9) AchievementSystem.getById("early_bird")?.let { earnedDefinitions.add(it) }
+
+                // - AVE NOCTURNA (>= 20 PM)
+                if (currentHour >= 20) AchievementSystem.getById("night_owl")?.let { earnedDefinitions.add(it) }
+                
+                // - GUERRERO DE FINDE (Sab=7, Dom=1)
+                if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
+                    AchievementSystem.getById("weekend_warrior")?.let { earnedDefinitions.add(it) }
+                }
+                
+                // - LUNES SAGRADO (Lun=2)
+                if (dayOfWeek == Calendar.MONDAY) {
+                    AchievementSystem.getById("never_skip_monday")?.let { earnedDefinitions.add(it) }
+                }
+                
+                // - HORA DEL ALMUERZO (12 a 14)
+                if (currentHour in 12..14) {
+                    AchievementSystem.getById("lunch_crew")?.let { earnedDefinitions.add(it) }
                 }
 
-                // 2. AVE NOCTURNA (>= 20 PM)
-                if (currentHour >= 20) {
-                    AchievementSystem.getById("night_owl")?.let { earnedDefinitions.add(it) }
+                // ANÁLISIS HISTÓRICO
+                // - DOBLE TURNO
+                val todayStart = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
+                val classesToday = documents.count { doc ->
+                    val timestamp = doc.getTimestamp("classDate")
+                    timestamp != null && timestamp.toDate().after(todayStart.time)
+                }
+                // (Nota: Incluye la actual porque ya guardamos antes)
+                if (classesToday >= 2) {
+                     AchievementSystem.getById("double_trouble")?.let { earnedDefinitions.add(it) }
+                }
+                
+                // - HAT TRICK (3 días seguidos)
+                val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0) }
+                val dayBeforeYesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -2); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0) }
+                val endOfYesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1); set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59) }
+                
+                val hasClassYesterday = documents.any { doc ->
+                     val d = doc.getTimestamp("classDate")?.toDate()
+                     d != null && d.after(yesterday.time) && d.before(endOfYesterday.time)
+                }
+                
+                val hasClassDayBefore = documents.any { doc ->
+                     val d = doc.getTimestamp("classDate")?.toDate()
+                     d != null && d.after(dayBeforeYesterday.time) && d.before(yesterday.time)
+                }
+                
+                if (hasClassYesterday && hasClassDayBefore) {
+                    AchievementSystem.getById("hat_trick")?.let { earnedDefinitions.add(it) }
                 }
 
-                // 3. SEMANA DE FUEGO (5 clases en últimos 7 días)
+                // - SEMANA DE FUEGO (5 clases en últimos 7 días)
                 val oneWeekAgo = Calendar.getInstance()
                 oneWeekAgo.add(Calendar.DAY_OF_YEAR, -7)
 
@@ -184,6 +227,8 @@ class QrScannerActivity : AppCompatActivity() {
             
             transaction.update(userRef, "xp", newTotalXp)
             transaction.update(userRef, "level", newLevel)
+            // Fix: Increment totalClassesAttended for achievements
+            transaction.update(userRef, "totalClassesAttended", com.google.firebase.firestore.FieldValue.increment(1))
             
             return@runTransaction newLevel
         }.addOnSuccessListener { newLevel ->
@@ -241,6 +286,8 @@ class QrScannerActivity : AppCompatActivity() {
             
             batch.update(userRef, "xp", newTotalXp)
             batch.update(userRef, "level", newLevel)
+            // Fix: Increment totalClassesAttended for achievements
+            batch.update(userRef, "totalClassesAttended", com.google.firebase.firestore.FieldValue.increment(1))
             
             batch.commit().addOnSuccessListener {
                 var message = "¡Presente (+10 XP)!"

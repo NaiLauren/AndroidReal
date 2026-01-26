@@ -47,7 +47,7 @@ private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
 private val ColorError = Color(0xFFEF5350)
 private val ColorSuccess = Color(0xFF4CAF50)
-private val ColorWarning = Color(0xFFFFA500)
+// private val ColorWarning = Color(0xFFFFA500) // Unused or replaced by dynamic color
 
 // 1. ACTUALIZAMOS EL ENUM LOCAL DE ORDENAMIENTO
 private enum class SortOrder {

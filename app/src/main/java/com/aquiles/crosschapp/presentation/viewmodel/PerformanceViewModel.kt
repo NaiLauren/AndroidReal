@@ -432,15 +432,21 @@ class PerformanceViewModel : ViewModel() {
                 } else if (!isBenchmark && resultObject is WodResult) {
                     userId = resultObject.userId
                     gymId = resultObject.gym_id
-                    val querySnapshot = firestore.collection("wod_results")
+                    
+                    if (resultObject.id.isNotBlank()) {
+                         firestore.collection("wod_results").document(resultObject.id).delete().await()
+                    } else {
+                        // Fallback only if ID is missing (should not happen with new app usage)
+                        val querySnapshot = firestore.collection("wod_results")
                         .whereEqualTo("wodId", resultObject.wodId)
                         .whereEqualTo("userId", resultObject.userId)
                         .whereEqualTo("date", resultObject.date)
                         .limit(1).get().await()
 
-                    if (!querySnapshot.isEmpty) {
-                        val docId = querySnapshot.documents.first().id
-                        firestore.collection("wod_results").document(docId).delete().await()
+                        if (!querySnapshot.isEmpty) {
+                            val docId = querySnapshot.documents.first().id
+                            firestore.collection("wod_results").document(docId).delete().await()
+                        }
                     }
                 } else {
                     return@launch

@@ -60,6 +60,7 @@ fun ProfileScreen(
     onEditProfileClicked: () -> Unit,
     onNavigateToRequestCredits: () -> Unit,
     onNavigateToAdminDashboard: () -> Unit,
+    onNavigateToRules: () -> Unit,
     onLogout: () -> Unit
 ) {
     val profileState by profileViewModel.userState.collectAsState()
@@ -137,10 +138,11 @@ fun ProfileScreen(
                             ProfileHeaderIOSStyle(
                                 user = state.user,
                                 activeBookingsCount = state.activeBookings.size,
-                                attendanceCount = realAttendanceCount, // <--- Pasamos el conteo real aquí
+                                attendanceCount = realAttendanceCount,
                                 onImageClick = { launchImagePicker() },
-                                onEditClick = onEditProfileClicked, // Pasamos la acción
-                                isLoadingImage = profileUpdateState is ProfileUpdateState.Loading
+                                onEditClick = onEditProfileClicked,
+                                isLoadingImage = profileUpdateState is ProfileUpdateState.Loading,
+                                onNavigateToRules = onNavigateToRules
                             )
                         }
 
@@ -225,48 +227,58 @@ fun ProfileScreen(
 fun ProfileHeaderIOSStyle(
     user: User,
     activeBookingsCount: Int,
-    attendanceCount: Int, // <--- NUEVO PARÁMETRO
+    attendanceCount: Int,
     onImageClick: () -> Unit,
     onEditClick: () -> Unit,
-    isLoadingImage: Boolean
+    isLoadingImage: Boolean,
+    onNavigateToRules: () -> Unit // Nueva acción
 ) {
+    val nextLevelXP = LevelSystem.getNextLevelXp(user.xp)
+    val prevLevelLimit = LevelSystem.getPreviousLevelLimit(user.xp)
+    val range = (nextLevelXP - prevLevelLimit).toFloat().coerceAtLeast(1f)
+    val progress = ((user.xp - prevLevelLimit) / range).coerceIn(0f, 1f)
+    val xpNeeded = nextLevelXP - user.xp
+
+    val dateFormatMonth = SimpleDateFormat("dd 'de' MMMM 'de' yyyy", Locale("es", "ES"))
+    val memberSinceStr = user.registrationDate?.let { dateFormatMonth.format(it) } ?: "Enero 2025"
+    val validUntilStr = user.creditValidUntil?.let { dateFormatMonth.format(it) } ?: "n/a"
+
     Column(modifier = Modifier.fillMaxWidth()) {
 
         // ZONA SUPERIOR: Foto, Botón Editar y Tarjeta de Nombre
         Box(modifier = Modifier.fillMaxWidth()) {
 
-            // 1. Botón Editar Flotante (Arriba a la derecha)
-            // Usamos un Z-Index alto visualmente al ponerlo en el Box, alineado TopEnd
+            // 1. Botón Editar Flotante
             IconButton(
                 onClick = onEditClick,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(end = 4.dp, top = 0.dp) // Ajuste fino
+                    .padding(end = 4.dp, top = 0.dp)
                     .shadow(elevation = 8.dp, shape = CircleShape)
-                    .background(ColorPrimaryAction, CircleShape) // Círculo Naranja
+                    .background(MaterialTheme.colorScheme.primary, CircleShape) // ROJO/COLOR TEMA
                     .size(44.dp)
             ) {
                 Icon(Icons.Default.Edit, contentDescription = "Editar", tint = Color.White, modifier = Modifier.size(20.dp))
             }
 
-            // 2. Contenido Central (Foto y Tarjeta)
+            // 2. Contenido Central
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp) // Bajamos un poco para que el botón editar respire
+                    .padding(top = 10.dp)
             ) {
                 // Foto de Perfil
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(120.dp) // Un poco más grande
+                        .size(120.dp)
                         .clip(CircleShape)
-                        .border(3.dp, ColorPrimaryAction, CircleShape)
+                        .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
                         .clickable { onImageClick() }
                 ) {
                     if (isLoadingImage) {
-                        CircularProgressIndicator(color = ColorPrimaryAction)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     } else {
                         SubcomposeAsyncImage(
                             model = user.profileImageUrl,
@@ -276,12 +288,10 @@ fun ProfileHeaderIOSStyle(
                             error = { Box(Modifier.fillMaxSize().background(Color.Gray)) { Icon(Icons.Default.Person, null, modifier = Modifier.align(Alignment.Center), tint = Color.White) } }
                         )
                     }
-                    // Icono cámara pequeño
                     Box(
                         modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape).padding(4.dp)
                     ) { Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
                     
-                    // --- DECORACIÓN DE NIVEL ---
                     val decorationName = LevelSystem.getAvatarDecoration(user.level)
                     if (decorationName != null) {
                         Box(
@@ -292,11 +302,11 @@ fun ProfileHeaderIOSStyle(
                             Icon(
                                 imageVector = getIconByName(decorationName),
                                 contentDescription = "Rango ${user.level}",
-                                tint = if(user.level == "Elite") Color(0xFFFFD700) else ColorPrimaryAction,
+                                tint = if(user.level == "Elite") Color(0xFFFFD700) else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                                     .size(36.dp)
                                     .shadow(8.dp, CircleShape)
-                                    .background(Color.White.copy(alpha=0.1f), CircleShape) // Small glow
+                                    .background(Color.White.copy(alpha=0.1f), CircleShape)
                             )
                         }
                     }
@@ -304,17 +314,17 @@ fun ProfileHeaderIOSStyle(
 
                 Spacer(Modifier.height(20.dp))
 
-                // TARJETA CRISTALINA PARA EL NOMBRE
+                // TARJETA CRISTALINA PARA EL PERFIL
                 Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), // Márgenes laterales para centrar
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = ColorGlassSurface), // Fondo Cristal
-                    border = BorderStroke(1.dp, ColorBorder) // Borde fino
+                    colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+                    border = BorderStroke(1.dp, ColorBorder)
                 ) {
                     Column(
-                        modifier = Modifier.padding(vertical = 16.dp, horizontal = 24.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
                             text = user.fullName,
@@ -324,40 +334,69 @@ fun ProfileHeaderIOSStyle(
                             textAlign = TextAlign.Center
                         )
 
-                        // Mostramos el email o fecha de registro
+                        // SUBTITULOS FECHAS
                         Text(
-                            text = user.email,
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "Miembro desde: $memberSinceStr",
+                            style = MaterialTheme.typography.bodySmall,
                             color = ColorTextSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "Válidos hasta el $validUntilStr",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary, // Resaltado en color tema
+                            fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
 
                         Spacer(Modifier.height(8.dp))
 
-                        // LEVEL BADGE
-                        Surface(
-                            color = ColorPrimaryAction.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(50),
-                            border = BorderStroke(1.dp, ColorPrimaryAction)
-                        ) {
+                        // PROGRESS BAR LEVEL
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = ColorPrimaryAction,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = user.level.uppercase(),
+                                    text = "Nivel ${user.level.uppercase()}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ColorPrimaryAction
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${user.xp} XP",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ColorTextSecondary
                                 )
                             }
+                            Spacer(Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = Color.White.copy(alpha = 0.2f),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "Próximo nivel en $xpNeeded XP",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ColorTextSecondary,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                        
+                        // BOTON VER REGLAS
+                        OutlinedButton(
+                            onClick = onNavigateToRules,
+                            shape = RoundedCornerShape(50),
+                            border = BorderStroke(1.dp, ColorBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            modifier = Modifier.height(32.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                        ) {
+                            Text("Ver Reglas", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -366,11 +405,9 @@ fun ProfileHeaderIOSStyle(
 
         Spacer(Modifier.height(24.dp))
 
-        // ESTADÍSTICAS (Igual que antes pero separadas visualmente)
+        // ESTADÍSTICAS
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            // USAMOS EL VALOR CALCULADO AQUÍ
-            ProfileStatCard(attendanceCount.toString(), "Asistencias", Icons.AutoMirrored.Filled.DirectionsRun, Modifier.weight(1f))
-
+            ProfileStatCard(attendanceCount.toString(), "Clases", Icons.AutoMirrored.Filled.DirectionsRun, Modifier.weight(1f))
             ProfileStatCard(activeBookingsCount.toString(), "Reservas", Icons.Default.Event, Modifier.weight(1f))
             ProfileStatCard(user.credits.toString(), "Créditos", Icons.Default.ConfirmationNumber, Modifier.weight(1f))
         }
@@ -393,7 +430,7 @@ fun ProfileStatCard(value: String, label: String, icon: ImageVector, modifier: M
             modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(icon, null, tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             Spacer(Modifier.height(8.dp))
             Text(value, fontWeight = FontWeight.Bold, color = ColorTextPrimary, style = MaterialTheme.typography.titleLarge)
             Text(label, style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -407,27 +444,27 @@ fun ActionButtonsSection(user: User, onNavigateToRequestCredits: () -> Unit, onN
         Button(
             onClick = onNavigateToRequestCredits,
             modifier = Modifier.fillMaxWidth().height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = RoundedCornerShape(12.dp)
         ) {
             Icon(Icons.Default.AddCard, null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Solicitar Créditos", fontWeight = FontWeight.Bold)
         }
-        if (user.role == "owner" || user.isAdmin) {
-            Button(
-                onClick = onNavigateToAdminDashboard,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ColorAdminAction),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.AdminPanelSettings, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Panel de Administrador", fontWeight = FontWeight.Bold)
+            if (user.role == "owner" || user.isAdmin) {
+                Button(
+                    onClick = onNavigateToAdminDashboard,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary), // ROJO/COLOR TEMA
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.AdminPanelSettings, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Panel de Administrador", fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
-}
 
 @Composable
 fun GlassCardSection(title: String? = null, content: @Composable ColumnScope.() -> Unit) {

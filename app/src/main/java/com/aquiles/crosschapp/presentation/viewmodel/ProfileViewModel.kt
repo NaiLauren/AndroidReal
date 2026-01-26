@@ -190,7 +190,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                 }
                 try {
                     val bookings = snapshots?.documents?.mapNotNull { doc ->
-                        doc.toObject(GymClass::class.java)?.copy(id = doc.id)
+                        doc.toObject(GymClass::class.java)?.copy(documentId = doc.id)
                     } ?: emptyList()
                     _userState.value = ProfileState.Success(user, bookings)
                 } catch (e: Exception) {

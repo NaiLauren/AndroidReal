@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.aquiles.crosschapp.presentation.viewmodel.UserSession
+import com.aquiles.crosschapp.data.model.Gym
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 
 // --- DESIGN SYSTEM CONSTANTS ---
@@ -30,6 +32,7 @@ private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,15 +42,17 @@ fun AdminGymSettingsScreen(
     innerPadding: PaddingValues
 ) {
     val context = LocalContext.current
-    var selectedColorHex by remember { mutableStateOf("#FFA500") } // Default Orange
+    val currentGymState = UserSession.currentGym.collectAsState()
     var isLoading by remember { mutableStateOf(false) }
-
-    // load current color
-    LaunchedEffect(Unit) {
-        // In a real app we might fetch this from VM state specifically,
-        // but for now we assume AdminViewModel can provide the current gym details
-        // or we default to Orange.
-        // We'll trust the user to pick a new one or the VM to update `selectedColorHex` if we bound it to a flow.
+    
+    val initialColor: String = remember(currentGymState.value) {
+        val gym = currentGymState.value
+        val color = gym?.primaryColor
+        if (color != null && color.isNotBlank()) color else "#FFA500"
+    }
+    
+    var selectedColorHex: String by remember(currentGymState.value) { 
+        mutableStateOf(initialColor) 
     }
 
     val presetColors = listOf(
@@ -62,17 +67,9 @@ fun AdminGymSettingsScreen(
         "#009688"  // Teal
     )
 
-    fun Color.toHex(): String {
-        return String.format("#%06X", (0xFFFFFF and this.hashCode()))
-    }
 
-    fun String.toColor(): Color {
-        return try {
-            Color(android.graphics.Color.parseColor(this))
-        } catch (e: Exception) {
-            Color(0xFFFFA500)
-        }
-    }
+    // Helpers moved to top level
+
 
     Box(
         modifier = Modifier
@@ -220,5 +217,17 @@ fun AdminGymSettingsScreen(
                 }
             }
         }
+    }
+}
+
+private fun Color.toHex(): String {
+    return String.format("#%06X", (0xFFFFFF and this.hashCode()))
+}
+
+private fun String.toColor(): Color {
+    return try {
+        Color(android.graphics.Color.parseColor(this))
+    } catch (e: Exception) {
+        Color(0xFFFFA500)
     }
 }

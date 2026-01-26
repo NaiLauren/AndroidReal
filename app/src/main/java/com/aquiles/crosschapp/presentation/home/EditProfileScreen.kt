@@ -380,7 +380,7 @@ private fun ProfileMedicalSection(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 ProfileReadOnlyRow("Cardíaco:", hasHeartCondition, Color(0xFFFF3B30))
-                ProfileReadOnlyRow("Lesiones:", hasInjuries, Color(0xFFFFA500))
+                ProfileReadOnlyRow("Lesiones:", hasInjuries, MaterialTheme.colorScheme.primary)
 
                 if (medicalNotes.isNotBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -400,7 +400,7 @@ private fun ProfileMedicalSection(
                     Text("¿Afecciones Cardíacas?", color = ColorTextPrimary)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onInjuriesChange(!hasInjuries) }) {
-                    Checkbox(checked = hasInjuries, onCheckedChange = onInjuriesChange, colors = CheckboxDefaults.colors(checkedColor = Color(0xFFFFA500), uncheckedColor = ColorTextSecondary))
+                    Checkbox(checked = hasInjuries, onCheckedChange = onInjuriesChange, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary, uncheckedColor = ColorTextSecondary))
                     Text("¿Lesiones Recientes?", color = ColorTextPrimary)
                 }
 

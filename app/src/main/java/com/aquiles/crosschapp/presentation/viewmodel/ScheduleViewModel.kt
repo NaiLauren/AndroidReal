@@ -103,7 +103,7 @@ class ScheduleViewModel : ViewModel() {
                     return@addSnapshotListener
                 }
 
-                val nextClass = s?.documents?.firstOrNull()?.toObject(GymClass::class.java)?.copy(id = s.documents.first().id)
+                val nextClass = s?.documents?.firstOrNull()?.toObject(GymClass::class.java)?.copy(documentId = s.documents.first().id)
                 _nextBookingState.value = NextBookingState.Success(nextClass)
             }
     }
@@ -123,7 +123,7 @@ class ScheduleViewModel : ViewModel() {
                 }
 
                 if (snapshot != null && snapshot.exists()) {
-                    val gymClass = snapshot.toObject(GymClass::class.java)?.copy(id = snapshot.id)
+                    val gymClass = snapshot.toObject(GymClass::class.java)?.copy(documentId = snapshot.id)
 
                     if (gymClass != null) {
                         if (!gymClass.wodId.isNullOrBlank()) {
@@ -275,7 +275,7 @@ class ScheduleViewModel : ViewModel() {
             .orderBy("dateTime", Query.Direction.ASCENDING)
             .addSnapshotListener { s, e ->
                 if (e != null) { _classesState.value = ClassesState.Error(e.message ?: ""); return@addSnapshotListener }
-                val list = s?.toObjects(GymClass::class.java)?.mapNotNull { it.copy(id = it.id) } ?: emptyList()
+                val list = s?.toObjects(GymClass::class.java) ?: emptyList()
                 _classesState.value = ClassesState.Success(list)
             }
     }

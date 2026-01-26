@@ -33,6 +33,42 @@ object AchievementSystem {
             iconName = "whatshot",
             xpReward = 100
         ),
+        // --- NUEVOS LOGROS ---
+        AchievementDefinition(
+            id = "weekend_warrior",
+            title = "Guerrero de Finde",
+            description = "Entrenar el fin de semana demuestra tu compromiso.",
+            iconName = "sports_kabaddi",
+            xpReward = 70
+        ),
+        AchievementDefinition(
+            id = "never_skip_monday",
+            title = "Lunes Sagrado",
+            description = "Nunca te saltas un lunes. ¡Esa es la actitud!",
+            iconName = "calendar_today",
+            xpReward = 30
+        ),
+        AchievementDefinition(
+            id = "lunch_crew",
+            title = "Hora del Almuerzo",
+            description = "Entrenando mientras otros comen. (12:00 - 14:00)",
+            iconName = "lunch_dining",
+            xpReward = 40
+        ),
+        AchievementDefinition(
+            id = "hat_trick",
+            title = "Hat Trick",
+            description = "¡3 días consecutivos asistiendo! Impresionante.",
+            iconName = "sports_soccer",
+            xpReward = 150
+        ),
+        AchievementDefinition(
+            id = "double_trouble",
+            title = "Doble Turno",
+            description = "¡2 clases en un solo día! ¿Estás loco?",
+            iconName = "filter_2",
+            xpReward = 200
+        ),
         // --- PROGRESO DE CLASES ---
         AchievementDefinition("1_class", "Primer Paso", "¡Completaste tu primera clase!", "flag", "automatic", 20),
         AchievementDefinition("5_classes", "Calentando Motores", "¡5 clases! Ya le coges el ritmo.", "local_fire_department", "automatic", 50),

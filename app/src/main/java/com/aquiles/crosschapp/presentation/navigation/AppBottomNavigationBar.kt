@@ -74,9 +74,9 @@ fun AppBottomNavigationBar(
                 },
                 alwaysShowLabel = true,
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = ColorPrimaryAction,
-                    selectedTextColor = ColorPrimaryAction,
-                    indicatorColor = ColorPrimaryAction.copy(alpha = 0.1f), // Fondo sutil al seleccionar (Pill)
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), // Fondo sutil al seleccionar (Pill)
                     unselectedIconColor = ColorTextUnselected,
                     unselectedTextColor = ColorTextUnselected
                 )

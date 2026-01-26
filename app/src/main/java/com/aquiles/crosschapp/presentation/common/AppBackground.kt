@@ -34,10 +34,10 @@ fun AppBackground(
                     // Creamos un degradado radial sutil
                     Brush.radialGradient(
                         colors = listOf(
-                            Color.Black.copy(alpha = 0.4f), // El centro es un 40% oscuro
-                            Color.Black.copy(alpha = 0.7f)  // Los bordes son un 70% oscuros
+                            Color.Black.copy(alpha = 0.15f), // Centro mucho más claro
+                            Color.Black.copy(alpha = 0.45f)  // Bordes suaves
                         ),
-                        radius = 1200f // Un radio grande para que el degradado sea muy suave
+                        radius = 1200f
                     )
                 )
         )
