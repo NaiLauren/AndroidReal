@@ -39,6 +39,12 @@ object UserSession {
         
         // Iniciar escucha del Gym para Theming
         listenToGym(user.gym_id)
+
+        // SYNC TOKEN: Asegurar que el dispositivo actual tenga su token en Firestore
+        // (Esto cubre logins en nuevos dispositivos donde onNewToken no dispara)
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+            com.aquiles.crosschapp.data.model.MyFirebaseMessagingService.sendTokenToFirestore(token)
+        }
     }
 
     /**

@@ -53,6 +53,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channelId = "crosschapp_default_channel"
+            val channelName = "Notificaciones Generales"
+            val notificationManager = getSystemService(android.app.NotificationManager::class.java)
+            val existingChannel = notificationManager.getNotificationChannel(channelId)
+            
+            if (existingChannel == null) {
+                val channel = android.app.NotificationChannel(
+                    channelId, channelName, android.app.NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Avisos importantes de la app"
+                    enableVibration(true)
+                    enableLights(true)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+        }
+    }
+
     private fun askNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -66,6 +86,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        ensureNotificationChannel() // Asegurar canal existente desde el inicio
         askNotificationPermission()
         val shouldOpenNotifications = intent.getBooleanExtra("open_notifications_screen", false)
         setContent {
@@ -241,6 +262,7 @@ fun NavGraphBuilder.mainGraph(
                 onNavigateToRequestCredits = { navController.navigate("request_credits_screen") },
                 onNavigateToAdminDashboard = { navController.navigate("admin_dashboard_screen") },
                 onNavigateToRules = { navController.navigate("gamification_rules_screen") },
+                onNavigateToHistory = { navController.navigate("xp_history_screen") },
                 onLogout = onLogout
             )
         }
@@ -419,6 +441,16 @@ fun NavGraphBuilder.mainGraph(
         composable("notifications_screen") {
             NotificationsScreen(navController = navController)
         }
+        
+        // --- NUEVA RUTA: HISTORIAL XP ---
+        composable("xp_history_screen") {
+            // Importación en línea o agregar import manual si falla.
+            // Asegurarse de tener: import com.aquiles.crosschapp.presentation.ui.gamification.XpHistoryScreen
+            com.aquiles.crosschapp.presentation.ui.gamification.XpHistoryScreen(
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        // --------------------------------
         composable(
             route = "create_edit_wod_screen?wodId={wodId}",
             arguments = listOf(navArgument("wodId") { type = NavType.StringType; nullable = true })

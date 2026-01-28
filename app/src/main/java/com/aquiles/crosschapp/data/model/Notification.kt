@@ -1,6 +1,7 @@
 package com.aquiles.crosschapp.data.model
 
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 import java.util.Date
 
@@ -18,6 +19,7 @@ data class Notification(
     val userId: String = "",
     val gym_id: String = "", // <-- ¡CRÍTICO! Añadido el campo para el multi-gimnasio
     val title: String = "",
+    @PropertyName("body")
     val message: String = "",
     var isRead: Boolean = false,
     val type: String = NotificationType.GENERAL_ANNOUNCEMENT.name,

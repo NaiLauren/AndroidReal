@@ -534,6 +534,7 @@ class AdminViewModel : ViewModel() {
                 // Mensaje combinado
                 val unifiedMessage = "Pack '${request.comboName}' activado exitosamente. Tienes un total de $finalCredits créditos válidos hasta el $formattedDate."
 
+                /*
                 batch.set(notificationRef, Notification(
                     userId = request.userId,
                     gym_id = gymId,
@@ -541,6 +542,7 @@ class AdminViewModel : ViewModel() {
                     message = unifiedMessage,
                     type = NotificationType.CREDIT_APPROVED.name
                 ))
+                */
 
                 batch.commit().await()
                 _updateState.value = RequestUpdateState.Success("Solicitud aprobada.")
@@ -566,6 +568,7 @@ class AdminViewModel : ViewModel() {
                 ))
 
                 val notifRef = firestore.collection("notifications").document()
+                /*
                 batch.set(notifRef, Notification(
                     userId = request.userId,
                     gym_id = gymId,
@@ -573,6 +576,7 @@ class AdminViewModel : ViewModel() {
                     message = "Tu solicitud de '${request.comboName}' fue rechazada.",
                     type = NotificationType.CREDIT_REJECTED.name
                 ))
+                */
 
                 batch.commit().await()
                 _updateState.value = RequestUpdateState.Success("Solicitud rechazada.")
@@ -707,34 +711,68 @@ class AdminViewModel : ViewModel() {
         }
     }
 
-    fun saveAttendance(classId: String, attendedUserIds: List<String>) {
+    fun saveAttendance(classId: String, newAttendedUserIds: List<String>) {
         executeAdminAction(errorStateSetter = { _classOperationState.value = ClassOperationState.Error(it) }) { _, gymId ->
             _classOperationState.value = ClassOperationState.Loading
             try {
-                firestore.runTransaction { transaction ->
+                val attendeesForGamification = firestore.runTransaction { transaction ->
                     val classRef = firestore.collection("gymClasses").document(classId)
                     val classDoc = transaction.get(classRef)
-                    if (classDoc.getBoolean("attendanceTaken") == true) throw IllegalStateException("Asistencia ya registrada.")
+                    
+                    // --- CORRECCIÓN: Permitir actualizar asistencia ya tomada ---
+                    // Obtenemos los IDs anteriores (si es nulo, es lista vacía)
+                    @Suppress("UNCHECKED_CAST")
+                    val oldAttendedUserIds = classDoc.get("attendedUserIds") as? List<String> ?: emptyList()
 
                     val classDate = classDoc.getDate("dateTime")
                     val calendar = Calendar.getInstance()
                     if(classDate != null) calendar.time = classDate
 
-                    attendedUserIds.forEach { userId ->
+                    // Calcular Deltas
+                    val usersToAdd = newAttendedUserIds.filter { !oldAttendedUserIds.contains(it) }
+                    val usersToRemove = oldAttendedUserIds.filter { !newAttendedUserIds.contains(it) }
+
+                    // 1. Agregar nuevos
+                    usersToAdd.forEach { userId ->
                         val record = AttendanceRecord(
                             classId = classId, classDate = classDate,
                             dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK), hourOfDay = calendar.get(Calendar.HOUR_OF_DAY),
                             userId = userId, gym_id = gymId
                         )
+                        // IMPORTANTE: Referencia al documento para el historial
+                        // Idealmente usaríamos un ID determinístico (ej: classId_userId) para evitar duplicados si la transacción reintenta
+                        // pero Firestore runTransaction maneja esto. 
                         transaction.set(firestore.collection("attendance_history").document(), record)
+                        
+                        // Incrementamos contador del usuario
                         transaction.update(firestore.collection("users").document(userId), "totalClassesAttended", FieldValue.increment(1))
                     }
-                    transaction.update(classRef, mapOf("attendanceTaken" to true, "attendedUserIds" to attendedUserIds))
+
+                    // 2. Remover desmarcados
+                    usersToRemove.forEach { userId ->
+                        // Buscar en attendance_history es complejo dentro de una transacción si no tenemos el ID del documento.
+                        // LIMITACIÓN: update/delete en transacción requiere DocumentReference conocida.
+                        // WORKAROUND: Decrementamos el contador del usuario. El registro en attendance_history quedará "huérfano" 
+                        // o requeriría una query previa fuera de la transacción para borrarlo.
+                        // Para simplificar y evitar fallos: solo ajustamos el contador.
+                        // (En una V2, deberíamos guardar attendance_history con ID = classId_userId)
+                        transaction.update(firestore.collection("users").document(userId), "totalClassesAttended", FieldValue.increment(-1))
+                    }
+
+                    // 3. Actualizar la clase
+                    transaction.update(classRef, mapOf(
+                        "attendanceTaken" to true, 
+                        "attendedUserIds" to newAttendedUserIds
+                    ))
+                    
+                    // Retornamos la lista de nuevos asistentes para procesar gamificación fuera de la transacción
+                    return@runTransaction usersToAdd
                 }.await()
-                _classOperationState.value = ClassOperationState.Success("Asistencia guardada.")
                 
-                // Iniciar proceso de gamificación en segundo plano para cada alumno
-                attendedUserIds.forEach { userId ->
+                _classOperationState.value = ClassOperationState.Success("Asistencia actualizada.")
+                
+                // Gamificación solo para los NUEVOS asistentes
+                attendeesForGamification.forEach { userId ->
                     processGamificationForUser(userId, gymId)
                 }
             } catch (e: Exception) {
@@ -742,6 +780,8 @@ class AdminViewModel : ViewModel() {
             }
         }
     }
+
+    fun resetClassOperationState() { _classOperationState.value = ClassOperationState.Idle }
 
     fun loadReportsForMonth(year: Int, month: Int) {
         executeAdminAction(errorStateSetter = { _reportsState.value = ReportsState.Error(it) }) { _, gymId ->
@@ -973,7 +1013,6 @@ class AdminViewModel : ViewModel() {
         }
     }
 
-    fun resetClassOperationState() { _classOperationState.value = ClassOperationState.Idle }
     fun resetWodOperationState() { _wodOperationState.value = WodOperationState.Idle }
     fun clearWodDetails() { _wodDetailsState.value = WodDetailsState.Idle }
 
@@ -1159,6 +1198,11 @@ class AdminViewModel : ViewModel() {
                     AchievementSystem.getById("weekend_warrior")?.let { earnedDefinitions.add(it) }
                 }
 
+                // - DOMINGO SANTO (Dom=1)
+                if (dayOfWeek == Calendar.SUNDAY) {
+                    AchievementSystem.getById("clean_sunday")?.let { earnedDefinitions.add(it) }
+                }
+
                 // - LUNES SAGRADO (Lun=2)
                 if (dayOfWeek == Calendar.MONDAY) {
                     AchievementSystem.getById("never_skip_monday")?.let { earnedDefinitions.add(it) }
@@ -1222,7 +1266,7 @@ class AdminViewModel : ViewModel() {
                 earnedDefinitions.forEach { def ->
                     val docRef = firestore.collection("achievements").document("${userId}_${def.id}")
                     val newAchievement = Achievement(
-                        id = def.id,
+                        achievementId = def.id,
                         title = def.title,
                         description = def.description,
                         iconName = def.iconName,

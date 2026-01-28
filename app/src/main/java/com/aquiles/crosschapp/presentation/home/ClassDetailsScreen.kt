@@ -128,6 +128,16 @@ private fun ClassDetailsContent(
         }
     }
 
+    LaunchedEffect(adminOperationState) {
+        if (adminOperationState is ClassOperationState.Success) {
+            Toast.makeText(context, (adminOperationState as ClassOperationState.Success).message, Toast.LENGTH_SHORT).show()
+            adminViewModel.resetClassOperationState()
+        } else if (adminOperationState is ClassOperationState.Error) {
+            Toast.makeText(context, (adminOperationState as ClassOperationState.Error).message, Toast.LENGTH_LONG).show()
+            adminViewModel.resetClassOperationState() // Reset to stop showing loading/error if we want to retry
+        }
+    }
+
     LaunchedEffect(detailsState) {
         if (detailsState is ClassDetailsState.Success) {
             val gymClass = (detailsState as ClassDetailsState.Success).gymClass

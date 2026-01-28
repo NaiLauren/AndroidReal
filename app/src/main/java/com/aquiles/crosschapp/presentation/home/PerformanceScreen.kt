@@ -526,6 +526,14 @@ fun AchievementItem(achievement: AchievementUiModel) {
         "wb_sunny" -> Icons.Default.WbSunny
         "dark_mode" -> Icons.Default.DarkMode
         "whatshot" -> Icons.Default.Whatshot
+        
+        // Gamification 2.0
+        "sports_kabaddi", "weekend_warrior" -> Icons.Default.FitnessCenter // Representing tough weekend training
+        "calendar_today", "never_skip_monday" -> Icons.Default.CalendarToday
+        "lunch_dining", "lunch_crew" -> Icons.Default.Restaurant // Lunch
+        "sports_soccer", "hat_trick" -> Icons.Default.SportsSoccer
+        "filter_2", "double_trouble" -> Icons.Default.Filter2
+        "clean_hands", "clean_sunday" -> Icons.Default.Spa // Clean/Holy Sunday
 
         else -> Icons.Default.EmojiEvents
     }

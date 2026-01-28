@@ -64,11 +64,18 @@ fun RegisterScreen(
     val authState by authViewModel.authState.collectAsState()
     val focusManager = LocalFocusManager.current
 
+    // Detección de Modo: Completar Perfil (Social Login)
+    val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+    val isSocialRegistration = firebaseUser != null
+
     LaunchedEffect(gymId) {
         if (!gymId.isNullOrBlank()) {
             authViewModel.loadGymDetails(gymId)
         }
     }
+    
+    // Efecto para pre-llenar datos si venimos de Google
+    
     val selectedGym by authViewModel.selectedGym.collectAsState()
 
     // Form States
@@ -82,6 +89,18 @@ fun RegisterScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var passwordsDoNotMatch by remember { mutableStateOf(false) }
+
+    // Efecto para pre-llenar datos si venimos de Google
+    // Efecto para pre-llenar datos si venimos de Google
+    LaunchedEffect(firebaseUser) {
+        if (firebaseUser != null) {
+            val splitName = firebaseUser.displayName?.split(" ")
+            if (name.isBlank()) name = splitName?.firstOrNull() ?: ""
+            // Intento básico de apellido
+            if (lastName.isBlank() && (splitName?.size ?: 0) > 1) lastName = splitName?.lastOrNull() ?: ""
+            if (email.isBlank()) email = firebaseUser.email ?: ""
+        }
+    }
 
     // Handlers
     LaunchedEffect(authState) {
@@ -154,7 +173,7 @@ fun RegisterScreen(
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "Únete a",
+                            text = if (isSocialRegistration) "Completa tu perfil" else "Únete a",
                             style = MaterialTheme.typography.labelMedium,
                             color = ColorTextSecondary
                         )
@@ -195,51 +214,54 @@ fun RegisterScreen(
                         keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
 
+                    // Email (Deshabilitado si es Social Login y ya tenemos el email)
                     GlassRegisterTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { if (!isSocialRegistration) email = it },
                         label = "Email",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = if (isSocialRegistration) ImeAction.Done else ImeAction.Next),
                         keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
-                    )
+                    ) // TODO: Visualmente indicar si está readonly
 
-                    GlassRegisterTextField(
-                        value = password,
-                        onValueChange = { password = it; passwordsDoNotMatch = false },
-                        label = "Contraseña",
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = ColorTextSecondary)
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                        keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
-                    )
-
-                    GlassRegisterTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it; passwordsDoNotMatch = false },
-                        label = "Confirmar Contraseña",
-                        visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
-                                Icon(if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = ColorTextSecondary)
-                            }
-                        },
-                        isError = passwordsDoNotMatch,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                    )
-
-                    if (passwordsDoNotMatch) {
-                        Text(
-                            text = "Las contraseñas no coinciden.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Start
+                    if (!isSocialRegistration) {
+                        GlassRegisterTextField(
+                            value = password,
+                            onValueChange = { password = it; passwordsDoNotMatch = false },
+                            label = "Contraseña",
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = ColorTextSecondary)
+                                }
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                            keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                         )
+
+                        GlassRegisterTextField(
+                            value = confirmPassword,
+                            onValueChange = { confirmPassword = it; passwordsDoNotMatch = false },
+                            label = "Confirmar Contraseña",
+                            visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
+                                    Icon(if (confirmPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = ColorTextSecondary)
+                                }
+                            },
+                            isError = passwordsDoNotMatch,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                        )
+
+                        if (passwordsDoNotMatch) {
+                            Text(
+                                text = "Las contraseñas no coinciden.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Start
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -247,21 +269,26 @@ fun RegisterScreen(
                     // --- BOTÓN CON GLOW ---
                     Button(
                         onClick = {
-                            if (password == confirmPassword) {
-                                if (gymId != null) {
+                            if (gymId == null) {
+                                Toast.makeText(context, "Error: ID de gimnasio no válido.", Toast.LENGTH_LONG).show()
+                                return@Button
+                            }
+                            
+                            if (isSocialRegistration) {
+                                authViewModel.completeSocialLoginRegistration(name, lastName, phoneNumber, gymId)
+                            } else {
+                                if (password == confirmPassword) {
                                     authViewModel.registerUser(email, password, name, lastName, phoneNumber, gymId)
                                 } else {
-                                    Toast.makeText(context, "Error: ID de gimnasio no válido.", Toast.LENGTH_LONG).show()
+                                    passwordsDoNotMatch = true
                                 }
-                            } else {
-                                passwordsDoNotMatch = true
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
                             .shadow(10.dp, RoundedCornerShape(12.dp), spotColor = ColorPrimaryAction), // Glow
-                        enabled = name.isNotBlank() && lastName.isNotBlank() && email.isNotBlank() && password.length >= 6 && confirmPassword.isNotBlank() && authState !is AuthState.Loading,
+                        enabled = name.isNotBlank() && lastName.isNotBlank() && email.isNotBlank() && (isSocialRegistration || (password.length >= 6 && confirmPassword.isNotBlank())) && authState !is AuthState.Loading,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = ColorPrimaryAction,
                             disabledContainerColor = ColorPrimaryAction.copy(alpha = 0.5f)
@@ -271,7 +298,7 @@ fun RegisterScreen(
                         if (authState is AuthState.Loading) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                         } else {
-                            Text("REGISTRARSE", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(if (isSocialRegistration) "FINALIZAR REGISTRO" else "REGISTRARSE", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         }
                     }
 

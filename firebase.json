@@ -14,5 +14,9 @@
 
       ]
     }
-  ]
+  ],
+  "firestore": {
+    "rules": "RealFitness-iOS/firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
 }

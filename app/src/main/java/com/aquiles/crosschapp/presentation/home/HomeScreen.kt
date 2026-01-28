@@ -35,6 +35,7 @@ import coil.compose.rememberAsyncImagePainter
 import com.aquiles.crosschapp.data.model.PersonalMessage
 import com.aquiles.crosschapp.data.model.User
 import com.aquiles.crosschapp.presentation.viewmodel.*
+import androidx.compose.foundation.lazy.items // Importante para LazyListScope.items
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
@@ -42,8 +43,8 @@ private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorBackgroundGradientStart = Color(0xFF000000)
-private val ColorBackgroundGradientEnd = Color(0xFF121212)
+// private val ColorBackgroundGradientStart = Color(0xFF000000) // Unused
+// private val ColorBackgroundGradientEnd = Color(0xFF121212) // Unused
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +52,7 @@ fun HomeScreen(
     innerPadding: PaddingValues,
     homeViewModel: HomeViewModel = viewModel(),
     adminViewModel: AdminViewModel = viewModel(),
+    benchmarkFeedViewModel: BenchmarkFeedViewModel = viewModel(), // [NEW] Linkado viewModel
     onNavigateToAdminCreditRequests: () -> Unit,
     onNavigateToNotifications: () -> Unit,
     onNavigateToMessageArchive: () -> Unit
@@ -128,7 +130,8 @@ fun HomeScreen(
                             homeViewModel.markPersonalMessageAsRead(messageId)
                         },
                         onNavigateToAdminCreditRequests = onNavigateToAdminCreditRequests,
-                        localScaffoldPadding = localScaffoldPadding
+                        localScaffoldPadding = localScaffoldPadding,
+                        benchmarkFeedViewModel = benchmarkFeedViewModel // [NEW] Pass it down
                     )
                 }
             }
@@ -143,9 +146,11 @@ private fun HomeScreenContent(
     personalMessageState: PersonalMessageState,
     onMarkMessageAsRead: (String) -> Unit,
     onNavigateToAdminCreditRequests: () -> Unit,
-    localScaffoldPadding: PaddingValues
+    localScaffoldPadding: PaddingValues,
+    benchmarkFeedViewModel: BenchmarkFeedViewModel // [NEW]
 ) {
     var showRulesDialog by remember { mutableStateOf(false) }
+    val feedState by benchmarkFeedViewModel.feedState.collectAsState() // [Fix] Moved here
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -229,6 +234,76 @@ private fun HomeScreenContent(
                 }
             }
         }
+
+
+
+        // --- BENCHMARK WALL (FEED) ---
+        item {
+            Text(
+                "Muro de Logros",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = ColorTextSecondary
+            )
+        }
+
+
+        // val feedState by benchmarkFeedViewModel.feedState.collectAsState() // [Removed] moved to top
+        
+        
+        when(feedState) {
+            is FeedState.Loading -> {
+                item {
+                   Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                       CircularProgressIndicator(color = ColorPrimaryAction)
+                   } 
+                }
+            }
+            is FeedState.Success -> {
+                val items = (feedState as FeedState.Success).items
+                if (items.isEmpty()) {
+                    item {
+                        Text(
+                            "Aún no hay actividad reciente.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ColorTextSecondary,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        )
+                    }
+                } else {
+                    items(items) { feedItem ->
+                        BenchmarkFeedItem(
+                            item = feedItem,
+                            onLongClick = {
+                                // Solo Admin puede verificar
+                                if (user.isAdmin || user.role == "owner") {
+                                    // Mostramos dialogo o acción directa?
+                                    // Por simplicidad, toggle directo, pero lo ideal sería un Dialog.
+                                    benchmarkFeedViewModel.toggleVerification(feedItem)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+            is FeedState.Error -> {
+                item {
+                    Text(
+                        (feedState as FeedState.Error).message,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            else -> {}
+        }
+
+        // Espacio final padding
+        item { Spacer(modifier = Modifier.height(50.dp)) }
+    }
+
+    // Trigger Load
+    LaunchedEffect(Unit) {
+        benchmarkFeedViewModel.loadFeed()
     }
 
     if (showRulesDialog) {

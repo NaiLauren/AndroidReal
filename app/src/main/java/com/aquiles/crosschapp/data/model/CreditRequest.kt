@@ -18,6 +18,7 @@ data class CreditRequest(
 
     // --- Información del Solicitante ---
     val gym_id: String = "",
+    val packId: String = "",
     val userId: String = "",
     val userName: String = "",
 

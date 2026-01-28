@@ -11,6 +11,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResult
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Warning
@@ -138,6 +140,11 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(25.dp))
 
+            // (Botón Google movido abajo)
+
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             // --- CAMPO EMAIL (Icono Naranja + Borde) ---
             GlassTextField(
                 value = email,
@@ -209,6 +216,54 @@ fun LoginScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(25.dp))
+
+            // Separador "O"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HorizontalDivider(modifier = Modifier.weight(1f), color = ColorBorder)
+                Text(" O ", color = ColorTextSecondary, modifier = Modifier.padding(horizontal = 8.dp))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = ColorBorder)
+            }
+
+            Spacer(modifier = Modifier.height(25.dp))
+
+            // --- BOTÓN GOOGLE (REUBICADO) ---
+            val googleLauncher = rememberLauncherForActivityResult(
+                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                try {
+                    val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                    account.idToken?.let { token ->
+                        authViewModel.signInWithGoogle(token)
+                    }
+                } catch (e: com.google.android.gms.common.api.ApiException) {
+                    Toast.makeText(context, "Error Google Sign In: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            // Estilo más sutil para Google: Outlined Button o Glass
+            Button(
+                onClick = {
+                    val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN)
+                        .requestIdToken(context.getString(R.string.default_web_client_id))
+                        .requestEmail()
+                        .build()
+                    val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                    googleLauncher.launch(googleSignInClient.signInIntent)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .border(BorderStroke(1.dp, Color.White.copy(alpha=0.5f)), RoundedCornerShape(12.dp)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent), // Glass Style
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                    Text("Continuar con Google", color = Color.White, fontWeight = FontWeight.Medium)
+                }
+            }
+
             // --- LINKS INFERIORES ---
             Column(
                 modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
@@ -251,6 +306,25 @@ fun LoginScreen(
             onSendEmail = { authViewModel.sendPasswordResetEmail(it) },
             isLoading = passwordResetState is PasswordResetState.Loading
         )
+    }
+
+    // --- MANEJO DE REGISTRO INCOMPLETO (Google Sign In nuevo) ---
+    // Usamos un LaunchedEffect extra para navegar si se detecta que faltan datos
+    // Nota: La navegación se delega al callback `onNavigateToRegister`.
+    // Pero necesitamos pasar datos. En Compose Navigation básico esto es complejo.
+    // Asumiremos que `onNavigateToRegister` no acepta argumentos en la firma actual, 
+    // pero podemos guardar el estado en el ViewModel o cambiar la firma.
+    // PRAGMATISMO: El AuthViewModel ya tiene el estado. RegisterScreen debería leer de ahí.
+    
+    // Aquí solo necesitamos "reaccionar" si pasa a NeedsProfileCompletion, pero la RegisterScreen 
+    // necesitará los datos. Si RegisterScreen lee 'currentUser' de authViewModel, ya tenemos medio camino.
+    
+    // Si la pantalla de Login no navega sola, debemos instruirla. 
+    // Como la firma de onNavigateToRegister es () -> Unit, asumimos que RegisterScreen leerá el estado.
+    if (authState is AuthState.NeedsProfileCompletion) {
+        LaunchedEffect(Unit) {
+            onNavigateToRegister()
+        }
     }
 }
 

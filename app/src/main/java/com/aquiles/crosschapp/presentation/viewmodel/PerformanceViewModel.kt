@@ -320,9 +320,15 @@ class PerformanceViewModel : ViewModel() {
         _saveBenchmarkState.value = BenchmarkSaveState.Loading
         viewModelScope.launch {
             try {
-                // Ensure ID is generated if empty? Usually firestore.add generates it, but if object has ID field...
-                // Assuming result comes with empty ID or we use .add()
-                firestore.collection("benchmark_results").add(result).await()
+                // Desnormalización de datos del usuario
+                val resultWithUserData = result.copy(
+                    userName = user.name,
+                    userLastName = user.lastName,
+                    userLevel = user.level,
+                    userProfileImageUrl = user.profileImageUrl ?: ""
+                )
+                
+                firestore.collection("benchmark_results").add(resultWithUserData).await()
                 _saveBenchmarkState.value = BenchmarkSaveState.Success("Benchmark guardado!")
                 loadBenchmarkRecords(user.id, user.gym_id)
                 checkAndAwardAchievements(user)
@@ -351,7 +357,7 @@ class PerformanceViewModel : ViewModel() {
                     .get().await()
 
                 val unlockedAchievements = unlockedAchievementsSnapshot.toObjects(Achievement::class.java)
-                val unlockedIds = unlockedAchievements.map { it.id }.toSet()
+                val unlockedIds = unlockedAchievements.map { it.achievementId }.toSet()
 
                 val batch = firestore.batch()
                 var newAchievementsAwarded = false
@@ -361,7 +367,7 @@ class PerformanceViewModel : ViewModel() {
                         val requiredClasses = def.id.replace("_classes", "").toIntOrNull()
                         if (requiredClasses != null && user.totalClassesAttended >= requiredClasses && !unlockedIds.contains(def.id)) {
                             val newAchievement = Achievement(
-                                id = def.id,
+                                achievementId = def.id,
                                 title = def.title,
                                 description = def.description,
                                 iconName = def.iconName,
@@ -388,11 +394,11 @@ class PerformanceViewModel : ViewModel() {
                     unlockedAchievements
                 }
                 
-                val finalUnlockedIds = finalUnlockedList.map { it.id }.toSet()
+                val finalUnlockedIds = finalUnlockedList.map { it.achievementId }.toSet()
 
                 finalUnlockedList.forEach { a ->
-                    val def = AchievementSystem.getById(a.id)
-                    combinedList.add(AchievementUiModel(a.id, a.title, a.description, a.iconName, true, a.unlockedAt, def?.xpReward ?: 0))
+                    val def = AchievementSystem.getById(a.achievementId)
+                    combinedList.add(AchievementUiModel(a.achievementId, a.title, a.description, a.iconName, true, a.unlockedAt, def?.xpReward ?: 0))
                 }
 
                 AchievementSystem.smartList.forEach { def ->
@@ -425,10 +431,10 @@ class PerformanceViewModel : ViewModel() {
                 val gymId: String
 
                 if (isBenchmark && resultObject is BenchmarkResult) {
-                    if (resultObject.id.isBlank()) return@launch
+                    if (resultObject.resultId.isBlank()) return@launch
                     userId = resultObject.userId
                     gymId = resultObject.gym_id
-                    firestore.collection("benchmark_results").document(resultObject.id).delete().await()
+                    firestore.collection("benchmark_results").document(resultObject.resultId).delete().await()
                 } else if (!isBenchmark && resultObject is WodResult) {
                     userId = resultObject.userId
                     gymId = resultObject.gym_id
@@ -469,7 +475,7 @@ class PerformanceViewModel : ViewModel() {
             }
             try {
                 val newAchievement = Achievement(
-                    id = achievementId,
+                    achievementId = achievementId,
                     title = title,
                     description = description,
                     iconName = iconName,

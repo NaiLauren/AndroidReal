@@ -22,6 +22,7 @@ sealed class AuthState {
     object Idle : AuthState()
     object Loading : AuthState()
     data class Success(val user: FirebaseUser?) : AuthState()
+    data class NeedsProfileCompletion(val user: FirebaseUser, val name: String?, val email: String?) : AuthState()
     data class Error(val message: String) : AuthState()
 }
 
@@ -60,6 +61,87 @@ class AuthViewModel : ViewModel() {
             }
         }
     }
+
+    // --- GOOGLE SIGN IN ---
+    fun signInWithGoogle(idToken: String) {
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            try {
+                val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                val authResult = auth.signInWithCredential(credential).await()
+                val user = authResult.user
+
+                if (user != null) {
+                    // Verificar si ya tiene perfil en Firestore
+                    val doc = firestore.collection("users").document(user.uid).get().await()
+                    if (doc.exists()) {
+                        // Usuario existe y tiene perfil completo -> Login Exitoso
+                        val userProfile = doc.toObject(User::class.java)
+                        if (userProfile != null) {
+                            UserSession.startSession(userProfile)
+                            updateAndSaveFcmToken()
+                            _authState.value = AuthState.Success(user)
+                        } else {
+                            _authState.value = AuthState.Error("Error al cargar perfil de usuario.")
+                        }
+                    } else {
+                        // Usuario autenticado en Firebase pero sin documento en Firestore -> Necesita completar registro
+                        // Extraemos datos básicos
+                        val name = user.displayName?.split(" ")?.firstOrNull() ?: ""
+                        val email = user.email ?: ""
+                        _authState.value = AuthState.NeedsProfileCompletion(user, name, email)
+                    }
+                } else {
+                    _authState.value = AuthState.Error("Error de autenticación con Google (Usuario nulo).")
+                }
+            } catch (e: Exception) {
+                _authState.value = AuthState.Error("Error al iniciar sesión con Google: ${e.message}")
+            }
+        }
+    }
+
+    fun completeSocialLoginRegistration(
+        name: String,
+        lastName: String,
+        phoneNumber: String,
+        gymId: String
+    ) {
+        val user = auth.currentUser
+        if (user == null) {
+            _authState.value = AuthState.Error("No hay sesión activa. Intenta ingresar con Google nuevamente.")
+            return
+        }
+        if (gymId.isBlank()) {
+            _authState.value = AuthState.Error("El ID del gimnasio es obligatorio.")
+            return
+        }
+
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            try {
+                val newUser = User(
+                    id = user.uid,
+                    email = user.email ?: "",
+                    name = name.trim(),
+                    lastName = lastName.trim(),
+                    phoneNumber = phoneNumber.trim(),
+                    gym_id = gymId,
+                    role = "member",
+                    profileImageUrl = user.photoUrl?.toString() // Usar foto de Google si existe
+                )
+
+                firestore.collection("users").document(user.uid).set(newUser).await()
+                
+                UserSession.startSession(newUser)
+                updateAndSaveFcmToken()
+                _authState.value = AuthState.Success(user)
+
+            } catch (e: Exception) {
+               _authState.value = AuthState.Error("Error al guardar perfil: ${e.message}")
+            }
+        }
+    }
+    // --- FIN GOOGLE SIGN IN ---
 
 
     fun registerUser(

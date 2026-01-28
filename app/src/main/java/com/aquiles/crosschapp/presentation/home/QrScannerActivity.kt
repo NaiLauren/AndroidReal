@@ -146,6 +146,11 @@ class QrScannerActivity : AppCompatActivity() {
                     AchievementSystem.getById("weekend_warrior")?.let { earnedDefinitions.add(it) }
                 }
                 
+                // - DOMINGO SANTO (Dom=1)
+                if (dayOfWeek == Calendar.SUNDAY) {
+                    AchievementSystem.getById("clean_sunday")?.let { earnedDefinitions.add(it) }
+                }
+                
                 // - LUNES SAGRADO (Lun=2)
                 if (dayOfWeek == Calendar.MONDAY) {
                     AchievementSystem.getById("never_skip_monday")?.let { earnedDefinitions.add(it) }
@@ -253,7 +258,7 @@ class QrScannerActivity : AppCompatActivity() {
         achievements.forEach { def ->
             val docRef = db.collection("achievements").document("${userId}_${def.id}")
             val newAchievement = Achievement(
-                id = def.id,
+                achievementId = def.id,
                 title = def.title,
                 description = def.description,
                 iconName = def.iconName,

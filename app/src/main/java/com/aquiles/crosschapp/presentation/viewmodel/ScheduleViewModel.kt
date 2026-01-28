@@ -9,6 +9,9 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
+import com.google.firebase.functions.HttpsCallableResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -301,7 +304,7 @@ class ScheduleViewModel : ViewModel() {
     fun validateCheckIn(scannedGymId: String) {
         val currentUser = UserSession.currentUser.value ?: return
 
-        // 1. Validar que sea el gimnasio correcto
+        // 1. Validar que sea el gimnasio correcto (Validación previa UI)
         if (scannedGymId != currentUser.gym_id) {
             _checkInResult.value = CheckInState.Error("Este código QR no es de tu gimnasio.")
             return
@@ -310,19 +313,12 @@ class ScheduleViewModel : ViewModel() {
         viewModelScope.launch {
             _checkInResult.value = CheckInState.Loading
             try {
-                // 2. Buscar una clase ACTIVA ahora (+/- 30 min) donde el usuario esté inscripto
+                // 2. Buscar la clase ACTIVA
                 val now = Date()
                 val calendar = Calendar.getInstance()
+                calendar.time = now; calendar.add(Calendar.MINUTE, -30); val timeStart = calendar.time
+                calendar.time = now; calendar.add(Calendar.MINUTE, 60); val timeEnd = calendar.time
 
-                calendar.time = now
-                calendar.add(Calendar.MINUTE, -30)
-                val timeStart = calendar.time
-
-                calendar.time = now
-                calendar.add(Calendar.MINUTE, 30) // Tolerancia hasta 30 min después de inicio
-                val timeEnd = calendar.time
-
-                // Nota: Esta consulta requiere un índice en Firestore (gym_id + enrolledUserIds + dateTime)
                 val querySnapshot = firestore.collection("gymClasses")
                     .whereEqualTo("gym_id", currentUser.gym_id)
                     .whereArrayContains("enrolledUserIds", currentUser.id)
@@ -335,28 +331,38 @@ class ScheduleViewModel : ViewModel() {
                     return@launch
                 }
 
-                // Tomamos la primera coincidencia
-                val classDoc = querySnapshot.documents.first()
+                val classId = querySnapshot.documents.first().id
 
-                // 3. Verificar si ya dio presente
-                val currentAttendees = classDoc.get("checkedInUserIds") as? List<String> ?: emptyList()
-                if (currentAttendees.contains(currentUser.id)) {
-                    _checkInResult.value = CheckInState.Success("¡Ya habías dado el presente!")
-                    return@launch
+                // 3. LLAMAR A CLOUD FUNCTION
+                val functions = com.google.firebase.functions.FirebaseFunctions.getInstance("southamerica-east1")
+                
+                val data = hashMapOf(
+                    "classId" to classId,
+                    "scannedCode" to scannedGymId
+                )
+
+                // Usamos await() en lugar de continueWith para simplificar y usar corrutinas
+                val task = functions.getHttpsCallable("registerAttendance").call(data).await()
+                
+                val result = task.data as? Map<String, Any>
+                val success = result?.get("success") as? Boolean ?: false
+                val message = result?.get("message") as? String ?: "Error desconocido"
+                
+                if (success) {
+                    _checkInResult.value = CheckInState.Success(message)
+                } else {
+                    _checkInResult.value = CheckInState.Error(message)
                 }
 
-                // 4. Actualizar Firebase
-                firestore.collection("gymClasses").document(classDoc.id)
-                    .update("checkedInUserIds", FieldValue.arrayUnion(currentUser.id))
-                    .await()
-
-                // (Opcional) Aquí llamaríamos a la lógica de logros si la integramos
-                // checkAndAwardAchievements(...)
-
-                _checkInResult.value = CheckInState.Success("¡Bienvenido! Presente registrado.")
-
             } catch (e: Exception) {
-                _checkInResult.value = CheckInState.Error("Error al validar: ${e.message}")
+                // Manejo de errores de Cloud Functions
+                val errorMsg = if (e is com.google.firebase.functions.FirebaseFunctionsException) {
+                    // Accedemos a las propiedades con el tipo correcto ya comprobado
+                    "Error del servidor (${e.code}): ${e.message}"
+                } else {
+                    "Error de conexión: ${e.localizedMessage}"
+                }
+                _checkInResult.value = CheckInState.Error(errorMsg)
             }
         }
     }

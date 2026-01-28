@@ -33,6 +33,13 @@ object AchievementSystem {
             iconName = "whatshot",
             xpReward = 100
         ),
+        AchievementDefinition(
+            id = "clean_sunday",
+            title = "Domingo Santo",
+            description = "Entrena un domingo. La disciplina no descansa.",
+            iconName = "clean_hands",
+            xpReward = 75
+        ),
         // --- NUEVOS LOGROS ---
         AchievementDefinition(
             id = "weekend_warrior",

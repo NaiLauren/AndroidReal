@@ -61,6 +61,7 @@ fun ProfileScreen(
     onNavigateToRequestCredits: () -> Unit,
     onNavigateToAdminDashboard: () -> Unit,
     onNavigateToRules: () -> Unit,
+    onNavigateToHistory: () -> Unit, // Nuevo parámetro
     onLogout: () -> Unit
 ) {
     val profileState by profileViewModel.userState.collectAsState()
@@ -142,7 +143,8 @@ fun ProfileScreen(
                                 onImageClick = { launchImagePicker() },
                                 onEditClick = onEditProfileClicked,
                                 isLoadingImage = profileUpdateState is ProfileUpdateState.Loading,
-                                onNavigateToRules = onNavigateToRules
+                                onNavigateToRules = onNavigateToRules,
+                                onNavigateToHistory = onNavigateToHistory // Pasar callback
                             )
                         }
 
@@ -231,7 +233,8 @@ fun ProfileHeaderIOSStyle(
     onImageClick: () -> Unit,
     onEditClick: () -> Unit,
     isLoadingImage: Boolean,
-    onNavigateToRules: () -> Unit // Nueva acción
+    onNavigateToRules: () -> Unit,
+    onNavigateToHistory: () -> Unit // Nuevo parámetro
 ) {
     val nextLevelXP = LevelSystem.getNextLevelXp(user.xp)
     val prevLevelLimit = LevelSystem.getPreviousLevelLimit(user.xp)
@@ -387,16 +390,35 @@ fun ProfileHeaderIOSStyle(
 
                         Spacer(Modifier.height(8.dp))
                         
-                        // BOTON VER REGLAS
-                        OutlinedButton(
-                            onClick = onNavigateToRules,
-                            shape = RoundedCornerShape(50),
-                            border = BorderStroke(1.dp, ColorBorder),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                        // BOTONES GAMIFICACIÓN
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            Text("Ver Reglas", style = MaterialTheme.typography.labelSmall)
+                            OutlinedButton(
+                                onClick = onNavigateToRules,
+                                shape = RoundedCornerShape(50),
+                                border = BorderStroke(1.dp, ColorBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                modifier = Modifier.height(32.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                            ) {
+                                Text("Reglas", style = MaterialTheme.typography.labelSmall)
+                            }
+                            
+                            Spacer(Modifier.width(8.dp))
+
+                            Button(
+                                onClick = { onNavigateToHistory() }, // Nuevo callback
+                                shape = RoundedCornerShape(50),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.height(32.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Historial", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }

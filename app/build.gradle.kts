@@ -78,6 +78,8 @@ dependencies {
     implementation("com.google.firebase:firebase-storage-ktx")
     implementation("me.onebone:toolbar-compose:2.3.5")
     implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    implementation("com.google.firebase:firebase-functions-ktx")
 
     // Kotlinx Coroutines
     implementation(libs.kotlinx.coroutines.android)
