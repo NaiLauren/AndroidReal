@@ -1,6 +1,7 @@
 package com.aquiles.crosschapp.presentation.home
 
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +34,7 @@ private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
+private val ColorPrimaryAction = Color(0xFFFC5200)
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,7 +122,28 @@ fun AdminGymSettingsScreen(
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
 
+                // --- NEW: Activity Images Management ---
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().clickable { navController.navigate("admin_manage_activity_images") }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Image, null, tint = ColorPrimaryAction, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text("Imágenes de Actividad Diaria", color = ColorTextPrimary, fontWeight = FontWeight.Bold)
+                            Text("Personaliza las fotos de Lunes a Domingo.", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                        }
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(32.dp))
+
+                // Color Picker Grid
 
                 // Color Picker Grid
                 Text(

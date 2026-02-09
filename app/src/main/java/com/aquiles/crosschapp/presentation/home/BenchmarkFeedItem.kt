@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.aquiles.crosschapp.data.model.BenchmarkResult
 import java.util.Date
+import com.aquiles.crosschapp.presentation.components.GlassCard
+import com.aquiles.crosschapp.presentation.viewmodel.FeedUiItem
+import com.aquiles.crosschapp.presentation.viewmodel.FeedTab // Imports required for refactor
 
 // --- CONSTANTS MATCHING HOMESCREEN ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
@@ -38,144 +41,180 @@ private val ColorScaled = Color(0xFF2196F3)
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BenchmarkFeedItem(
-    item: BenchmarkResult,
+    item: FeedUiItem,
+    rankingPosition: Int? = null,
     onLongClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = {}, // No action on single click for now
-                onLongClick = onLongClick
-            ),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, if (item.isVerified) ColorVerified.copy(alpha = 0.5f) else ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+    Box(modifier = Modifier.fillMaxWidth()) {
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {}, 
+                    onLongClick = onLongClick
+                ),
+            // Border is handled by GlassCard internally, but we can override if verified logic is critical
+            // GlassCard doesn't expose border override easily. 
+            // We can wrap content or accept the glass border. 
+            // The item.isVerified logic added a blue border. 
+            // Let's rely on GlassCard for now or implement a wrapper if needed.
+            // Actually, let's keep it simple: GlassCard is better than custom border for consistency.
+            // If verified needs highlighting, use the badge.
         ) {
-            // --- HEADER ---
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier.padding(16.dp)
             ) {
-                // Avatar
-                if (!item.userProfileImageUrl.isNullOrBlank()) {
-                    Image(
-                        painter = rememberAsyncImagePainter(item.userProfileImageUrl),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color.Gray), // Fallback color
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color.Gray),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = item.userName.take(1).uppercase(),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
+                // --- HEADER ---
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Avatar (Existing logic...)
+                    if (!item.userProfileImageUrl.isNullOrBlank()) {
+                        Image(
+                            painter = rememberAsyncImagePainter(item.userProfileImageUrl),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.Gray),
+                            contentScale = ContentScale.Crop
                         )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // Name and Info
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "${item.userName} ${item.userLastName}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorTextPrimary
-                        )
-                        
-                        // Verification Badge
-                        if (item.isVerified) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Verificado",
-                                tint = ColorVerified,
-                                modifier = Modifier.size(14.dp)
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color.Gray),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = item.userName.take(1).uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
-
-                    // Level Badge
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // RENAMED FUNCTION CALL
-                        FeedBadgePill(text = item.userLevel.uppercase(), color = getFeedLevelColor(item.userLevel))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        
-                        // Relative Time
-                        val timeAgo = item.date?.let { 
-                            DateUtils.getRelativeTimeSpanString(it.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
-                        } ?: "Reciente"
-                        
-                        Text(
-                            text = timeAgo.toString(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ColorTextSecondary,
-                            fontSize = 11.sp
-                        )
+    
+                    Spacer(modifier = Modifier.width(12.dp))
+    
+                    // Name and Info
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            
+                            Text(
+                                text = item.userName, // FeedUiItem already combining/formatting name if needed or valid
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorTextPrimary
+                            )
+                            
+                            // Verification Badge
+                            if (item.isVerified) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Verificado",
+                                    tint = ColorVerified,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+    
+                        // Level Badge
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            FeedBadgePill(text = item.userLevel.uppercase(), color = getFeedLevelColor(item.userLevel))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            
+                            // Relative Time
+                            val timeAgo = item.date?.let { 
+                                DateUtils.getRelativeTimeSpanString(it.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+                            } ?: "Reciente"
+                            
+                            Text(
+                                text = timeAgo.toString(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ColorTextSecondary,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = ColorBorder)
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // --- BODY ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Completó",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ColorTextSecondary
-                    )
-                    Text(
-                        text = item.benchmarkName,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black, // Extra Bold
-                        color = ColorTextPrimary
-                    )
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = item.score,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (item.isRx) ColorRx else ColorScaled
-                    )
-                    
-                    Surface(
-                        color = (if (item.isRx) ColorRx else ColorScaled).copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
+    
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = ColorBorder)
+                Spacer(modifier = Modifier.height(12.dp))
+    
+                // --- BODY ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (item.isRx) "RX" else "SCALED",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            text = "Completó",
                             style = MaterialTheme.typography.labelSmall,
+                            color = ColorTextSecondary
+                        )
+                        Text(
+                            text = item.title, // [CHANGED] benchmarkName -> title
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black, // Extra Bold
+                            color = ColorTextPrimary
+                        )
+                    }
+    
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = item.score,
+                            style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = if (item.isRx) ColorRx else ColorScaled
                         )
+                        
+                        Surface(
+                            color = (if (item.isRx) ColorRx else ColorScaled).copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = if (item.isRx) "RX" else "SCALED",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (item.isRx) ColorRx else ColorScaled
+                            )
+                        }
                     }
+                }
+            }
+        }
+
+        // RANKING BADGE OVERLAY
+        if (rankingPosition != null) {
+            val badgeColor = when(rankingPosition) {
+                1 -> Color(0xFFFFD700) // Gold
+                2 -> Color(0xFFC0C0C0) // Silver
+                3 -> Color(0xFFCD7F32) // Bronze
+                else -> ColorPrimaryAction
+            }
+            
+            Surface(
+                color = badgeColor,
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 8.dp, y = (-8).dp)
+                    .size(32.dp),
+                shadowElevation = 4.dp
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "#$rankingPosition",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
                 }
             }
         }

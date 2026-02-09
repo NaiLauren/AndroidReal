@@ -36,6 +36,7 @@ fun XpHistoryScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding() // [Fix] Avoid overlap with status bar
     ) {
         // Header simple
         Box(

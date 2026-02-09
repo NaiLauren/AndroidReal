@@ -67,9 +67,14 @@ class ScheduleViewModel : ViewModel() {
     private val _classDetailsState = MutableStateFlow<ClassDetailsState>(ClassDetailsState.Idle)
     val classDetailsState: StateFlow<ClassDetailsState> = _classDetailsState.asStateFlow()
 
+    // [NEW] Exclusive Today Card State
+    private val _todayBookingState = MutableStateFlow<NextBookingState>(NextBookingState.Loading)
+    val todayBookingState: StateFlow<NextBookingState> = _todayBookingState.asStateFlow()
+
     // Listeners
     private var classesListener: ListenerRegistration? = null
     private var nextBookingListener: ListenerRegistration? = null
+    private var todayBookingListener: ListenerRegistration? = null // [NEW]
     private var classDetailsListener: ListenerRegistration? = null
 
     init {
@@ -78,6 +83,7 @@ class ScheduleViewModel : ViewModel() {
             UserSession.currentUser.collect { u ->
                 if (u != null && u.gym_id.isNotEmpty()) {
                     listenForNextBooking(u.id, u.gym_id)
+                    listenForTodayBooking(u.id, u.gym_id) // [NEW]
                 }
             }
         }
@@ -108,6 +114,41 @@ class ScheduleViewModel : ViewModel() {
 
                 val nextClass = s?.documents?.firstOrNull()?.toObject(GymClass::class.java)?.copy(documentId = s.documents.first().id)
                 _nextBookingState.value = NextBookingState.Success(nextClass)
+            }
+    }
+
+
+    // ========================================================================
+    // RESERVA DE HOY (EXCLUSIVE CARD)
+    // ========================================================================
+    private fun listenForTodayBooking(uid: String, gid: String) {
+        todayBookingListener?.remove()
+        _todayBookingState.value = NextBookingState.Loading
+
+        val now = Date()
+        val calendar = Calendar.getInstance()
+        calendar.time = now
+        calendar.set(Calendar.HOUR_OF_DAY, 0); calendar.set(Calendar.MINUTE, 0); calendar.set(Calendar.SECOND, 0)
+        val startOfDay = calendar.time
+        
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+        val endOfDay = calendar.time
+
+        // Busca clase donde el usuario esté inscrito Y sea HOY
+        todayBookingListener = firestore.collection("gymClasses")
+            .whereEqualTo("gym_id", gid)
+            .whereArrayContains("enrolledUserIds", uid)
+            .whereGreaterThanOrEqualTo("dateTime", startOfDay)
+            .whereLessThan("dateTime", endOfDay)
+            .limit(1) // Asumimos 1 clase principal por día o tomamos la primera
+            .addSnapshotListener { s, e ->
+                if (e != null) {
+                    _todayBookingState.value = NextBookingState.Error(e.message ?: "Error loading today booking")
+                    return@addSnapshotListener
+                }
+
+                val todayClass = s?.documents?.firstOrNull()?.toObject(GymClass::class.java)?.copy(documentId = s.documents.first().id)
+                _todayBookingState.value = NextBookingState.Success(todayClass)
             }
     }
 
@@ -288,6 +329,7 @@ class ScheduleViewModel : ViewModel() {
     override fun onCleared() {
         classesListener?.remove()
         nextBookingListener?.remove()
+        todayBookingListener?.remove() // [NEW]
         classDetailsListener?.remove()
         super.onCleared()
     }

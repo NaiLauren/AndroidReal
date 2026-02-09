@@ -149,6 +149,7 @@ fun EditProfileScreen(
                     var phoneNumber by remember(user.id) { mutableStateOf(user.phoneNumber) }
                     var emergencyContact by remember(user.id) { mutableStateOf(user.emergencyContact ?: "") }
                     var birthDate by remember(user.id) { mutableStateOf(user.birthDate) }
+                    var gender by remember(user.id) { mutableStateOf(user.gender) } // [Fix] Gender edit
 
                     // Médicos
                     var hasHeartCondition by remember(user.id) { mutableStateOf(user.hasHeartCondition ?: false) }
@@ -227,6 +228,9 @@ fun EditProfileScreen(
                             Box(modifier = Modifier.matchParentSize().clickable { showDatePicker = true })
                         }
 
+                        // [Fix] Gender Selector
+                        GenderSelectorProfile(selectedGender = gender, onGenderSelected = { gender = it })
+
                         Spacer(modifier = Modifier.height(10.dp))
 
                         // --- FICHA MÉDICA ---
@@ -246,14 +250,14 @@ fun EditProfileScreen(
                         Spacer(modifier = Modifier.height(20.dp))
 
                         val hasChanges = name != user.name || lastName != user.lastName || phoneNumber != user.phoneNumber || emergencyContact != (user.emergencyContact ?: "") || birthDate != user.birthDate ||
-                                hasHeartCondition != (user.hasHeartCondition ?: false) || hasInjuries != (user.hasInjuries ?: false) || medicalNotes != (user.medicalNotes ?: "") || waiverAccepted != (user.waiverAccepted ?: false)
+                                hasHeartCondition != (user.hasHeartCondition ?: false) || hasInjuries != (user.hasInjuries ?: false) || medicalNotes != (user.medicalNotes ?: "") || waiverAccepted != (user.waiverAccepted ?: false) || gender != user.gender // [Fix] Detect gender change
 
                         // BOTÓN GUARDAR
                         Button(
                             onClick = {
                                 profileViewModel.updateUserProfile(
                                     name, lastName, phoneNumber, emergencyContact, birthDate,
-                                    hasHeartCondition, hasInjuries, medicalNotes, waiverAccepted
+                                    hasHeartCondition, hasInjuries, medicalNotes, waiverAccepted, gender // [Fix] Pass gender
                                 )
                             },
                             modifier = Modifier
@@ -431,6 +435,38 @@ private fun ProfileMedicalSection(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onWaiverChange(!waiverAccepted) }) {
                     Checkbox(checked = waiverAccepted, onCheckedChange = onWaiverChange, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary))
                     Text("ACEPTO y Firmo digitalmente", fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GenderSelectorProfile(selectedGender: String, onGenderSelected: (String) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Género",
+            style = MaterialTheme.typography.labelMedium,
+            color = ColorTextSecondary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("male" to "Masculino", "female" to "Femenino", "other" to "Otro").forEach { (value, label) ->
+                val isSelected = selectedGender == value || (selectedGender == "Not Specified" && value == "male")
+                OutlinedButton(
+                    onClick = { onGenderSelected(value) },
+                    modifier = Modifier.weight(1f),
+                    border = BorderStroke(1.dp, if (isSelected) ColorPrimaryAction else ColorBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (isSelected) ColorPrimaryAction.copy(alpha = 0.2f) else Color.Transparent,
+                        contentColor = if (isSelected) ColorPrimaryAction else ColorTextSecondary
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(label, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
                 }
             }
         }

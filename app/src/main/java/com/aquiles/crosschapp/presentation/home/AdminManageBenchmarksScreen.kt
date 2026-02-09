@@ -227,6 +227,23 @@ private fun GlassBenchmarkDialog(
     var description by remember { mutableStateOf(benchmark?.description ?: "") }
     var scoreType by remember { mutableStateOf(benchmark?.scoreType?.takeIf { it.isNotBlank() } ?: "TIME") }
     var strategy by remember { mutableStateOf(benchmark?.strategy ?: "") }
+    
+    // Moved up for scope visibility
+    var sortOrderExpanded by remember { mutableStateOf(false) }
+    // Default logic: Time -> ASC (Menor es mejor), Weight/Reps -> DESC (Mayor es mejor)
+    // Initialize based on existing benchmark or default by scoreType
+    var sortOrder by remember { 
+        mutableStateOf(benchmark?.sortOrder?.takeIf { it.isNotBlank() } ?: if (scoreType == "TIME") "ASC" else "DESC") 
+    }
+    
+    // Auto-update sortOrder default when scoreType changes, ONLY if it's a fresh creation or user is changing types
+    // We can use a side effect for this, or just let user change it manually. 
+    // Let's force update default if user changes scoreType to help them.
+    LaunchedEffect(scoreType) {
+        if (benchmark == null) { // Only auto-switch for new benchmarks to avoid overriding edit
+             sortOrder = if (scoreType == "TIME") "ASC" else "DESC"
+        }
+    }
 
     var isNameError by remember { mutableStateOf(false) }
     var scoreTypeExpanded by remember { mutableStateOf(false) }
@@ -272,15 +289,15 @@ private fun GlassBenchmarkDialog(
                     label = "Estrategia (Opcional)"
                 )
 
-                // 4. DROPDOWN
+                // 4. DROPDOWN UNIDAD DE MEDIDA (Antes scoreType)
                 ExposedDropdownMenuBox(
                     expanded = scoreTypeExpanded,
                     onExpandedChange = { scoreTypeExpanded = !scoreTypeExpanded }
                 ) {
                     OutlinedTextField(
-                        value = scoreType,
+                        value = scoreType, // Mantenemos variable scoreType para visualización
                         onValueChange = {},
-                        label = { Text("Tipo de Score", color = ColorTextSecondary) },
+                        label = { Text("¿Qué se mide? (Unidad)", color = ColorTextSecondary) },
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = scoreTypeExpanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true).fillMaxWidth(),
@@ -299,12 +316,53 @@ private fun GlassBenchmarkDialog(
                         onDismissRequest = { scoreTypeExpanded = false },
                         modifier = Modifier.background(ColorDialogSurface)
                     ) {
-                        scoreTypes.forEach { type ->
+                        // TIME, WEIGHT, REPS, DISTANCE, PERCENTAGE
+                        listOf("TIME", "WEIGHT", "REPS", "DISTANCE", "PERCENTAGE").forEach { type ->
                             DropdownMenuItem(
                                 text = { Text(type, color = ColorTextPrimary) },
                                 onClick = { scoreType = type; scoreTypeExpanded = false }
                             )
                         }
+                    }
+                }
+                
+                // 5. DROPDOWN ORDENAMIENTO (Smart Ranking)
+                // sortOrder variables moved to top scope
+
+                ExposedDropdownMenuBox(
+                    expanded = sortOrderExpanded,
+                    onExpandedChange = { sortOrderExpanded = !sortOrderExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = if (sortOrder == "ASC") "Menor es mejor (Tiempo, Carreras)" else "Mayor es mejor (Peso, Reps)",
+                        onValueChange = {},
+                        label = { Text("Criterio de Ranking", color = ColorTextSecondary) },
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sortOrderExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable, true).fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ColorPrimaryAction,
+                            unfocusedBorderColor = ColorBorder,
+                            focusedTextColor = ColorTextPrimary,
+                            unfocusedTextColor = ColorTextPrimary,
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = sortOrderExpanded,
+                        onDismissRequest = { sortOrderExpanded = false },
+                        modifier = Modifier.background(ColorDialogSurface)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Mayor es mejor (Peso, Reps, Distancia)", color = ColorTextPrimary) },
+                            onClick = { sortOrder = "DESC"; sortOrderExpanded = false }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Menor es mejor (Tiempo rápido)", color = ColorTextPrimary) },
+                            onClick = { sortOrder = "ASC"; sortOrderExpanded = false }
+                        )
                     }
                 }
             }
@@ -316,12 +374,16 @@ private fun GlassBenchmarkDialog(
                         val newOrUpdatedBenchmark = benchmark?.copy(
                             name = name,
                             description = description,
-                            scoreType = scoreType,
+                            scoreType = scoreType, // Lo mantenemos por legacy
+                            measurementUnit = scoreType, // Nuevo campo
+                            sortOrder = sortOrder,
                             strategy = strategy.trim()
                         ) ?: BenchmarkWod(
                             name = name,
                             description = description,
                             scoreType = scoreType,
+                            measurementUnit = scoreType,
+                            sortOrder = sortOrder,
                             strategy = strategy.trim()
                         )
                         onSave(newOrUpdatedBenchmark)

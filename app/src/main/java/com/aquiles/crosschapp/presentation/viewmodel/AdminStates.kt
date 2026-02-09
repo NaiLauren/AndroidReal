@@ -124,12 +124,22 @@ sealed class ClassForEditState {
     object Idle: ClassForEditState()
 }
 
+data class AppPaymentInfo(
+    val alias: String = "",
+    val cbu: String = "",
+    val bankName: String = "",
+    val holder: String = ""
+)
+
 sealed class ReportsState {
     object Loading : ReportsState()
     data class Success(
         val totalRevenue: Double,
         val monthlyActiveUsers: Int,
-        val monthlyTransactions: List<CreditRequest>
+        val monthlyTransactions: List<CreditRequest>,
+        val dollarRate: Double? = null,
+        val paymentStatus: String = "PENDING", // PENDING, PENDING_REVIEW, PAID, REJECTED
+        val paymentInfo: AppPaymentInfo? = null
     ) : ReportsState()
     data class Error(val message: String) : ReportsState()
     object Idle : ReportsState()

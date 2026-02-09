@@ -15,6 +15,7 @@ data class User(
     var profileImageUrl: String? = null,
     val gym_id: String = "",
     val role: String = "member",
+    val gender: String = "Not Specified", // Male, Female, Other
 
     @get:Exclude @set:Exclude
     var isAdmin: Boolean = false,
@@ -23,6 +24,10 @@ data class User(
     var creditValidUntil: Date? = null,
     var totalClassesAttended: Int = 0,
     var currentClassesReserved: Int = 0,
+    
+    // --- NUEVO: SCHEMA MATCHING ---
+    var hasFreePass: Boolean = false,
+    var attendance_history: List<Date> = emptyList(), // Para Racha Hat-Trick y Semana Perfecta
     
     // --- GAMIFICACIÓN ---
     var xp: Int = 0,

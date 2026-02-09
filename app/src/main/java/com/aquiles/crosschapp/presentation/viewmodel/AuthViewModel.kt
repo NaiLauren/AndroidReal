@@ -62,6 +62,40 @@ class AuthViewModel : ViewModel() {
         }
     }
 
+    // --- SESIÓN RESTORATION ---
+    fun checkActiveSession(onResult: (Boolean) -> Unit) {
+        val currentUser = auth.currentUser
+        if (currentUser != null) {
+            viewModelScope.launch {
+                try {
+                    val doc = firestore.collection("users").document(currentUser.uid).get().await()
+                    if (doc.exists()) {
+                        val userProfile = doc.toObject(User::class.java)
+                        if (userProfile != null) {
+                            UserSession.startSession(userProfile)
+                            updateAndSaveFcmToken()
+                            _authState.value = AuthState.Success(currentUser)
+                            onResult(true) // Sesión restaurada con éxito
+                        } else {
+                            // Documento existe pero falló parseo
+                            onResult(false)
+                        }
+                    } else {
+                        // Usuario auth existe pero no tiene perfil (¿Registro incompleto?)
+                        // Tratamos como no logueado para que vaya a Login/Register
+                        onResult(false)
+                    }
+                } catch (e: Exception) {
+                    Log.e("AuthViewModel", "Error restaurando sesión: ${e.message}")
+                    onResult(false)
+                }
+            }
+        } else {
+            // No hay usuario de Firebase logueado
+            onResult(false)
+        }
+    }
+
     // --- GOOGLE SIGN IN ---
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
@@ -104,7 +138,8 @@ class AuthViewModel : ViewModel() {
         name: String,
         lastName: String,
         phoneNumber: String,
-        gymId: String
+        gymId: String,
+        gender: String = "Not Specified"
     ) {
         val user = auth.currentUser
         if (user == null) {
@@ -127,7 +162,8 @@ class AuthViewModel : ViewModel() {
                     phoneNumber = phoneNumber.trim(),
                     gym_id = gymId,
                     role = "member",
-                    profileImageUrl = user.photoUrl?.toString() // Usar foto de Google si existe
+                    profileImageUrl = user.photoUrl?.toString(), // Usar foto de Google si existe
+                    gender = gender // [Fix] Gender capture
                 )
 
                 firestore.collection("users").document(user.uid).set(newUser).await()
@@ -150,7 +186,8 @@ class AuthViewModel : ViewModel() {
         name: String,
         lastName: String,
         phoneNumber: String,
-        gymId: String
+        gymId: String,
+        gender: String = "Not Specified"
     ) {
         if (gymId.isBlank()) {
             _authState.value = AuthState.Error("Error: El identificador del gimnasio es necesario para el registro.")
@@ -171,7 +208,8 @@ class AuthViewModel : ViewModel() {
                         lastName = lastName.trim(),
                         phoneNumber = phoneNumber.trim(),
                         gym_id = gymId,
-                        role = "member"
+                        role = "member",
+                        gender = gender // [Fix] Gender capture
                     )
                     firestore.collection("users")
                         .document(user.uid)

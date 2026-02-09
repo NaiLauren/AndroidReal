@@ -121,6 +121,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainApp(shouldOpenNotifications: Boolean = false) {
     val navController = rememberNavController()
+    // --- NUEVO: Estado para control de chequeo de sesión ---
+    var isCheckingSession by remember { mutableStateOf(true) }
+    val authViewModel: AuthViewModel = viewModel()
+    // --------------------------------------------------------
 
     LaunchedEffect(shouldOpenNotifications) {
         if (shouldOpenNotifications) {
@@ -128,9 +132,25 @@ fun MainApp(shouldOpenNotifications: Boolean = false) {
         }
     }
 
+    // --- NUEVO: Lógica de Restauración de Sesión ---
+    LaunchedEffect(Unit) {
+        // Verificar si hay sesión en Auth pero no en UserSession (Memory Wipe)
+        authViewModel.checkActiveSession { result ->
+            isCheckingSession = false
+        }
+    }
+    // -----------------------------------------------
+
     val currentUser by UserSession.currentUser.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    
+    // Si estamos chequeando sesión, mostramos Splash
+    if (isCheckingSession) {
+        VideoSplashScreen(onVideoEnded = { /* No-op, esperamos check */ })
+        return
+    }
+
     val startDestination = if (currentUser != null) "main_graph" else "auth_graph"
     val routesWithBottomBar = setOf(
         BottomNavItem.Home.route,
@@ -244,9 +264,9 @@ fun NavGraphBuilder.mainGraph(
                 innerPadding = innerPadding,
                 homeViewModel = viewModel(),
                 adminViewModel = viewModel(),
-                onNavigateToAdminCreditRequests = { navController.navigate("admin_credit_requests") },
                 onNavigateToNotifications = { navController.navigate("notifications_screen") },
-                onNavigateToMessageArchive = { navController.navigate("message_archive") }
+                onNavigateToMessageArchive = { navController.navigate("message_archive") },
+                onNavigateToCreateNotice = { navController.navigate("create_notice") }
             )
         }
 
@@ -300,13 +320,15 @@ fun NavGraphBuilder.mainGraph(
                 onNavigateToClassDetail = { classId: String -> navController.navigate("class_details/$classId") },
                 onNavigateToScheduleAtDate = { date: LocalDate -> navController.navigate(BottomNavItem.Schedule.route + "?date=" + date.toString()) },
                 onNavigateToWodHistory = { /* A implementar */ },
-                onNavigateToRequestCredits = { navController.navigate("request_credits_screen") }
+                onNavigateToRequestCredits = { navController.navigate("request_credits_screen") },
+                onNavigateToBenchmarks = { navController.navigate("benchmarks_screen") }
             )
         }
         composable(BottomNavItem.Performance.route) {
             PerformanceScreen(
                 innerPadding = innerPadding,
-                performanceViewModel = performanceViewModel
+                performanceViewModel = performanceViewModel,
+                onNavigateToLeaderboard = { navController.navigate("leaderboard_screen") }
             )
         }
         composable("edit_profile_screen") {
@@ -372,6 +394,22 @@ fun NavGraphBuilder.mainGraph(
                 adminViewModel = viewModel()
             )
         }
+        
+        composable("leaderboard_screen") {
+            LeaderboardScreen(
+                 innerPadding = innerPadding,
+                 navController = navController,
+                 leaderboardViewModel = viewModel()
+            )
+        }
+        
+        composable("benchmarks_screen") {
+            com.aquiles.crosschapp.presentation.benchmarks.BenchmarksScreen(
+                adminViewModel = viewModel(),
+                performanceViewModel = performanceViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
         composable(
             route = "admin_user_details/{userId}",
             arguments = listOf(navArgument("userId") { type = NavType.StringType })
@@ -401,6 +439,13 @@ fun NavGraphBuilder.mainGraph(
         composable("admin_manage_schedules") {
             AdminManageSchedulesScreen(
                 innerPadding = innerPadding,
+                navController = navController,
+                adminViewModel = viewModel()
+            )
+        }
+        
+        composable("admin_manage_activity_images") {
+            AdminActivityImagesScreen(
                 navController = navController,
                 adminViewModel = viewModel()
             )
@@ -441,6 +486,23 @@ fun NavGraphBuilder.mainGraph(
         composable("notifications_screen") {
             NotificationsScreen(navController = navController)
         }
+
+        // --- NUEVA RUTA: CREAR NOVEDAD ---
+        composable("create_notice") {
+            CreateNoticeScreen(
+                navController = navController,
+                noticeViewModel = viewModel()
+            )
+        }
+        
+        composable("admin_news_screen") {
+            AdminNewsScreen(
+                innerPadding = innerPadding,
+                navController = navController,
+                noticeViewModel = viewModel()
+            )
+        }
+        // -------------------------------
         
         // --- NUEVA RUTA: HISTORIAL XP ---
         composable("xp_history_screen") {

@@ -39,7 +39,7 @@ sealed class BottomNavItem(
 
     object Wods : BottomNavItem(
         route = "wods", // <-- CORREGIDO
-        label = "WODs",
+        label = "Hoy",
         icon = Icons.Filled.FitnessCenter
     )
 

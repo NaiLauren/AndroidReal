@@ -109,7 +109,21 @@ private fun UserProfileContent(
             Text(text = user.role.uppercase(), style = MaterialTheme.typography.bodyLarge, color = ColorPrimaryAction)
         }
 
-        // --- 1. NUEVA TARJETA: AUDITORÍA LEGAL ---
+        // --- 1. MEMBRESÍA ACTUAL (Mover Arriba) ---
+        GlassInfoCard(title = "Membresía", icon = Icons.Default.CardMembership) {
+            InfoDetailRow(icon = Icons.Default.ConfirmationNumber, label = "Créditos", value = "${user.credits}")
+            val date = user.creditValidUntil?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: "-"
+            InfoDetailRow(icon = Icons.Default.EventAvailable, label = "Vencimiento", value = date)
+        }
+
+        // --- 2. DATOS PERSONALES (Contacto) ---
+        GlassInfoCard(title = "Contacto", icon = Icons.Default.ContactMail) {
+            InfoDetailRow(icon = Icons.Default.Email, label = "Email", value = user.email)
+            InfoDetailRow(icon = Icons.Default.Phone, label = "Teléfono", value = user.phoneNumber?.takeIf { it.isNotBlank() } ?: "-")
+            InfoDetailRow(icon = Icons.Default.HealthAndSafety, label = "Emergencia", value = user.emergencyContact?.takeIf { it.isNotBlank() } ?: "-")
+        }
+
+        // --- 3. AUDITORÍA LEGAL Y MÉDICA ---
         GlassInfoCard(title = "Auditoría Legal y Médica", icon = Icons.Default.Shield) {
 
             // ESTADO DE FIRMA
@@ -155,18 +169,6 @@ private fun UserProfileContent(
                 Text("Notas:", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
                 Text(user.medicalNotes!!, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
             }
-        }
-
-        GlassInfoCard(title = "Contacto", icon = Icons.Default.ContactMail) {
-            InfoDetailRow(icon = Icons.Default.Email, label = "Email", value = user.email)
-            InfoDetailRow(icon = Icons.Default.Phone, label = "Teléfono", value = user.phoneNumber?.takeIf { it.isNotBlank() } ?: "-")
-            InfoDetailRow(icon = Icons.Default.HealthAndSafety, label = "Emergencia", value = user.emergencyContact?.takeIf { it.isNotBlank() } ?: "-")
-        }
-
-        GlassInfoCard(title = "Membresía", icon = Icons.Default.CardMembership) {
-            InfoDetailRow(icon = Icons.Default.ConfirmationNumber, label = "Créditos", value = "${user.credits}")
-            val date = user.creditValidUntil?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: "-"
-            InfoDetailRow(icon = Icons.Default.EventAvailable, label = "Vencimiento", value = date)
         }
 
         Spacer(modifier = Modifier.height(32.dp))

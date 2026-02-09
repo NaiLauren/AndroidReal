@@ -85,6 +85,7 @@ fun RegisterScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var gender by remember { mutableStateOf("Not Specified") } // [Fix] Gender selection
 
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
@@ -214,6 +215,9 @@ fun RegisterScreen(
                         keyboardActions = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Down) })
                     )
 
+                    // [Fix] Gender Selector
+                    GenderSelector(selectedGender = gender, onGenderSelected = { gender = it })
+
                     // Email (Deshabilitado si es Social Login y ya tenemos el email)
                     GlassRegisterTextField(
                         value = email,
@@ -275,10 +279,10 @@ fun RegisterScreen(
                             }
                             
                             if (isSocialRegistration) {
-                                authViewModel.completeSocialLoginRegistration(name, lastName, phoneNumber, gymId)
+                                authViewModel.completeSocialLoginRegistration(name, lastName, phoneNumber, gymId, gender)
                             } else {
                                 if (password == confirmPassword) {
-                                    authViewModel.registerUser(email, password, name, lastName, phoneNumber, gymId)
+                                    authViewModel.registerUser(email, password, name, lastName, phoneNumber, gymId, gender)
                                 } else {
                                     passwordsDoNotMatch = true
                                 }
@@ -362,6 +366,38 @@ fun GlassRegisterTextField(
         trailingIcon = trailingIcon,
         isError = isError
     )
+}
+
+@Composable
+fun GenderSelector(selectedGender: String, onGenderSelected: (String) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Género",
+            style = MaterialTheme.typography.labelMedium,
+            color = ColorTextSecondary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf("male" to "Masculino", "female" to "Femenino", "other" to "Otro").forEach { (value, label) ->
+                val isSelected = selectedGender == value || (selectedGender == "Not Specified" && value == "male") // Default to male if not specified
+                OutlinedButton(
+                    onClick = { onGenderSelected(value) },
+                    modifier = Modifier.weight(1f),
+                    border = BorderStroke(1.dp, if (isSelected) ColorPrimaryAction else ColorBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (isSelected) ColorPrimaryAction.copy(alpha = 0.2f) else Color.Transparent,
+                        contentColor = if (isSelected) ColorPrimaryAction else ColorTextSecondary
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(label, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                }
+            }
+        }
+    }
 }
 
 @Preview(showBackground = true)

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -165,6 +166,13 @@ private fun ManagementToolsSection(navController: NavController) {
             subtitle = "Definir bloques horarios base",
             icon = Icons.Default.Schedule,
             onClick = { navController.navigate("admin_manage_schedules") }
+        )
+
+        AdminOptionCardGlass(
+            title = "Novedades / Tablón",
+            subtitle = "Publicar anuncios y noticias",
+            icon = Icons.Default.Campaign, // Using Campaign icon for announcements
+            onClick = { navController.navigate("admin_news_screen") }
         )
     }
 }

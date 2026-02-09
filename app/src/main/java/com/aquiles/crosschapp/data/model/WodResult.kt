@@ -10,9 +10,18 @@ data class WodResult(
     val userId: String = "",
     val wodId: String = "",
     val score: String = "",
+    val numericScore: Double = 0.0, // Critical for Ranking Sorting
     val notes: String = "",
     @PropertyName("rx")
     val isRx: Boolean = true,
     @ServerTimestamp val date: Date? = null,
-    val gym_id: String = ""
+    val classSessionId: String? = null, // Multi-session support
+    val wodName: String? = null, // [Fix] Store class name
+    val gym_id: String = "",
+    
+    // Desnormalized Data for Feed
+    val userName: String = "",
+    val userProfileImageUrl: String = "",
+    val userLevel: String = "",
+    val userGender: String = ""
 )

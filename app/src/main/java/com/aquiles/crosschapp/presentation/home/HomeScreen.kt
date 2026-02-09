@@ -2,6 +2,7 @@ package com.aquiles.crosschapp.presentation.home
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -9,6 +10,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,6 +22,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,9 +39,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.*
 import coil.compose.rememberAsyncImagePainter
 import com.aquiles.crosschapp.data.model.PersonalMessage
-import com.aquiles.crosschapp.data.model.User
+import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
-import androidx.compose.foundation.lazy.items // Importante para LazyListScope.items
+import com.aquiles.crosschapp.presentation.viewmodel.FeedTab
+import com.aquiles.crosschapp.presentation.viewmodel.FeedUiItem
+import com.aquiles.crosschapp.presentation.home.BenchmarkFeedItem as SocialFeedItem // Alias for clarity
+import com.aquiles.crosschapp.presentation.viewmodel.NoticeViewModel
+import com.aquiles.crosschapp.data.model.GymNotice
+import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
@@ -43,8 +54,6 @@ private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
-// private val ColorBackgroundGradientStart = Color(0xFF000000) // Unused
-// private val ColorBackgroundGradientEnd = Color(0xFF121212) // Unused
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,20 +61,38 @@ fun HomeScreen(
     innerPadding: PaddingValues,
     homeViewModel: HomeViewModel = viewModel(),
     adminViewModel: AdminViewModel = viewModel(),
-    benchmarkFeedViewModel: BenchmarkFeedViewModel = viewModel(), // [NEW] Linkado viewModel
-    onNavigateToAdminCreditRequests: () -> Unit,
+    benchmarkFeedViewModel: BenchmarkFeedViewModel = viewModel(),
+    noticeViewModel: NoticeViewModel = viewModel(),
+    performanceViewModel: PerformanceViewModel = viewModel(),
     onNavigateToNotifications: () -> Unit,
-    onNavigateToMessageArchive: () -> Unit
+    onNavigateToMessageArchive: () -> Unit,
+    onNavigateToCreateNotice: () -> Unit
 ) {
     val currentUser by UserSession.currentUser.collectAsState()
     val notificationsState by homeViewModel.notificationsState.collectAsState()
     val pendingRequestsCount by adminViewModel.pendingRequestsCount.collectAsState()
     val personalMessageState by homeViewModel.personalMessageState.collectAsState()
+    val notices by noticeViewModel.notices.collectAsState()
 
+    LaunchedEffect(Unit) {
+        noticeViewModel.loadNotices() 
+        adminViewModel.loadAppConfig()
+        adminViewModel.loadActivityImages()
+        performanceViewModel.loadInitialData()
+    }
+
+    // Social Feed State
+    val feedItems by benchmarkFeedViewModel.feedItems.collectAsState()
+    val currentTab by benchmarkFeedViewModel.currentTab.collectAsState()
+    val availableBenchmarks by benchmarkFeedViewModel.availableBenchmarks.collectAsState()
+    val selectedWodFilter by benchmarkFeedViewModel.selectedWodFilter.collectAsState()
+    val sortCriteria by benchmarkFeedViewModel.sortCriteria.collectAsState()
+    val filteredItems by benchmarkFeedViewModel.filteredItems.collectAsState()
+
+    // --- UI STRUCTURE ---
     val hasUnreadNotifications = notificationsState is NotificationsState.Success &&
             (notificationsState as NotificationsState.Success).notifications.isNotEmpty()
 
-    // --- UI STRUCTURE ---
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -80,28 +107,42 @@ fun HomeScreen(
                     ),
                     actions = {
                         // Archivo de Mensajes
-                        IconButton(onClick = onNavigateToMessageArchive) {
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(40.dp)
+                                .background(ColorGlassSurface, CircleShape)
+                                .clickable { onNavigateToMessageArchive() },
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
                                 imageVector = Icons.Outlined.MailOutline,
                                 contentDescription = "Archivo",
-                                tint = ColorTextPrimary
+                                tint = ColorPrimaryAction
                             )
                         }
 
                         // Notificaciones
-                        IconButton(onClick = onNavigateToNotifications) {
-                            Box {
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(40.dp)
+                                .background(ColorGlassSurface, CircleShape)
+                                .clickable { onNavigateToNotifications() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                             Box {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Send,
                                     contentDescription = "Notificaciones",
-                                    tint = if (hasUnreadNotifications) ColorPrimaryAction else ColorTextPrimary
+                                    tint = if (hasUnreadNotifications) ColorPrimaryAction else Color.White
                                 )
                                 if (hasUnreadNotifications) {
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
                                             .size(10.dp)
-                                            .background(ColorPrimaryAction, CircleShape)
+                                            .background(Color.Red, CircleShape)
                                             .border(1.dp, Color.Black, CircleShape)
                                     )
                                 }
@@ -124,14 +165,23 @@ fun HomeScreen(
                 ) {
                     HomeScreenContent(
                         user = user,
-                        pendingRequestsCount = pendingRequestsCount,
                         personalMessageState = personalMessageState,
                         onMarkMessageAsRead = { messageId ->
                             homeViewModel.markPersonalMessageAsRead(messageId)
                         },
-                        onNavigateToAdminCreditRequests = onNavigateToAdminCreditRequests,
                         localScaffoldPadding = localScaffoldPadding,
-                        benchmarkFeedViewModel = benchmarkFeedViewModel // [NEW] Pass it down
+                        benchmarkFeedViewModel = benchmarkFeedViewModel,
+                        notices = notices,
+                        onDeleteNotice = { id -> noticeViewModel.deleteNotice(id) },
+                        onNavigateToCreateNotice = onNavigateToCreateNotice,
+                        feedItems = feedItems,
+                        currentTab = currentTab,
+                        onTabSelected = { benchmarkFeedViewModel.setTab(it) },
+                        availableBenchmarks = availableBenchmarks,
+                        selectedWodFilter = selectedWodFilter,
+                        onWodFilterSelected = { benchmarkFeedViewModel.setWodFilter(it) },
+                        onToggleSort = { benchmarkFeedViewModel.toggleSortOrder() },
+                        sortCriteria = sortCriteria
                     )
                 }
             }
@@ -142,15 +192,26 @@ fun HomeScreen(
 @Composable
 private fun HomeScreenContent(
     user: User,
-    pendingRequestsCount: Int,
     personalMessageState: PersonalMessageState,
     onMarkMessageAsRead: (String) -> Unit,
-    onNavigateToAdminCreditRequests: () -> Unit,
     localScaffoldPadding: PaddingValues,
-    benchmarkFeedViewModel: BenchmarkFeedViewModel // [NEW]
+    benchmarkFeedViewModel: BenchmarkFeedViewModel,
+    notices: List<GymNotice> = emptyList(),
+    onDeleteNotice: (String) -> Unit = {},
+    onNavigateToCreateNotice: () -> Unit = {},
+    feedItems: List<FeedUiItem> = emptyList(),
+    currentTab: FeedTab = FeedTab.TODAY,
+    onTabSelected: (FeedTab) -> Unit = {},
+    availableBenchmarks: List<String> = emptyList(),
+    selectedWodFilter: String? = null,
+    onWodFilterSelected: (String?) -> Unit = {},
+    onToggleSort: () -> Unit = {},
+    sortCriteria: String? = null
 ) {
     var showRulesDialog by remember { mutableStateOf(false) }
-    val feedState by benchmarkFeedViewModel.feedState.collectAsState() // [Fix] Moved here
+    
+    val feedState by benchmarkFeedViewModel.feedState.collectAsState()
+    val selectedGenderFilter by benchmarkFeedViewModel.selectedGenderFilter.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -162,139 +223,293 @@ private fun HomeScreenContent(
         ),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
+        // 1. GREETING (iOS Style)
         item {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "¡Hola, ${user.name.split(" ").first()}!",
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorTextPrimary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Surface(
-                        color = ColorPrimaryAction,
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.clickable { showRulesDialog = true }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = user.level.uppercase(),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = ColorTextPrimary
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Icon(Icons.Default.Info, null, tint = ColorTextPrimary, modifier = Modifier.size(12.dp))
-                        }
-                    }
-                }
-                Text(
-                    text = "A darle duro hoy. \uD83D\uDCAA",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = ColorTextSecondary
+            HomeGreetingCard(userName = user.name.split(" ").first())
+        }
+    
+        // 1.5 PERSONAL MESSAGE CARD
+        if (personalMessageState is PersonalMessageState.Success) {
+            item {
+                PersonalMessageCardGlass(
+                    message = personalMessageState.message,
+                    onAcknowledge = { onMarkMessageAsRead(personalMessageState.message.id) }
                 )
             }
         }
 
-
-
-        when (user.role) {
-            "owner", "coach" -> {
-                item {
-                    AdminSummaryCardGlass(
-                        pendingRequests = pendingRequestsCount,
-                        onClick = onNavigateToAdminCreditRequests
-                    )
+        // 2. NEWS CAROUSEL (Muro del Inicio)
+        if (notices.isNotEmpty()) {
+            item {
+                androidx.compose.foundation.pager.HorizontalPager(
+                    state = androidx.compose.foundation.pager.rememberPagerState { notices.size },
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                    pageSpacing = 16.dp,
+                    modifier = Modifier.height(160.dp)
+                ) { page ->
+                     NoticeBoardCard(
+                         notice = notices[page],
+                         onDelete = { if (user.isAdmin || user.role == "owner") onDeleteNotice(notices[page].id) },
+                         isAdmin = user.isAdmin || user.role == "owner"
+                     )
                 }
             }
-            "member" -> {
-                item {
-                    when(personalMessageState) {
-                        is PersonalMessageState.Success -> {
-                            PersonalMessageCardGlass(
-                                message = personalMessageState.message,
-                                onAcknowledge = { onMarkMessageAsRead(personalMessageState.message.id) }
+        }
+
+        // 3. TABS (Hoy / Récords)
+        item {
+            // Segmented Control Style
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .background(ColorGlassSurface, CircleShape)
+                    .padding(4.dp)
+            ) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    listOf(FeedTab.TODAY to "Hoy \uD83D\uDCC5", FeedTab.RECORDS to "Récords \uD83C\uDFC6").forEach { (tab, label) ->
+                        val isSelected = currentTab == tab
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .background(if (isSelected) ColorPrimaryAction else Color.Transparent)
+                                .clickable { onTabSelected(tab) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
                         }
-                        is PersonalMessageState.Loading -> {
-                            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = ColorPrimaryAction)
+                    }
+                }
+            }
+        }
+        
+        // ========== FEED CONTENT ==========
+
+        // TAB HOY: Daily WOD + Daily Feed
+        if (currentTab == FeedTab.TODAY) {
+            if (feedItems.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                         Text("Sin actividad hoy. ¡Sé el primero!", color = ColorTextSecondary)
+                    }
+                }
+            } else {
+                items(feedItems) { item ->
+                    SocialFeedItem(item = item, rankingPosition = null, onLongClick = {})
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
+
+        // TAB RECORDS (Wrapped in Glass)
+        else if (currentTab == FeedTab.RECORDS) {
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // 1. HEADER & FILTERS
+                        Column {
+                            // Header con Dropdown
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { /* TODO: Open Sheet */ }
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = selectedWodFilter ?: "Filtrar por WOD",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                
+                                // Sort Toggle
+                                Text(
+                                    text = sortCriteria ?: "Ordenar", 
+                                    color = ColorPrimaryAction, 
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.clickable { onToggleSort() }
+                                )
                             }
-                        }
-                        is PersonalMessageState.Empty -> { /* Nada */ }
-                        is PersonalMessageState.Error -> { /* Nada */ }
-                    }
-                }
-                item {
-                    WelcomeGuideCardGlass()
-                }
-            }
-        }
-
-
-
-        // --- BENCHMARK WALL (FEED) ---
-        item {
-            Text(
-                "Muro de Logros",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = ColorTextSecondary
-            )
-        }
-
-
-        // val feedState by benchmarkFeedViewModel.feedState.collectAsState() // [Removed] moved to top
-        
-        
-        when(feedState) {
-            is FeedState.Loading -> {
-                item {
-                   Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                       CircularProgressIndicator(color = ColorPrimaryAction)
-                   } 
-                }
-            }
-            is FeedState.Success -> {
-                val items = (feedState as FeedState.Success).items
-                if (items.isEmpty()) {
-                    item {
-                        Text(
-                            "Aún no hay actividad reciente.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = ColorTextSecondary,
-                            modifier = Modifier.padding(vertical = 10.dp)
-                        )
-                    }
-                } else {
-                    items(items) { feedItem ->
-                        BenchmarkFeedItem(
-                            item = feedItem,
-                            onLongClick = {
-                                // Solo Admin puede verificar
-                                if (user.isAdmin || user.role == "owner") {
-                                    // Mostramos dialogo o acción directa?
-                                    // Por simplicidad, toggle directo, pero lo ideal sería un Dialog.
-                                    benchmarkFeedViewModel.toggleVerification(feedItem)
+                            
+                            // Chips Scrollable
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(vertical = 8.dp)
+                            ) {
+                                item {
+                                    FilterChip(
+                                        selected = selectedWodFilter == null,
+                                        onClick = { onWodFilterSelected(null) },
+                                        label = { Text("Todos") },
+                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ColorPrimaryAction, labelColor = Color.White)
+                                    )
+                                }
+                                items(availableBenchmarks) { bench ->
+                                    FilterChip(
+                                        selected = selectedWodFilter == bench,
+                                        onClick = { onWodFilterSelected(bench) },
+                                        label = { Text(bench) },
+                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ColorPrimaryAction, labelColor = Color.White)
+                                    )
                                 }
                             }
-                        )
+                        }
+
+                        // 2. FEED CONTENT
+                        when(feedState) {
+                            is FeedState.Loading -> {
+                                Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(color = ColorPrimaryAction)
+                                } 
+                            }
+                            is FeedState.Success -> {
+                                val allItems = (feedState as FeedState.Success).items
+                                
+                                if (allItems.isNotEmpty()) {
+                                    // Dropdown de Ejercicios (Inside Glass)
+                                    val availableBenchmarks by benchmarkFeedViewModel.availableBenchmarks.collectAsState()
+                                    var dropdownExpanded by remember { mutableStateOf(false) }
+                                    
+                                    if (availableBenchmarks.isNotEmpty()) {
+                                         Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { dropdownExpanded = true }
+                                                .padding(vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = selectedWodFilter ?: "Seleccionar Ejercicio",
+                                                    style = MaterialTheme.typography.headlineSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (selectedWodFilter != null) Color.White else ColorTextSecondary
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Icon(
+                                                    imageVector = if (dropdownExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                    contentDescription = "Seleccionar ejercicio",
+                                                    tint = ColorPrimaryAction,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                            }
+                                        }
+                                        
+                                        // Dropdown Menu
+                                        DropdownMenu(
+                                            expanded = dropdownExpanded,
+                                            onDismissRequest = { dropdownExpanded = false },
+                                            modifier = Modifier.background(Color(0xFF2a2a2a))
+                                        ) {
+                                             DropdownMenuItem(
+                                                text = { Text("Todo (Feed completo)", color = if (selectedWodFilter == null) Color.White else ColorTextSecondary) },
+                                                onClick = { benchmarkFeedViewModel.setWodFilter(null); dropdownExpanded = false }
+                                            )
+                                            HorizontalDivider(color = Color.White.copy(0.1f))
+                                            availableBenchmarks.forEach { benchmark ->
+                                                DropdownMenuItem(
+                                                    text = { Text(benchmark, color = if (benchmark == selectedWodFilter) Color.White else ColorTextSecondary) },
+                                                    onClick = { benchmarkFeedViewModel.setWodFilter(benchmark); dropdownExpanded = false }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    
+                                    // UI Premium del Ranking (Sort & Gender)
+                                    AnimatedVisibility(visible = selectedWodFilter != null) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            // Badge Sort
+                                            sortCriteria?.let { criteria ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable { benchmarkFeedViewModel.toggleSortOrder() }
+                                                        .background(Brush.horizontalGradient(listOf(Color(0xFFFF6B35), Color(0xFFFFB340))), RoundedCornerShape(12.dp))
+                                                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                ) {
+                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                        Text("ORDENADO POR: ${criteria.replace("🏆 ", "").replace("⏱️ ", "")}", style = MaterialTheme.typography.labelMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                                                        Icon(Icons.Default.SwapVert, null, tint = Color.White.copy(0.7f), modifier = Modifier.size(24.dp))
+                                                    }
+                                                }
+                                            }
+                                            // Gender Chips
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text("Filtrar:", color = ColorTextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.CenterVertically))
+                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter(null) }, label = { Text("Todos") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == null) ColorPrimaryAction else Color.Transparent))
+                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("male") }, label = { Text("Hombre") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "male") ColorPrimaryAction else Color.Transparent))
+                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("female") }, label = { Text("Mujer") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "female") ColorPrimaryAction else Color.Transparent))
+                                            }
+                                        }
+                                    }
+
+                                    // EMPTY STATE check
+                                    if (feedItems.isEmpty()) {
+                                        Text("No hay resultados.", style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
+                                    } else {
+                                        // LIST / PODIUM
+                                        if (selectedWodFilter != null && feedItems.size >= 3) {
+                                             // PODIUM ROW
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                                verticalAlignment = Alignment.Bottom
+                                            ) {
+                                                PodiumCard(feedItems[1], 2, MedalColor.Silver, false)
+                                                PodiumCard(feedItems[0], 1, MedalColor.Gold, true)
+                                                PodiumCard(feedItems[2], 3, MedalColor.Bronze, false)
+                                            }
+                                            // REMAINING LIST
+                                            if (feedItems.size > 3) {
+                                                feedItems.drop(3).forEach { feedItem ->
+                                                    SocialFeedItem(
+                                                        item = feedItem, 
+                                                        rankingPosition = feedItems.indexOf(feedItem) + 1,
+                                                        onLongClick = { if (user.isAdmin || user.role == "owner") benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified) }
+                                                    )
+                                                    Spacer(modifier = Modifier.height(12.dp))
+                                                }
+                                            }
+                                        } else {
+                                            // NORMAL LIST (No Podium)
+                                            feedItems.forEach { feedItem ->
+                                                 SocialFeedItem(
+                                                    item = feedItem, 
+                                                    rankingPosition = if(selectedWodFilter != null) feedItems.indexOf(feedItem) + 1 else null,
+                                                    onLongClick = { if (user.isAdmin || user.role == "owner") benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified) }
+                                                )
+                                                Spacer(modifier = Modifier.height(12.dp))
+                                            }
+                                        }
+                                    }
+
+                                } else {
+                                     Text("No hay resultados.", style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
+                                }
+                            }
+                            is FeedState.Error -> {
+                                Text((feedState as FeedState.Error).message, color = MaterialTheme.colorScheme.error)
+                            }
+                            else -> {}
+                        }
                     }
                 }
             }
-            is FeedState.Error -> {
-                item {
-                    Text(
-                        (feedState as FeedState.Error).message,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-            else -> {}
         }
 
         // Espacio final padding
@@ -319,11 +534,8 @@ private fun HomeScreenContent(
 fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit) {
     val context = LocalContext.current
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorPrimaryAction.copy(alpha = 0.5f)), // Borde naranja suave para destacar
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+    GlassCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -399,126 +611,6 @@ fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit
                     Text("Marcar como Leído", color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
                 }
             }
-        }
-    }
-}
-
-
-@Composable
-fun WelcomeGuideCardGlass() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Default.RocketLaunch, contentDescription = null, tint = ColorPrimaryAction, modifier = Modifier.size(28.dp))
-                Text(
-                    text = "¡Bienvenido a Real Fitness!",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorTextPrimary
-                )
-            }
-
-            Text(
-                "Aquí tienes una guía rápida para empezar:",
-                style = MaterialTheme.typography.bodyMedium,
-                color = ColorTextSecondary
-            )
-
-            HorizontalDivider(color = ColorBorder)
-
-            GuideStep(Icons.Default.AccountBalanceWallet, "Perfil", "Solicita créditos y gestiona tu cuenta.")
-            GuideStep(Icons.Default.EventAvailable, "Horarios", "Reserva clases (necesitas créditos activos).")
-            GuideStep(Icons.Default.FitnessCenter, "WODs", "Mira el entreno del día y registra marcas.")
-            GuideStep(Icons.Default.Timeline, "Rendimiento", "Sigue tu progreso y desbloquea logros.")
-
-            HorizontalDivider(color = ColorBorder)
-
-            Text(
-                "¡A superar tus límites!",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = ColorPrimaryAction,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-        }
-    }
-}
-
-@Composable
-private fun GuideStep(icon: ImageVector, title: String, text: String) {
-    Row(
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp).padding(top = 2.dp),
-            tint = ColorTextSecondary
-        )
-        Column {
-            Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
-            Text(text = text, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
-        }
-    }
-}
-
-@Composable
-fun AdminSummaryCardGlass(pendingRequests: Int, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, if(pendingRequests > 0) ColorPrimaryAction else ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(Color.White.copy(alpha = 0.1f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.AdminPanelSettings, null, tint = ColorTextPrimary)
-                }
-
-                Column {
-                    Text(
-                        "Panel de Admin",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorTextPrimary
-                    )
-                    if (pendingRequests > 0) {
-                        Text(
-                            "$pendingRequests solicitudes pendientes",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = ColorPrimaryAction,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else {
-                        Text(
-                            "Todo al día",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = ColorTextSecondary
-                        )
-                    }
-                }
-            }
-
-            Icon(Icons.Default.ChevronRight, null, tint = ColorTextSecondary)
         }
     }
 }

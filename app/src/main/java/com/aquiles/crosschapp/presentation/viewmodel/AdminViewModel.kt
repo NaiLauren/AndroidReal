@@ -141,6 +141,9 @@ class AdminViewModel : ViewModel() {
     private val _paymentSettingsState = MutableStateFlow<PaymentSettingsState>(PaymentSettingsState.Idle)
     val paymentSettingsState = _paymentSettingsState.asStateFlow()
 
+    private val _activityImagesState = MutableStateFlow<Map<String, String>>(emptyMap())
+    val activityImagesState: StateFlow<Map<String, String>> = _activityImagesState.asStateFlow()
+
     init {
         listenForPendingRequests()
     }
@@ -202,6 +205,32 @@ class AdminViewModel : ViewModel() {
             }
         }
     }
+
+    // --- ACTIVITY IMAGES & APP CONFIG ---
+
+    fun loadActivityImages() {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            try {
+                val doc = firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("activity_images")
+                    .get().await()
+                
+                if (doc.exists()) {
+                     val data = doc.data ?: emptyMap()
+                     val map = data.mapValues { it.value.toString() }
+                     _activityImagesState.value = map
+                } else {
+                     _activityImagesState.value = emptyMap()
+                }
+            } catch (e: Exception) {
+                 e.printStackTrace()
+                 _activityImagesState.value = emptyMap()
+            }
+        }
+    }
+
+
 
     // --- NEW: Dynamic Theming Update (Sync with iOS) ---
     fun updateGymPrimaryColor(hexColor: String, onResult: (Boolean) -> Unit) {
@@ -744,6 +773,21 @@ class AdminViewModel : ViewModel() {
                         // pero Firestore runTransaction maneja esto. 
                         transaction.set(firestore.collection("attendance_history").document(), record)
                         
+                        // [Fix] Crear Log de XP para Historial (Simulando 10 XP base por asistencia)
+                        val xpLogRef = firestore.collection("xp_logs").document()
+                        val xpLogData = hashMapOf(
+                            "userId" to userId,
+                            "gym_id" to gymId,
+                            "amount" to 10,
+                            "type" to "ATTENDANCE",
+                            "title" to "Clase Completada",
+                            "description" to "Asistencia confirmada",
+                            "icon" to "✅",
+                            "timestamp" to FieldValue.serverTimestamp(),
+                            "relatedId" to classId
+                        )
+                        transaction.set(xpLogRef, xpLogData)
+                        
                         // Incrementamos contador del usuario
                         transaction.update(firestore.collection("users").document(userId), "totalClassesAttended", FieldValue.increment(1))
                     }
@@ -784,6 +828,7 @@ class AdminViewModel : ViewModel() {
     fun resetClassOperationState() { _classOperationState.value = ClassOperationState.Idle }
 
     fun loadReportsForMonth(year: Int, month: Int) {
+        // CORREGIDO: Se pasa la función de seteo de error correctamente
         executeAdminAction(errorStateSetter = { _reportsState.value = ReportsState.Error(it) }) { _, gymId ->
             _reportsState.value = ReportsState.Loading
             try {
@@ -792,22 +837,155 @@ class AdminViewModel : ViewModel() {
                 val start = calendar.time
                 calendar.add(Calendar.MONTH, 1)
                 val end = calendar.time
+                
+                // Formato MM-yyyy para búsqueda de pagos
+                val monthStr = String.format(Locale.getDefault(), "%02d-%d", month, year)
 
-                val snapshot = firestore.collection("creditRequests")
-                    .whereEqualTo("gym_id", gymId)
-                    .whereEqualTo("status", "APPROVED")
-                    .whereGreaterThanOrEqualTo("processedDate", start)
-                    .whereLessThan("processedDate", end)
-                    .get().await()
+                // --- Parallel Fetching ---
+                val dollarDeferred = async(Dispatchers.IO) { fetchDollarRate() }
+                
+                // 1. Attendance (For Active Users)
+                val attendanceDeferred = async { 
+                    firestore.collection("attendance_history")
+                        .whereEqualTo("gym_id", gymId)
+                        .whereGreaterThanOrEqualTo("classDate", start)
+                        .whereLessThan("classDate", end)
+                        .get().await() 
+                }
 
-                val requests = snapshot.toObjects(CreditRequest::class.java)
+                // 2. Payment Status
+                val paymentStatusDeferred = async {
+                     firestore.collection("app_payments")
+                        .whereEqualTo("gym_id", gymId)
+                        .whereEqualTo("month", monthStr)
+                        .get().await()
+                }
+
+                // 3. Transactions (Revenue)
+                val transactionsDeferred = async {
+                    firestore.collection("creditRequests")
+                        .whereEqualTo("gym_id", gymId)
+                        .whereEqualTo("status", "APPROVED")
+                        .whereGreaterThanOrEqualTo("processedDate", start)
+                        .whereLessThan("processedDate", end)
+                        .get().await()
+                }
+                
+                // 4. App Payment Info (Global)
+                val paymentInfoDeferred = async {
+                     firestore.collection("settings").document("payment_info").get().await()
+                }
+
+                // --- Await & Process ---
+                
+                val dollarRate = dollarDeferred.await()
+                
+                val attendanceSnap = attendanceDeferred.await()
+                val activeUsersCount = attendanceSnap.documents.mapNotNull { it.getString("userId") }.distinct().count()
+
+                val paymentStatusSnap = paymentStatusDeferred.await()
+                var paymentStatus = "PENDING"
+                if (!paymentStatusSnap.isEmpty) {
+                    val doc = paymentStatusSnap.documents.first()
+                    paymentStatus = doc.getString("status") ?: "PENDING"
+                }
+
+                val transactionsSnap = transactionsDeferred.await()
+                val requests = transactionsSnap.toObjects(CreditRequest::class.java)
+                
+                val paymentInfoSnap = paymentInfoDeferred.await()
+                val paymentInfo = if (paymentInfoSnap.exists()) {
+                     AppPaymentInfo(
+                        alias = paymentInfoSnap.getString("alias") ?: "No disponible",
+                        cbu = paymentInfoSnap.getString("cbu") ?: "",
+                        bankName = paymentInfoSnap.getString("bankName") ?: "",
+                        holder = paymentInfoSnap.getString("accountHolder") ?: ""
+                     )
+                } else {
+                    null
+                }
+
                 _reportsState.value = ReportsState.Success(
                     totalRevenue = requests.sumOf { it.amountPaid },
-                    monthlyActiveUsers = requests.map { it.userId }.distinct().count(),
-                    monthlyTransactions = requests
+                    monthlyActiveUsers = activeUsersCount,
+                    monthlyTransactions = requests,
+                    dollarRate = dollarRate,
+                    paymentStatus = paymentStatus,
+                    paymentInfo = paymentInfo
                 )
             } catch (e: Exception) {
                 _reportsState.value = ReportsState.Error(e.localizedMessage ?: "Error.")
+            }
+        }
+    }
+
+    private fun fetchDollarRate(): Double? {
+        return try {
+            val url = java.net.URL("https://dolarapi.com/v1/dolares/oficial")
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            
+            if (connection.responseCode == 200) {
+                val stream = connection.inputStream
+                val reader = java.io.BufferedReader(java.io.InputStreamReader(stream))
+                val response = reader.readText()
+                reader.close()
+                stream.close()
+                
+                val json = org.json.JSONObject(response)
+                json.getDouble("venta")
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    fun uploadProofOfPayment(uri: Uri, month: Int, year: Int, amount: Double, context: Context) {
+        val gymId = currentUserGymId ?: return
+        executeAdminAction({ _reportsState.value = ReportsState.Error(it) }) { _, _ ->
+            try {
+                _reportsState.value = ReportsState.Loading
+                val monthStr = String.format(Locale.getDefault(), "%02d-%d", month, year)
+                
+                // 1. Upload Image
+                val fileExtension = getFileExtension(context, uri) ?: "jpg"
+                val ref = storage.reference.child("payments/$gymId/${monthStr}_proof.$fileExtension")
+                ref.putFile(uri).await()
+                val downloadUrl = ref.downloadUrl.await().toString()
+                
+                // 2. Create/Update Payment Document
+                val paymentData = hashMapOf(
+                    "gym_id" to gymId,
+                    "month" to monthStr,
+                    "year" to year,
+                    "status" to "PENDING_REVIEW",
+                    "proofUrl" to downloadUrl,
+                    "amount" to amount,
+                    "timestamp" to FieldValue.serverTimestamp()
+                )
+                
+                val query = firestore.collection("app_payments")
+                    .whereEqualTo("gym_id", gymId)
+                    .whereEqualTo("month", monthStr)
+                    .get().await()
+                
+                if (query.isEmpty) {
+                    firestore.collection("app_payments").add(paymentData).await()
+                } else {
+                    val docId = query.documents.first().id
+                    firestore.collection("app_payments").document(docId).update(paymentData as Map<String, Any>).await()
+                }
+                
+                // Reload
+                loadReportsForMonth(year, month)
+                
+            } catch (e: Exception) {
+                _reportsState.value = ReportsState.Error(e.localizedMessage ?: "Error al subir comprobante")
             }
         }
     }
@@ -1299,6 +1477,89 @@ class AdminViewModel : ViewModel() {
 
             } catch (e: Exception) {
                 Log.e("AdminViewModel", "Error processing gamification for $userId", e)
+            }
+        }
+    }
+
+    // =================================================================
+    // 6. GESTIÓN DE IMÁGENES DE ACTIVIDADES (PARIDAD IOS)
+    // =================================================================
+
+
+
+    fun saveActivityImage(name: String, imageUri: Uri, context: Context, onResult: (Boolean) -> Unit) {
+        executeAdminAction({ onResult(false) }) { _, gymId ->
+            try {
+                val fileExtension = getFileExtension(context, imageUri) ?: "jpg"
+                val path = "gyms/$gymId/activities/$name.$fileExtension"
+                val ref = storage.reference.child(path)
+                
+                ref.putFile(imageUri).await()
+                val url = ref.downloadUrl.await().toString()
+
+                firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("activity_images")
+                    .set(mapOf(name to url), SetOptions.merge())
+                    .await()
+
+                val currentMap = _activityImagesState.value.toMutableMap()
+                currentMap[name] = url
+                _activityImagesState.value = currentMap
+                
+                onResult(true)
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error saving activity image", e)
+                onResult(false)
+            }
+        }
+    }
+
+    fun deleteActivityImage(name: String) {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            try {
+                firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("activity_images")
+                    .update(name, FieldValue.delete())
+                    .await()
+                
+                val currentMap = _activityImagesState.value.toMutableMap()
+                currentMap.remove(name)
+                _activityImagesState.value = currentMap
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error deleting activity image", e)
+            }
+        }
+    }
+
+    fun generateDayPlaceholders() {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            val days = listOf("LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO")
+            val currentMap = _activityImagesState.value.toMutableMap()
+            var hasChanges = false
+
+            val updates = hashMapOf<String, Any>()
+            
+            days.forEach { day ->
+                if (!currentMap.containsKey(day)) {
+                    updates[day] = "placeholder"
+                    currentMap[day] = "placeholder"
+                    hasChanges = true
+                }
+            }
+
+            if (hasChanges) {
+                try {
+                    firestore.collection("gyms").document(gymId)
+                        .collection("settings").document("activity_images")
+                        .set(updates, SetOptions.merge())
+                        .await()
+                    
+                    _activityImagesState.value = currentMap
+                } catch (e: Exception) {
+                    Log.e("AdminViewModel", "Error generating placeholders", e)
+                }
             }
         }
     }

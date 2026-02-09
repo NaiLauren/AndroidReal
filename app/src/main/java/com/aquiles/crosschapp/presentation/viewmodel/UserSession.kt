@@ -60,7 +60,17 @@ object UserSession {
     /**
      * Función de ayuda para obtener el ID del usuario actual.
      */
+    /**
+     * Función de ayuda para obtener el ID del usuario actual.
+     */
     fun getCurrentUserId(): String? = _currentUser.value?.id
+
+    /**
+     * Actualiza el usuario actual en sesión (ej. tras ganar XP).
+     */
+    fun updateUser(user: User) {
+        _currentUser.value = user
+    }
     
     // --- GYM LISTENER FOR THEMING ---
     private val _currentGym = MutableStateFlow<Gym?>(null)

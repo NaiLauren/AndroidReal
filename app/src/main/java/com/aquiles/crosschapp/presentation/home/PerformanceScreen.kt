@@ -56,7 +56,8 @@ private val ColorBackgroundGradientEnd = Color(0xFF121212)
 @Composable
 fun PerformanceScreen(
     innerPadding: PaddingValues,
-    performanceViewModel: PerformanceViewModel
+    performanceViewModel: PerformanceViewModel,
+    onNavigateToLeaderboard: () -> Unit = {}
 ) {
     val benchmarkState by performanceViewModel.benchmarkRecordsState.collectAsState()
     val dailyWodState by performanceViewModel.dailyWodRecordsState.collectAsState()
@@ -107,12 +108,26 @@ fun PerformanceScreen(
                     // 2. RÉCORDS Y MARCAS
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Column(Modifier.weight(1f)) {
-                            SectionLabel("BENCHMARKS")
+                            // Header con Botón
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SectionLabel("BENCHMARKS")
+                                Text(
+                                    text = "Ranking >", 
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ColorPrimaryAction, 
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.clickable { onNavigateToLeaderboard() }
+                                )
+                            }
                             RecordCardGlass(state = benchmarkState, label = "Benchmark", viewModel = performanceViewModel, isBenchmark = true)
                         }
                         Column(Modifier.weight(1f)) {
-                            SectionLabel("WODS DIARIOS")
-                            RecordCardGlass(state = dailyWodState, label = "WOD", viewModel = performanceViewModel, isBenchmark = false)
+                            SectionLabel("RESULTADO DE CLASES")
+                            RecordCardGlass(state = dailyWodState, label = "Clase", viewModel = performanceViewModel, isBenchmark = false)
                         }
                     }
 

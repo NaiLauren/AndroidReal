@@ -281,7 +281,8 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         hasHeartCondition: Boolean,
         hasInjuries: Boolean,
         medicalNotes: String,
-        waiverAccepted: Boolean
+        waiverAccepted: Boolean,
+        gender: String // [Fix] Gender update
     ) {
         viewModelScope.launch {
             _profileUpdateState.value = ProfileUpdateState.Loading
@@ -296,7 +297,8 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                     "birthDate" to birthDate,
                     "hasHeartCondition" to hasHeartCondition,
                     "hasInjuries" to hasInjuries,
-                    "medicalNotes" to medicalNotes
+                    "medicalNotes" to medicalNotes,
+                    "gender" to gender // [Fix] Gender update
                 )
 
                 val wasActive = isWaiverActive(user)

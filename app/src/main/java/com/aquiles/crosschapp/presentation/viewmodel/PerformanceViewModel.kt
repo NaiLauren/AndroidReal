@@ -4,8 +4,13 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aquiles.crosschapp.presentation.viewmodel.UserSession
+import com.aquiles.crosschapp.data.model.LevelSystem
+import com.aquiles.crosschapp.data.model.XpLog
+import com.aquiles.crosschapp.data.model.AchievementSystem
 import com.aquiles.crosschapp.data.model.*
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldPath
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -291,7 +296,7 @@ class PerformanceViewModel : ViewModel() {
     }
 
     // --- SAVING ACTIONS ---
-    fun saveWodResult(wodId: String, score: String, notes: String, isRx: Boolean) {
+    fun saveWodResult(wodId: String, score: String, notes: String, isRx: Boolean, classSessionId: String?, wodName: String? = null) {
         val user = UserSession.currentUser.value ?: return
         _saveResultState.value = SaveResultState.Loading
         viewModelScope.launch {
@@ -303,10 +308,32 @@ class PerformanceViewModel : ViewModel() {
                     date = Date(),
                     score = score,
                     notes = notes,
-                    isRx = isRx
+                    isRx = isRx,
+                    classSessionId = classSessionId,
+
+                    wodName = wodName, // [Fix] Persist name
+                    
+                    // Desnormalized Data
+                    userName = user.name,
+                    userProfileImageUrl = user.profileImageUrl ?: "",
+                    userLevel = user.level,
+                    userGender = user.gender
                 )
                 firestore.collection("wod_results").add(result).await()
-                _saveResultState.value = SaveResultState.Success("Resultado guardado!")
+
+                // --- GAMIFICATION: AWARD XP ---
+                // Base XP for WOD
+                addXp(10, "ATTENDANCE", "Clase Completada", "Entrenamiento del dia: $wodName")
+                
+                // RX Bonus
+                if (isRx) {
+                    addXp(5, "BONUS", "Plus RX", "Bono por realizar en modalidad RX")
+                }
+                
+                // Check Level Up
+                checkLevelUp()
+                
+                _saveResultState.value = SaveResultState.Success("Resultado guardado! (+10 XP)")
                 loadDailyWodRecords(user.id, user.gym_id)
                 checkAndAwardAchievements(user)
             } catch(e: Exception) {
@@ -315,20 +342,46 @@ class PerformanceViewModel : ViewModel() {
         }
     }
 
-    fun saveBenchmarkResult(result: BenchmarkResult) {
+    fun saveBenchmarkResult(benchmark: BenchmarkWod, score: String, isRx: Boolean, notes: String, date: Date, isPublic: Boolean = true) {
         val user = UserSession.currentUser.value ?: return
+        if (user.gym_id.isBlank()) return
+
+        if (score.isBlank()) {
+            _saveBenchmarkState.value = BenchmarkSaveState.Error("El score es obligatorio.")
+            return
+        }
+
         _saveBenchmarkState.value = BenchmarkSaveState.Loading
         viewModelScope.launch {
             try {
-                // Desnormalización de datos del usuario
-                val resultWithUserData = result.copy(
+                // Cálculo de Score Numérico Inteligente
+                val numericScore = calculateNumericScore(score, benchmark.measurementUnit)
+
+                val result = BenchmarkResult(
+                    userId = user.id,
+                    gym_id = user.gym_id,
+                    benchmarkId = benchmark.id,
+                    benchmarkName = benchmark.name,
+                    score = score.trim(),
+                    isRx = isRx,
+                    notes = notes.trim(),
+                    date = date,
+                    
+                    // Desnormalized Data
                     userName = user.name,
                     userLastName = user.lastName,
                     userLevel = user.level,
-                    userProfileImageUrl = user.profileImageUrl ?: ""
+                    userProfileImageUrl = user.profileImageUrl ?: "",
+                    userGender = user.gender, // Nuevo campo
+                    
+                    // Smart Sort
+                    numericScore = numericScore,
+                    
+                    // Social
+                    isPublic = isPublic
                 )
                 
-                firestore.collection("benchmark_results").add(resultWithUserData).await()
+                firestore.collection("benchmark_results").add(result).await()
                 _saveBenchmarkState.value = BenchmarkSaveState.Success("Benchmark guardado!")
                 loadBenchmarkRecords(user.id, user.gym_id)
                 checkAndAwardAchievements(user)
@@ -336,6 +389,19 @@ class PerformanceViewModel : ViewModel() {
                  _saveBenchmarkState.value = BenchmarkSaveState.Error(e.message ?: "Error al guardar")
             }
         }
+    }
+
+    // Deprecado pero mantenido por compatibilidad si es llamado desde otros lados con objeto directo
+    fun saveBenchmarkResult(result: BenchmarkResult) {
+       // Redirigir o adaptar si es necesario, o dejar como fallback
+       // Por ahora actualizamos con la misma lógica
+       saveBenchmarkResult(
+           benchmark = BenchmarkWod(id=result.benchmarkId, name=result.benchmarkName), // Dummy wrapper
+           score = result.score,
+           isRx = result.isRx,
+           notes = result.notes,
+           date = result.date ?: Date()
+       )
     }
 
     fun resetSaveResultState() { _saveResultState.value = SaveResultState.Idle }
@@ -378,6 +444,21 @@ class PerformanceViewModel : ViewModel() {
                             )
                             batch.set(achievementsRef.document("${userId}_${def.id}"), newAchievement)
                             newAchievementsAwarded = true
+
+                            // [Fix] Add XP Log for History (Parity with iOS)
+                            val xpLogRef = firestore.collection("xp_logs").document()
+                            val xpLogData = hashMapOf(
+                                "userId" to userId,
+                                "gym_id" to gymId,
+                                "amount" to def.xpReward,
+                                "type" to "ACHIEVEMENT",
+                                "title" to "Logro Desbloqueado",
+                                "description" to "Obtuviste: ${def.title}",
+                                "icon" to "🏆",
+                                "timestamp" to FieldValue.serverTimestamp(),
+                                "relatedId" to def.id
+                            )
+                            batch.set(xpLogRef, xpLogData)
                         }
                     }
                 }
@@ -431,10 +512,10 @@ class PerformanceViewModel : ViewModel() {
                 val gymId: String
 
                 if (isBenchmark && resultObject is BenchmarkResult) {
-                    if (resultObject.resultId.isBlank()) return@launch
+                    if (resultObject.id.isBlank()) return@launch
                     userId = resultObject.userId
                     gymId = resultObject.gym_id
-                    firestore.collection("benchmark_results").document(resultObject.resultId).delete().await()
+                    firestore.collection("benchmark_results").document(resultObject.id).delete().await()
                 } else if (!isBenchmark && resultObject is WodResult) {
                     userId = resultObject.userId
                     gymId = resultObject.gym_id
@@ -486,6 +567,88 @@ class PerformanceViewModel : ViewModel() {
                 firestore.collection("achievements").document("${userId}_${achievementId}").set(newAchievement).await()
             } catch (e: Exception) {
                 Log.e("Achievements", "Error al otorgar logro manual a $userId", e)
+            }
+        }
+    }
+    private fun calculateNumericScore(scoreInput: String, unit: String): Double {
+        return try {
+            when (unit) {
+                "TIME" -> parseTimeToSeconds(scoreInput)
+                "WEIGHT", "REPS", "DISTANCE", "PERCENTAGE", "ROUNDS", "AMRAP" -> {
+                    // Extraer solo dígitos y decimales
+                    scoreInput.replace(Regex("[^0-9.]"), "").toDoubleOrNull() ?: 0.0
+                }
+                else -> 0.0 // Fallback
+            }
+        } catch (e: Exception) {
+            0.0
+        }
+    }
+
+    private fun parseTimeToSeconds(timeStr: String): Double {
+        // Formatos soportados: "mm:ss", "hh:mm:ss", o segundos puros
+        val parts = timeStr.trim().split(":").mapNotNull { it.trim().toDoubleOrNull() }
+        return when (parts.size) {
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            2 -> parts[0] * 60 + parts[1]
+            1 -> parts[0]
+            else -> 0.0
+        }
+    }
+
+    // =========================================================================
+    // GAMIFICATION LOGIC (XP & LEVELING)
+    // =========================================================================
+
+    private suspend fun addXp(amount: Int, type: String, title: String, description: String) {
+        val currentUser = UserSession.currentUser.value ?: return
+        if (currentUser.id.isBlank()) return
+
+        try {
+            // 1. Update User Document (increment XP)
+            val userRef = firestore.collection("users").document(currentUser.id)
+            firestore.runTransaction { transaction ->
+                val snapshot = transaction.get(userRef)
+                val currentXp = snapshot.getLong("xp") ?: 0
+                transaction.update(userRef, "xp", currentXp + amount)
+            }.await()
+
+            // 2. Create XP Log
+            val xpLog = XpLog(
+                amount = amount,
+                type = type,
+                title = title,
+                description = description,
+                timestamp = Timestamp.now(),
+                relatedId = currentUser.id
+            )
+            firestore.collection("users").document(currentUser.id)
+                .collection("xp_logs").add(xpLog).await()
+
+            // Update local session immediately for UI responsiveness
+             UserSession.updateUser(currentUser.copy(xp = (currentUser.xp + amount)))
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private suspend fun checkLevelUp() {
+        val currentUser = UserSession.currentUser.value ?: return
+        val currentXp = currentUser.xp 
+        
+        // Calculate correct level based on XP
+        val calculatedLevel = LevelSystem.getLevelName(currentXp)
+        
+        if (calculatedLevel != currentUser.level) {
+            // LEVEL UP!
+            try {
+                firestore.collection("users").document(currentUser.id)
+                    .update("level", calculatedLevel).await()
+                
+                UserSession.updateUser(currentUser.copy(level = calculatedLevel))
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }

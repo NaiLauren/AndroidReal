@@ -34,6 +34,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 import com.aquiles.crosschapp.presentation.viewmodel.BillingRulesState
 import com.aquiles.crosschapp.presentation.viewmodel.CreditPack
 import com.aquiles.crosschapp.presentation.viewmodel.CreditPacksState
+import com.aquiles.crosschapp.presentation.viewmodel.PaymentSettingsState
 import java.text.NumberFormat
 import java.util.*
 
@@ -57,13 +58,18 @@ fun AdminManagePacksScreen(
     adminViewModel: AdminViewModel = viewModel()
 ) {
     val packsState by adminViewModel.creditPacksState.collectAsState()
+    val paymentSettingsState by adminViewModel.paymentSettingsState.collectAsState()
+    val billingRulesState by adminViewModel.billingRulesState.collectAsState()
+    
     var showEditDialog by remember { mutableStateOf(false) }
     var selectedPack by remember { mutableStateOf<CreditPack?>(null) }
     var packToDelete by remember { mutableStateOf<CreditPack?>(null) }
 
     LaunchedEffect(Unit) {
         adminViewModel.loadAllCreditPacks()
+        adminViewModel.loadAllCreditPacks()
         adminViewModel.loadBillingRules()
+        adminViewModel.loadGymPaymentSettings()
     }
 
     // --- UI STRUCTURE ---
@@ -105,7 +111,11 @@ fun AdminManagePacksScreen(
                     .padding(top = localScaffoldPadding.calculateTopPadding())
             ) {
 
-                GlassSurchargeCard(adminViewModel = adminViewModel)
+                GlassPaymentConfigCard(
+                     adminViewModel = adminViewModel,
+                     paymentSettingsState = paymentSettingsState,
+                     billingRulesState = billingRulesState
+                )
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     when (val state = packsState) {
@@ -184,8 +194,24 @@ fun AdminManagePacksScreen(
 }
 
 @Composable
-private fun GlassSurchargeCard(adminViewModel: AdminViewModel) {
-    val billingRulesState by adminViewModel.billingRulesState.collectAsState()
+private fun GlassPaymentConfigCard(
+    adminViewModel: AdminViewModel,
+    paymentSettingsState: PaymentSettingsState,
+    billingRulesState: BillingRulesState
+) {
+    var alias by remember { mutableStateOf("") }
+    var cbu by remember { mutableStateOf("") }
+    var hasLoaded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // Sync state to local variables when loaded
+    LaunchedEffect(paymentSettingsState) {
+        if (paymentSettingsState is PaymentSettingsState.Success) {
+            alias = paymentSettingsState.bankInfo
+            cbu = paymentSettingsState.mpInfo
+            hasLoaded = true
+        }
+    }
 
     Card(
         modifier = Modifier
@@ -195,32 +221,79 @@ private fun GlassSurchargeCard(adminViewModel: AdminViewModel) {
         border = BorderStroke(1.dp, ColorBorder),
         colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Recargos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
-                Text("Activa para usar precios con mora.", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Configuración de Recepción", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                    Text("Datos para que tus alumnos te paguen.", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                }
             }
-            Spacer(Modifier.width(16.dp))
 
-            when (val state = billingRulesState) {
-                is BillingRulesState.Loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp), color = ColorPrimaryAction)
-                is BillingRulesState.Error -> Switch(checked = false, onCheckedChange = null, enabled = false)
-                is BillingRulesState.Success -> {
-                    Switch(
-                        checked = state.rules.isSurchargeActive,
-                        onCheckedChange = { isEnabled -> adminViewModel.setSurchargeStatus(isEnabled) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = ColorPrimaryAction,
-                            uncheckedThumbColor = Color.Gray,
-                            uncheckedTrackColor = Color.Transparent,
-                            uncheckedBorderColor = ColorTextSecondary
+            Spacer(Modifier.height(16.dp))
+            
+            if (paymentSettingsState is PaymentSettingsState.Loading) {
+                 CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally), color = ColorPrimaryAction)
+            } else {
+                 GlassDialogTextField(value = alias, onValueChange = { alias = it }, label = "Alias (CBU/CVU)")
+                 Spacer(Modifier.height(8.dp))
+                 GlassDialogTextField(value = cbu, onValueChange = { cbu = it }, label = "CVU / CBU (Numérico)", keyboardType = KeyboardType.Number)
+                 
+                 Spacer(Modifier.height(16.dp))
+                 
+                 Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                 ) {
+                     Button(
+                         onClick = {
+                             adminViewModel.saveGymPaymentSettings(alias, cbu)
+                             Toast.makeText(context, "Datos de pago guardados.", Toast.LENGTH_SHORT).show()
+                         },
+                         colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction),
+                         shape = RoundedCornerShape(8.dp),
+                         modifier = Modifier.height(40.dp)
+                     ) {
+                         Text("Guardar Cambios")
+                     }
+                 }
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider(color = ColorBorder)
+            Spacer(Modifier.height(16.dp))
+
+            // Surcharge Section
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                 Column(Modifier.weight(1f)) {
+                    Text("Recargos", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                    Text("Activa para usar precios con mora.", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                }
+                Spacer(Modifier.width(16.dp))
+
+                when (val state = billingRulesState) {
+                    is BillingRulesState.Loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp), color = ColorPrimaryAction)
+                    is BillingRulesState.Error -> Switch(checked = false, onCheckedChange = null, enabled = false)
+                    is BillingRulesState.Success -> {
+                        Switch(
+                            checked = state.rules.isSurchargeActive,
+                            onCheckedChange = { isEnabled -> adminViewModel.setSurchargeStatus(isEnabled) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = ColorPrimaryAction,
+                                uncheckedThumbColor = Color.Gray,
+                                uncheckedTrackColor = Color.Transparent,
+                                uncheckedBorderColor = ColorTextSecondary
+                            )
                         )
-                    )
+                    }
                 }
             }
         }

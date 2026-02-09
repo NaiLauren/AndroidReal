@@ -13,8 +13,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.HorizontalPager // [Fix] Changed to Horizontal
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.graphics.graphicsLayer // [Fix] For scale animation
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,7 +49,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.time.LocalDate
-import java.time.format.TextStyle
+import java.time.format.TextStyle as JavaTextStyle
 import java.util.*
 
 // --- DESIGN SYSTEM CONSTANTS ---
@@ -69,7 +71,8 @@ fun WodsScreen(
     onNavigateToClassDetail: (String) -> Unit,
     onNavigateToScheduleAtDate: (LocalDate) -> Unit,
     onNavigateToWodHistory: () -> Unit,
-    onNavigateToRequestCredits: () -> Unit
+    onNavigateToRequestCredits: () -> Unit,
+    onNavigateToBenchmarks: () -> Unit
 ) {
     val currentUser by UserSession.currentUser.collectAsState()
     val currentUserGymId by UserSession.currentUserGymId.collectAsState()
@@ -87,13 +90,27 @@ fun WodsScreen(
     val saveWodResultState by performanceViewModel.saveResultState.collectAsState()
     val saveBenchmarkState by performanceViewModel.saveBenchmarkState.collectAsState()
 
-    // Resultado previo
+    // Imágenes de Actividad (iOS Parity)
+    val activityImages by adminViewModel.activityImagesState.collectAsState()
+    LaunchedEffect(Unit) {
+        if (activityImages.isEmpty()) {
+            adminViewModel.loadActivityImages()
+        }
+    }
+
+    // Resultados Multi-Sesión (Lista Completa)
     val wodResultState by performanceViewModel.dailyWodRecordsState.collectAsState()
-    val todayWodResultObject = (wodResultState as? PerformanceState.Success)?.records?.firstOrNull()?.result
+    val dailyRecords = (wodResultState as? PerformanceState.Success)?.records ?: emptyList()
+
+    // Resultado principal para compartir (Fallback al primero o lógica específica si se desea)
+    val todayWodResultObject = dailyRecords.firstOrNull()?.result
     val todayWodResult = todayWodResultObject as? WodResult
 
     val context = LocalContext.current
     var imageUri by remember { mutableStateOf<Uri?>(null) }
+    
+    // Helper fecha
+    val dayFormat = remember { SimpleDateFormat("EEEE", Locale("es", "ES")) }
 
     // --- LAUNCHERS ---
     val cameraLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.TakePicture()) { success ->
@@ -185,13 +202,8 @@ fun WodsScreen(
                     }
                 }
 
-                // IMAGEN DEL DIA
-                val spanishLocale = remember { Locale.forLanguageTag("es-ES") }
-                val todayNameRaw = remember { LocalDate.now().dayOfWeek.getDisplayName(TextStyle.FULL, spanishLocale) }
-                val todayKey = remember(todayNameRaw) { todayNameRaw.uppercase(spanishLocale) }
-
+                // IMAGEN DEL DIA (Legacy/Fallback)
                 val imagesByDay = (appConfigState as? AppConfigState.Success)?.imagesByDay
-                val todayImageUrl = imagesByDay?.get(todayKey)
                 val restDayImageUrl = imagesByDay?.get("REST_DAY")
 
                 // SECCIÓN WOD (PAGER)
@@ -213,35 +225,92 @@ fun WodsScreen(
                         }
                     }
 
-                    Box(modifier = Modifier.fillMaxWidth().height(550.dp)) {
-                        VerticalPager(
-                            state = pagerState,
-                            modifier = Modifier.fillMaxSize(),
-                            pageSpacing = 16.dp,
-                            contentPadding = PaddingValues(vertical = 0.dp)
-                        ) { pageIndex ->
-                            val gymClass = dailyClassesState.classes[pageIndex]
-                            val isCurrentPage = pagerState.currentPage == pageIndex
-                            val alpha = if (isCurrentPage) 1f else 0.5f
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(modifier = Modifier.fillMaxWidth().height(550.dp)) {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxSize(),
+                                pageSpacing = 16.dp,
+                                contentPadding = PaddingValues(horizontal = 32.dp) // Add horizontal padding for peek effect
+                            ) { pageIndex ->
+                                val gymClass = dailyClassesState.classes.getOrNull(pageIndex)
+                                if (gymClass != null) {
+                                    val isCurrentPage = pagerState.currentPage == pageIndex
+                                    
+                                    // Scale animation for focus effect
+                                    val pageOffset = (pagerState.currentPage - pageIndex) + pagerState.currentPageOffsetFraction
+                                    val scale = 1f - (0.1f * kotlin.math.abs(pageOffset)).coerceIn(0f, 0.2f)
+                                    val alpha = if (isCurrentPage) 1f else 0.5f
 
-                            Box(modifier = Modifier.alpha(alpha)) {
-                                WodPagerCard(
-                                    gymClass = gymClass,
-                                    imageUrl = todayImageUrl,
-                                    onSaveResult = { result, isRx, notes ->
-                                        val wodIdToSave = gymClass.wodId ?: gymClass.id
-                                        performanceViewModel.saveWodResult(wodId = wodIdToSave, score = result, notes = notes, isRx = isRx)
-                                    },
-                                    isSavingResult = saveWodResultState is SaveResultState.Loading
+                                    // Calcular imagen basada en el día de la clase
+                                    val dayName = remember(gymClass.dateTime) {
+                                        gymClass.dateTime?.let { dayFormat.format(it).uppercase() } ?: ""
+                                    }
+                                    val dynamicImage = activityImages[dayName]
+
+                                    // Buscar Resultado Existente (Multi-Sesión)
+                                    val existingResult = remember(gymClass.id, dailyRecords, saveWodResultState) {
+                                        dailyRecords.find { record ->
+                                            val res = record.result as? WodResult
+                                            val matchSession = res?.classSessionId == gymClass.id
+                                            val matchWodLegacy = (res?.classSessionId == null && res?.wodId == gymClass.wodId)
+                                            matchSession || matchWodLegacy
+                                        }?.result as? WodResult
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .graphicsLayer {
+                                                scaleX = scale
+                                                scaleY = scale
+                                                this.alpha = alpha
+                                            }
+                                            .fillMaxHeight()
+                                    ) {
+                                        WodPagerCard(
+                                            gymClass = gymClass,
+                                            imageUrl = dynamicImage,
+                                            existingResult = existingResult,
+                                            onSaveResult = { result, isRx, notes ->
+                                                val wodIdToSave = gymClass.wodId ?: gymClass.id
+                                                // PASAMOS EL CLASSSESSIONID (gymClass.id)
+                                                performanceViewModel.saveWodResult(
+                                                    wodId = wodIdToSave,
+                                                    score = result,
+                                                    notes = notes,
+                                                    isRx = isRx,
+                                                    classSessionId = gymClass.id,
+                                                    wodName = gymClass.name // [Fix] Save WOD Name
+                                                )
+                                            },
+                                            isSavingResult = saveWodResultState is SaveResultState.Loading
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Simple Dots Indicator
+                        Row(
+                            Modifier
+                                .wrapContentHeight()
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            repeat(pagerState.pageCount) { iteration ->
+                                val color = if (pagerState.currentPage == iteration) ColorPrimaryAction else Color.Gray.copy(alpha = 0.5f)
+                                Box(
+                                    modifier = Modifier
+                                        .padding(2.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .size(8.dp)
                                 )
                             }
                         }
-
-                        VerticalPagerIndicator(
-                            pagerState = pagerState,
-                            itemCount = dailyClassesState.classes.size,
-                            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)
-                        )
                     }
                 }
 
@@ -278,11 +347,7 @@ fun WodsScreen(
 
                 // BENCHMARKS
                 SectionTitle("Benchmarks")
-                BenchmarkLogger(
-                    adminViewModel = adminViewModel,
-                    performanceViewModel = performanceViewModel,
-                    isSaving = saveBenchmarkState is BenchmarkSaveState.Loading
-                )
+                BenchmarkAccessCard(onClick = onNavigateToBenchmarks)
 
                 Spacer(modifier = Modifier.height(80.dp))
             }
@@ -309,10 +374,10 @@ fun VerticalPagerIndicator(
     itemCount: Int,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Row(
         modifier = modifier,
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(itemCount) { iteration ->
             val isSelected = pagerState.currentPage == iteration
@@ -321,7 +386,7 @@ fun VerticalPagerIndicator(
 
             Box(
                 modifier = Modifier
-                    .padding(vertical = 4.dp)
+                    .padding(horizontal = 4.dp)
                     .clip(CircleShape)
                     .background(color)
                     .size(size)
@@ -334,12 +399,15 @@ fun VerticalPagerIndicator(
 fun WodPagerCard(
     gymClass: GymClass,
     imageUrl: String?,
+    existingResult: WodResult?, // New Param
     onSaveResult: (result: String, isRx: Boolean, notes: String) -> Unit,
     isSavingResult: Boolean
 ) {
-    var userResult by remember { mutableStateOf("") }
-    var userNotes by remember { mutableStateOf("") }
-    var isRx by remember { mutableStateOf(false) }
+    // Inicializar estado con resultado existente
+    var userResult by remember(existingResult) { mutableStateOf(existingResult?.score ?: "") }
+    var userNotes by remember(existingResult) { mutableStateOf(existingResult?.notes ?: "") }
+    var isRx by remember(existingResult) { mutableStateOf(existingResult?.isRx ?: true) }
+    
     val fallbackImageUrl = "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=2070"
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
@@ -403,14 +471,21 @@ fun WodPagerCard(
                         Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White))
                         Text("RX", fontWeight = FontWeight.Bold, color = if (isRx) ColorTextPrimary else ColorTextSecondary)
                     }
+                    
+                    // Conditionally change Button Label if updating
+                    val isUpdating = existingResult != null
                     Button(
-                        onClick = { onSaveResult(userResult, isRx, userNotes); userResult = ""; userNotes = ""; isRx = false },
+                        onClick = { onSaveResult(userResult, isRx, userNotes) },
                         enabled = userResult.isNotBlank() && !isSavingResult,
                         colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction, disabledContainerColor = ColorPrimaryAction.copy(alpha = 0.5f)),
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
                     ) {
-                        if (isSavingResult) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White) else Text("Guardar", fontWeight = FontWeight.Bold)
+                        if (isSavingResult) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White) 
+                        } else {
+                            Text(if (isUpdating) "Actualizar" else "Guardar", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -542,103 +617,46 @@ fun GlassLoadingCard(height: androidx.compose.ui.unit.Dp = 200.dp) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BenchmarkLogger(
-    adminViewModel: AdminViewModel,
-    performanceViewModel: PerformanceViewModel,
-    isSaving: Boolean
-) {
-    val benchmarkWodsState by adminViewModel.benchmarkWodsState.collectAsState()
-    val currentUser by UserSession.currentUser.collectAsState()
-    var expanded by remember { mutableStateOf(false) }
-    var selectedWod by remember { mutableStateOf<BenchmarkWod?>(null) }
-    var score by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var isRx by remember { mutableStateOf(true) }
-    val saveState by performanceViewModel.saveBenchmarkState.collectAsState()
-
-    LaunchedEffect(saveState) {
-        if (saveState is BenchmarkSaveState.Success) {
-            selectedWod = null; score = ""; notes = ""; isRx = true
-        }
-    }
-
-    GlassCard {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth().menuAnchor(),
-                    value = selectedWod?.name ?: "Selecciona Benchmark...",
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = ColorGlassInput, unfocusedContainerColor = ColorGlassInput, focusedBorderColor = ColorBorder, unfocusedBorderColor = ColorBorder, focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary, cursorColor = ColorPrimaryAction),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.background(Color(0xFF2C2C2E))) {
-                    if (benchmarkWodsState is BenchmarkWodsState.Success) {
-                        (benchmarkWodsState as BenchmarkWodsState.Success).wods.forEach { wod ->
-                            DropdownMenuItem(text = { Text(wod.name, color = Color.White) }, onClick = { selectedWod = wod; expanded = false })
-                        }
-                    }
-                }
+fun BenchmarkAccessCard(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+        border = BorderStroke(1.dp, ColorBorder)
+    ) {
+        Row(
+            modifier = Modifier.padding(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "REGISTRAR TU PROGRESO", style = MaterialTheme.typography.labelSmall, color = ColorPrimaryAction, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = "Ir a Benchmarks", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White)
+                Text(text = "Registra tus PRs: Fran, Murph, Max Lifts...", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
             }
-
-            AnimatedVisibility(visible = selectedWod != null) {
-                selectedWod?.let { wod ->
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.FitnessCenter, null, tint = ColorTextSecondary, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = "ESQUEMA DEL WOD", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(text = wod.description, style = MaterialTheme.typography.bodyMedium, color = Color.White, lineHeight = 24.sp, fontWeight = FontWeight.Medium)
-                        }
-
-                        if (wod.strategy.isNotBlank()) {
-                            Box(modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).border(1.dp, ColorBorder.copy(alpha = 0.1f), RoundedCornerShape(12.dp)).padding(12.dp)) {
-                                Column {
-                                    Text(text = "ESTRATEGIA / SCALING", style = MaterialTheme.typography.labelSmall, color = ColorPrimaryAction, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(text = wod.strategy, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f), lineHeight = 20.sp)
-                                }
-                            }
-                        }
-
-                        GlassTextField(value = score, onValueChange = { score = it }, label = "Tu Marca (Tiempo/Reps)")
-                        GlassTextField(value = notes, onValueChange = { notes = it }, label = "Notas personales")
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { isRx = !isRx }.padding(end = 8.dp)) {
-                                Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White))
-                                Text(text = "RX", color = if (isRx) ColorTextPrimary else ColorTextSecondary, fontWeight = FontWeight.Bold)
-                            }
-                            Button(
-                                onClick = {
-                                    currentUser?.let { user ->
-                                        performanceViewModel.saveBenchmarkResult(BenchmarkResult(userId = user.id, gym_id = user.gym_id, benchmarkId = wod.id, benchmarkName = wod.name, score = score.trim(), isRx = isRx, notes = notes.trim()))
-                                    }
-                                },
-                                enabled = score.isNotBlank() && !isSaving,
-                                colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction, disabledContainerColor = ColorPrimaryAction.copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
-                            ) {
-                                if (isSaving) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp) else Text("Guardar Marca", fontWeight = FontWeight.ExtraBold)
-                            }
-                        }
-                    }
-                }
+            Box(
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(CircleShape)
+                    .background(ColorPrimaryAction),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.ArrowForward, null, tint = Color.White)
             }
         }
     }
 }
+// Old BenchmarkLogger removed as it is now in BenchmarksScreen
 
 @Composable
-fun GlassTextField(value: String, onValueChange: (String) -> Unit, label: String) {
+fun GlassTextField(
+    value: String, 
+    onValueChange: (String) -> Unit, 
+    label: String,
+    keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -646,9 +664,11 @@ fun GlassTextField(value: String, onValueChange: (String) -> Unit, label: String
         modifier = Modifier.fillMaxWidth(),
         colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = ColorGlassInput, unfocusedContainerColor = ColorGlassInput, focusedBorderColor = Color.White.copy(alpha = 0.5f), unfocusedBorderColor = ColorBorder, focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary, cursorColor = ColorPrimaryAction),
         shape = RoundedCornerShape(12.dp),
-        singleLine = true
+        singleLine = true,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType)
     )
 }
+
 
 private fun createImageUri(context: Context): Uri {
     val imageFolder = File(context.cacheDir, "images")
