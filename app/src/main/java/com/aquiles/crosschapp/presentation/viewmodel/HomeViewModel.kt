@@ -45,6 +45,11 @@ class HomeViewModel : ViewModel() {
     private var notificationsJob: Job? = null
     private var personalMessageJob: Job? = null
 
+    private val _userClasses = MutableStateFlow<List<com.aquiles.crosschapp.data.model.GymClass>>(emptyList())
+    val userClasses: StateFlow<List<com.aquiles.crosschapp.data.model.GymClass>> = _userClasses.asStateFlow()
+
+    private var classesJob: Job? = null
+
     init {
         Log.d(TAG, "ViewModel inicializado.")
         UserSession.currentUser
@@ -54,12 +59,51 @@ class HomeViewModel : ViewModel() {
                     Log.d(TAG, "Usuario VÁLIDO detectado. Iniciando listeners...")
                     listenForUnreadNotifications(user.id, user.gym_id)
                     listenForPersonalMessage(user.id, user.gym_id)
+                    listenForUserClasses(user.id, user.gym_id)
                 } else {
                     Log.d(TAG, "Usuario NULO o inválido. Limpiando listeners y estado.")
                     clearListenersAndSetEmptyState()
                 }
             }
             .launchIn(viewModelScope)
+    }
+
+    private fun listenForUserClasses(userId: String, gymId: String) {
+        classesJob?.cancel()
+        
+        // Calculate Today's Range
+        val calendar = java.util.Calendar.getInstance()
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        calendar.set(java.util.Calendar.MINUTE, 0)
+        calendar.set(java.util.Calendar.SECOND, 0)
+        calendar.set(java.util.Calendar.MILLISECOND, 0)
+        val startOfDay = calendar.time
+        
+        calendar.add(java.util.Calendar.DAY_OF_MONTH, 1)
+        val endOfDay = calendar.time
+
+        // Firestore Query matches SchedulePlanner but with 'enrolledUserIds' filter locally or via query if array-contains supported
+        // Array-contains is supported.
+        classesJob = viewModelScope.launch {
+            com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("gymClasses")
+                .whereEqualTo("gym_id", gymId)
+                .whereGreaterThanOrEqualTo("dateTime", com.google.firebase.Timestamp(startOfDay))
+                .whereLessThan("dateTime", com.google.firebase.Timestamp(endOfDay))
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Log.e(TAG, "Error listening for classes", e)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val allTodayClasses = snapshot.toObjects(com.aquiles.crosschapp.data.model.GymClass::class.java)
+                        // Filter locally for enrollment to avoid complex composite index requirement (ArrayContains + Range)
+                        val myClasses = allTodayClasses.filter { it.enrolledUserIds.contains(userId) && !it.isCancelled }
+                            .sortedBy { it.dateTime }
+                        _userClasses.value = myClasses
+                    }
+                }
+        }
     }
 
     private fun listenForUnreadNotifications(userId: String, gymId: String) {
@@ -122,8 +166,10 @@ class HomeViewModel : ViewModel() {
     private fun clearListenersAndSetEmptyState() {
         notificationsJob?.cancel()
         personalMessageJob?.cancel()
+        classesJob?.cancel()
         _notificationsState.value = NotificationsState.Success(emptyList())
         _personalMessageState.value = PersonalMessageState.Empty
+        _userClasses.value = emptyList()
     }
 
     override fun onCleared() {

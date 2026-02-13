@@ -7,7 +7,7 @@ import com.google.firebase.firestore.ServerTimestamp
 
 data class GymNotice(
     @DocumentId val id: String = "",
-    @PropertyName("gym_id") val gymId: String = "",
+    @get:PropertyName("gym_id") val gymId: String = "",
     val title: String? = null, // iOS compatible - can be null
     val message: String = "", // Default empty for iOS docs (iOS doesn't have this field)
     val imageUrl: String = "",
@@ -17,7 +17,7 @@ data class GymNotice(
     val authorName: String = "", // Default empty - iOS doesn't have this
     @ServerTimestamp val createdAt: Timestamp? = null,
     val expiresAt: Timestamp? = null,
-    @PropertyName("isActive") val isActive: Boolean = true,
+    @get:PropertyName("isActive") val isActive: Boolean = true,
     val viewCount: Int = 0 // Default 0 - iOS doesn't have this
 )
 

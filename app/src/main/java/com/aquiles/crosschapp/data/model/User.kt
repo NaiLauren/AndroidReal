@@ -27,7 +27,6 @@ data class User(
     
     // --- NUEVO: SCHEMA MATCHING ---
     var hasFreePass: Boolean = false,
-    var attendance_history: List<Date> = emptyList(), // Para Racha Hat-Trick y Semana Perfecta
     
     // --- GAMIFICACIÓN ---
     var xp: Int = 0,

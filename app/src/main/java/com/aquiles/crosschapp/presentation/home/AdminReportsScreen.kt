@@ -35,6 +35,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.ReportsState
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
+import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
@@ -69,7 +70,7 @@ fun AdminReportsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            // .background(Color.Black.copy(alpha = 0.4f)) // Removed for glass background
     ) {
         Scaffold(
             topBar = {
@@ -186,8 +187,10 @@ private fun ReportsContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         if (state.monthlyTransactions.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Sin movimientos este mes.", color = ColorTextSecondary.copy(alpha = 0.5f))
+            GlassCard(modifier = Modifier.fillMaxWidth().padding(32.dp)) {
+                Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text("Sin movimientos este mes.", color = ColorTextSecondary.copy(alpha = 0.5f))
+                }
             }
         } else {
             LazyColumn(
@@ -209,10 +212,8 @@ private fun GlassMonthSelector(
 ) {
     val dateFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale("es", "ES")) }
 
-    Card(
+    GlassCard(
         shape = RoundedCornerShape(50), // Pill shape
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-        border = BorderStroke(1.dp, ColorBorder)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -246,11 +247,9 @@ private fun GlassMetricCard(
     modifier: Modifier = Modifier,
     isMoney: Boolean = false
 ) {
-    Card(
+    GlassCard(
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -293,11 +292,9 @@ private fun GlassMetricCard(
 private fun GlassTransactionItem(transaction: CreditRequest) {
     val dateFormat = remember { SimpleDateFormat("dd MMM", Locale("es", "ES")) }
 
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -371,11 +368,9 @@ private fun GlassAppCostCard(
         }
     }
 
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             // Header: Total & Status

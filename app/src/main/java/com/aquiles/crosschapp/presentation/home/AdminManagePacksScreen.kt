@@ -37,6 +37,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.CreditPacksState
 import com.aquiles.crosschapp.presentation.viewmodel.PaymentSettingsState
 import java.text.NumberFormat
 import java.util.*
+import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
@@ -76,7 +77,7 @@ fun AdminManagePacksScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            // .background(Color.Black.copy(alpha = 0.4f)) // Removed for glass background
     ) {
         Scaffold(
             topBar = {
@@ -126,7 +127,11 @@ fun AdminManagePacksScreen(
                             Text("Error: ${state.message}", modifier = Modifier.align(Alignment.Center), color = ColorError)
                         }
                         is CreditPacksState.Empty -> {
-                            Text("No hay packs creados.", modifier = Modifier.align(Alignment.Center), color = ColorTextSecondary)
+                            GlassCard(modifier = Modifier.fillMaxWidth().padding(32.dp)) {
+                                Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Text("No hay packs creados.", color = ColorTextSecondary)
+                                }
+                            }
                         }
                         is CreditPacksState.Success -> {
                             LazyColumn(
@@ -213,13 +218,11 @@ private fun GlassPaymentConfigCard(
         }
     }
 
-    Card(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -309,11 +312,9 @@ private fun GlassCreditPackItem(
 ) {
     val currencyFormat = remember { NumberFormat.getCurrencyInstance(Locale("es", "AR")) }
 
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Row(
             modifier = Modifier.padding(20.dp),

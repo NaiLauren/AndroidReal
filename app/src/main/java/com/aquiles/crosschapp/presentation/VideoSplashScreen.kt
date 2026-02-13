@@ -1,70 +1,92 @@
-// RUTA: presentation/VideoSplashScreen.kt
-// VERSIÓN DINÁMICA CON VIEWMODEL
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 
 package com.aquiles.crosschapp.presentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.aquiles.crosschapp.R
 import com.aquiles.crosschapp.presentation.viewmodel.DynamicSplashViewModel
 import com.aquiles.crosschapp.presentation.viewmodel.SplashState
 import kotlinx.coroutines.delay
 
-@UnstableApi
 @Composable
 fun VideoSplashScreen(
     onVideoEnded: () -> Unit,
-    viewModel: DynamicSplashViewModel = viewModel() // <-- CAMBIO 1: Añadir ViewModel
+    viewModel: DynamicSplashViewModel = viewModel(),
+    canProceed: Boolean = true // CONTROL DE SINCRONIZACIÓN
 ) {
-    val context = LocalContext.current
     val splashState by viewModel.splashState.collectAsState()
 
-    // Lanzamos la carga de la URL solo una vez
-    LaunchedEffect(Unit) {
-        viewModel.loadVideoUrl()
+    // Controlamos el lanzamiento de la carga
+    LaunchedEffect(canProceed) {
+        if (canProceed) {
+            // Solo cargamos si ya tenemos permiso (sesión checkeada)
+            // Pequeño delay opcional para dar tiempo a UserSession a propagar si acaba de setearse
+            delay(100) 
+            viewModel.loadVideoUrl()
+        }
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black), // Fondo negro por defecto
+        modifier = Modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
-        when (val state = splashState) {
-            is SplashState.Loading, SplashState.Idle -> {
-                // Muestra un indicador de carga mientras busca la URL
-                CircularProgressIndicator()
-            }
-            // Si hay un error o no se encuentra la URL, navega directamente.
-            is SplashState.Error, is SplashState.Success -> {
-                val videoUrl = (state as? SplashState.Success)?.videoUrl
+        // Si no podemos proceder o estamos cargando, mostramos spinner
+        if (!canProceed) {
+             CircularProgressIndicator(color = Color.White)
+        } else {
+            when (val state = splashState) {
+                is SplashState.Loading, SplashState.Idle -> {
+                    CircularProgressIndicator(color = Color.White)
+                }
+                is SplashState.Error, is SplashState.Success -> {
+                    val videoUrl = (state as? SplashState.Success)?.videoUrl
 
-                // Si no hay URL, esperamos un instante y navegamos.
-                if (videoUrl.isNullOrBlank()) {
-                    LaunchedEffect(Unit) {
-                        delay(500) // Pequeña pausa para evitar un salto brusco
-                        onVideoEnded()
+                    if (videoUrl.isNullOrBlank()) {
+                        LaunchedEffect(Unit) {
+                            delay(500)
+                            onVideoEnded()
+                        }
+                    } else {
+                        VideoPlayer(
+                            videoUrl = videoUrl,
+                            onVideoEnded = onVideoEnded
+                        )
+                        
+                        // Botón de Saltar (Skip)
+                        androidx.compose.material3.TextButton(
+                            onClick = onVideoEnded,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp)
+                                .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.statusBars)
+                        ) {
+                            androidx.compose.material3.Text(
+                                text = "SALTAR",
+                                color = Color.White,
+                                fontWeight =androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        }
                     }
-                } else {
-                    // Si hay URL, mostramos el reproductor de video.
-                    VideoPlayer(
-                        videoUrl = videoUrl,
-                        onVideoEnded = onVideoEnded
-                    )
                 }
             }
         }

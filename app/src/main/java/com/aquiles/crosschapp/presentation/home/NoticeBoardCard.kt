@@ -24,7 +24,7 @@ import com.aquiles.crosschapp.presentation.components.GlassCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 
-private val ColorPrimaryAction = Color(0xFFFC5200)
+
 
 @Composable
 fun NoticeBoardCard(
@@ -32,6 +32,12 @@ fun NoticeBoardCard(
     isAdmin: Boolean = false,
     onDelete: (() -> Unit)? = null
 ) {
+    val gymPrimaryColor = try { 
+        Color(android.graphics.Color.parseColor(com.aquiles.crosschapp.presentation.viewmodel.UserSession.currentGym.value?.primaryColor ?: "#FC5200")) 
+    } catch (e: Exception) { 
+        Color(0xFFFC5200) 
+    }
+
     val tintColor = when (notice.priority) {
         NoticePriority.HIGH, NoticePriority.PINNED -> Color(0xFFFF6B35).copy(alpha = 0.15f)
         else -> Color.Transparent // Includes null (iOS notices)
@@ -107,7 +113,7 @@ fun NoticeBoardCard(
                             null -> Icons.Default.Campaign // iOS notices without type
                         },
                         contentDescription = null,
-                        tint = ColorPrimaryAction,
+                        tint = gymPrimaryColor,
                         modifier = Modifier.size(20.dp)
                     )
                 }

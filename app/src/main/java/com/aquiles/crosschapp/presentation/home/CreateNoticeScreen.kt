@@ -37,7 +37,6 @@ import kotlinx.coroutines.withContext
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
-private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
@@ -49,6 +48,13 @@ fun CreateNoticeScreen(
     navController: NavHostController,
     noticeViewModel: NoticeViewModel
 ) {
+    val gymPrimaryColor = try { 
+        Color(android.graphics.Color.parseColor(UserSession.currentGym.value?.primaryColor ?: "#FC5200")) 
+    } catch (e: Exception) { 
+        Color(0xFFFC5200) 
+    }
+    val ColorPrimaryAction = gymPrimaryColor
+
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var title by remember { mutableStateOf("") }
@@ -212,13 +218,15 @@ fun CreateNoticeScreen(
                                         ref.putFile(selectedImageUri!!).await()
                                         val downloadUrl = ref.downloadUrl.await().toString()
 
-                                        // Create notice with uploaded URL
+
+
+                                        // Create notice with uploaded URL (Suspend function, waits for completion)
+                                        noticeViewModel.createNotice(
+                                            title = if (title.isBlank()) null else title,
+                                            imageUrl = downloadUrl
+                                        )
+
                                         withContext(Dispatchers.Main) {
-                                            noticeViewModel.createNotice(
-                                                title = if (title.isBlank()) null else title,
-                                                imageUrl = downloadUrl
-                                            )
-                                            
                                             Toast.makeText(context, "¡Publicado!", Toast.LENGTH_SHORT).show()
                                             navController.popBackStack()
                                         }

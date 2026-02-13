@@ -3,7 +3,9 @@ package com.aquiles.crosschapp.presentation.home
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.aquiles.crosschapp.presentation.components.GlassCard
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -74,7 +76,7 @@ fun AdminManageUsersScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            // .background(Color.Black.copy(alpha = 0.4f)) // Removed for glass background
     ) {
         Scaffold(
             topBar = {
@@ -156,7 +158,11 @@ fun AdminManageUsersScreen(
                         }
 
                         if (filteredAndSortedUsers.isEmpty()) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No se encontraron alumnos.", color = ColorTextSecondary) }
+                            GlassCard(modifier = Modifier.fillMaxWidth().padding(32.dp)) {
+                                Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Text("No se encontraron alumnos.", color = ColorTextSecondary)
+                                }
+                            }
                         } else {
                             LazyColumn(
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -238,11 +244,12 @@ fun UserStatusItemGlass(
         else -> ColorSuccess
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onUserClick(user.id) },
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, if (isSelected) ColorPrimaryAction else ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onUserClick(user.id) }
+            .then(if (isSelected) Modifier.border(1.dp, ColorPrimaryAction, RoundedCornerShape(16.dp)) else Modifier),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

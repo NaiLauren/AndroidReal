@@ -2,16 +2,26 @@ package com.aquiles.crosschapp.presentation.home
 
 import android.app.DatePickerDialog
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,9 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.aquiles.crosschapp.data.model.GymClass
 import com.aquiles.crosschapp.presentation.viewmodel.SchedulePlannerViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- COLORS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.9f)
@@ -32,26 +44,256 @@ private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 
+// --- COMPONENTS ---
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminSchedulePlannerScreen(
     navController: NavController,
-    viewModel: SchedulePlannerViewModel = viewModel(), // Allow injection or default
+    viewModel: SchedulePlannerViewModel = viewModel(),
     innerPadding: PaddingValues
 ) {
     val context = LocalContext.current
     val creationState by viewModel.creationState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val templateTimes by viewModel.scheduleTemplate.collectAsState()
+    
+    // UI States matching iOS
+    val classesForDate by viewModel.classesForSelectedDate.collectAsState()
+    val selectedClassIds by viewModel.selectedClassIds.collectAsState()
+    val isSelectionMode by viewModel.isSelectionMode.collectAsState()
+    
+    var showCreateSheet by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf(Date()) }
+    
+    // DatePicker State (Material 3)
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = selectedDate.time
+    )
 
-    // Form State
-    var startDate by remember { mutableStateOf(Date()) }
-    var repeatMonths by remember { mutableStateOf(0) } // 0=None, 1=1 Month
+    // Sync DatePicker with ViewModel
+    // Sync DatePicker with ViewModel
+    LaunchedEffect(datePickerState.selectedDateMillis) {
+        datePickerState.selectedDateMillis?.let {
+            val date = Date(it)
+            selectedDate = date
+            viewModel.fetchClasses(date)
+            viewModel.fetchScheduleTemplate(date) // Fetch specific template for this day
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchClasses(selectedDate)
+        viewModel.fetchScheduleTemplate(selectedDate) // Fetch initial template
+    }
     
-    // Weekdays (1=Sun, 7=Sat)
+    // Auto-open sheet when editing
+    LaunchedEffect(isSelectionMode) {
+        // En iOS el batch edit se dispara manual, aquí si entramos en selection mode esperamos.
+    }
+
+    // Toast handler
+    LaunchedEffect(creationState) {
+        creationState?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            if (it.startsWith("Success") || it.startsWith("Éxito")) {
+                showCreateSheet = false
+                viewModel.clearSelection()
+            }
+            viewModel.clearMessage()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            // .background(Color.Black) // Removed for glass background
+    ) {
+        Scaffold(
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = { Text("Planificador", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
+                        }
+                    },
+                    actions = {
+                        if (isSelectionMode) {
+                            TextButton(onClick = { viewModel.clearSelection() }) {
+                                Text("Cancelar", color = Color.Red)
+                            }
+                        } else {
+                            TextButton(onClick = { viewModel.selectAll() }) {
+                                Text("Seleccionar", color = ColorPrimaryAction)
+                            }
+                        }
+                        
+                        if (isSelectionMode) {
+                            TextButton(
+                                onClick = { 
+                                    viewModel.prepareBatchEdit() // Not implemented in VM yet but standard flow
+                                    showCreateSheet = true 
+                                },
+                                enabled = selectedClassIds.isNotEmpty()
+                            ) {
+                                Text("Editar (${selectedClassIds.size})", fontWeight = FontWeight.Bold, color = if(selectedClassIds.isNotEmpty()) ColorPrimaryAction else Color.Gray)
+                            }
+                        } else {
+                            IconButton(onClick = { 
+                                viewModel.clearSelection() // Ensure clean state
+                                showCreateSheet = true 
+                            }) {
+                                Icon(Icons.Default.AddCircle, "Crear", tint = ColorPrimaryAction)
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                )
+            },
+            containerColor = Color.Transparent
+        ) { localPadding ->
+            
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(localPadding)
+            ) {
+                // 1. CALENDAR HEADER (Collapsible-ish)
+                // Usamos DatePicker in a container
+                GlassCard(
+                    shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                   Column {
+                       DatePicker(
+                           state = datePickerState,
+                           colors = DatePickerDefaults.colors(
+                               selectedDayContainerColor = ColorPrimaryAction,
+                               todayDateBorderColor = ColorPrimaryAction,
+                               dayContentColor = ColorTextPrimary,
+                               weekdayContentColor = ColorTextSecondary,
+                               headlineContentColor = ColorTextPrimary,
+                               navigationContentColor = ColorTextPrimary,
+                               subheadContentColor = ColorTextSecondary,
+                               yearContentColor = ColorTextPrimary,
+                               currentYearContentColor = ColorTextPrimary,
+                               selectedYearContentColor = Color.White,
+                               disabledDayContentColor = Color.Gray,
+                               disabledSelectedDayContentColor = Color.Gray,
+                               containerColor = Color.Transparent
+                           ),
+                           showModeToggle = false,
+                           title = null,
+                           headline = null
+                       )
+                       
+                       // Sección "Clases Programadas" Header
+                       Row(
+                           modifier = Modifier
+                               .fillMaxWidth()
+                               .padding(16.dp),
+                           horizontalArrangement = Arrangement.SpaceBetween,
+                           verticalAlignment = Alignment.CenterVertically
+                       ) {
+                           Text("Clases Programadas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                           
+                           Surface(color = ColorPrimaryAction, shape = CircleShape) {
+                               Text(
+                                   text = "${classesForDate.size}",
+                                   style = MaterialTheme.typography.labelSmall,
+                                   color = Color.White,
+                                   modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                               )
+                           }
+                       }
+                   }
+                }
+
+                // 2. LIST CONTENT
+                if (isLoading) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { 
+                        CircularProgressIndicator(color = ColorPrimaryAction) 
+                    }
+                } else if (classesForDate.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        GlassCard(modifier = Modifier.padding(32.dp)) {
+                            Column(modifier = Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.EventBusy, null, tint = Color.Gray, modifier = Modifier.size(64.dp))
+                                Spacer(Modifier.height(16.dp))
+                                Text("No hay clases para este día", color = ColorTextSecondary)
+                                Button(onClick = { showCreateSheet = true }, modifier = Modifier.padding(top = 16.dp), colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction)) {
+                                    Text("Crear Clases")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(classesForDate) { gymClass ->
+                            PlannerClassItem(
+                                gymClass = gymClass,
+                                isSelected = selectedClassIds.contains(gymClass.id),
+                                onToggle = { 
+                                     if(isSelectionMode) viewModel.toggleSelection(gymClass.id)
+                                     else {
+                                         // En modo normal, al tocar abre editar para UNA sola
+                                         viewModel.clearSelection()
+                                         viewModel.toggleSelection(gymClass.id) // Seleccionamos temporalmente esta
+                                         showCreateSheet = true // Abrimos sheet en modo edición
+                                     } 
+                                },
+                                isSelectionMode = isSelectionMode
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // BOTTOM SHEET FOR CREATION / EDITING
+        if (showCreateSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { 
+                    showCreateSheet = false
+                    if (!isSelectionMode) viewModel.clearSelection() // Limpiar si fue edición single
+                },
+                containerColor = Color(0xFF1C1C1E),
+                dragHandle = { BottomSheetDefaults.DragHandle() }
+            ) {
+                // Here we inject the FORM Logic
+                // We pass 'selectedDate' effectively.
+                CreateClassesFormContent(
+                    viewModel = viewModel,
+                    initialDate = selectedDate,
+                    isEditMode = selectedClassIds.isNotEmpty(),
+                    onCancel = { showCreateSheet = false }
+                )
+            }
+        }
+    }
+}
+
+// Extracted Form Content
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CreateClassesFormContent(
+    viewModel: SchedulePlannerViewModel,
+    initialDate: Date,
+    isEditMode: Boolean,
+    onCancel: () -> Unit
+) {
+    val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    val templateTimes by viewModel.scheduleTemplate.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    
+    // States
+    var startDate by remember { mutableStateOf(initialDate) }
+    var repeatMonths by remember { mutableStateOf(0) }
     var selectedWeekdays by remember { mutableStateOf(setOf<Int>()) }
-    
-    // Times
     var selectedTimes by remember { mutableStateOf(setOf<String>()) }
 
     var className by remember { mutableStateOf("WOD") }
@@ -61,253 +303,221 @@ fun AdminSchedulePlannerScreen(
     
     var createWod by remember { mutableStateOf(true) }
     var wodDescription by remember { mutableStateOf("") }
-    // wodScoreType could be added
-
+    
+    // Auto-fill if editing
     LaunchedEffect(Unit) {
-        viewModel.fetchScheduleTemplate()
-    }
-
-    LaunchedEffect(creationState) {
-        creationState?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            if (it.startsWith("Success")) {
-                 // Optional: Navigate back or clear form
+        if (isEditMode) {
+            val sample = viewModel.getFirstSelectedClass()
+            if (sample != null) {
+                // Pre-populate
+                className = sample.name
+                coachName = sample.coachName
+                capacity = sample.maxCapacity.toString()
+                duration = sample.durationMinutes.toString()
+                wodDescription = sample.description ?: ""
+                createWod = (sample.wodId != null)
+                // Note: Times/Days usually cleared or set to match sample? 
+                // In iOS batch edit, we edit ATTRIBUTES, not dates/times usually.
+                // Re-creating dates logic for editing existing ones implies MOVING them, which is complex.
+                // For simplified parity: Edit only properties.
             }
-            viewModel.clearMessage()
         }
     }
 
-    val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-
-    Box(
+    Column(
         modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 32.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = { Text("Planificador Masivo", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
-                    navigationIcon = {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
-                        }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+        Text(
+            if (isEditMode) "Editar Clases" else "Programar Clases",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = ColorTextPrimary
+        )
+        
+        // --- FORM SECTIONS ---
+        
+        // DATE & TIME (Hide in Edit Mode typically, unless moving)
+        if (!isEditMode) {
+            PlannerSectionCard("Fecha y Repetición") {
+                Text("Inicio: ${dateFormatter.format(startDate)}", color = ColorTextPrimary)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Solo Hoy", 1 to "1 Mes").forEach { (valMonths, label) ->
+                        FilterChip(
+                            selected = repeatMonths == valMonths,
+                            onClick = { repeatMonths = valMonths },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ColorPrimaryAction, labelColor = ColorTextPrimary)
+                        )
+                    }
+                }
+            }
+            
+            PlannerSectionCard("Horarios") {
+                 if (templateTimes.isEmpty()) Text("Sin plantilla de horarios", color = ColorTextSecondary)
+                 else {
+                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                         templateTimes.forEach { time ->
+                             val isSelected = selectedTimes.contains(time)
+                             FilterChip(
+                                 selected = isSelected,
+                                 onClick = { if (isSelected) selectedTimes -= time else selectedTimes += time },
+                                 label = { Text(time) },
+                                 colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ColorPrimaryAction, labelColor = ColorTextPrimary)
+                             )
+                         }
+                     }
+                 }
+            }
+        }
+        
+        PlannerSectionCard("Detalles") {
+            OutlinedTextField(value = className, onValueChange = { className = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = coachName, onValueChange = { coachName = it }, label = { Text("Coach") }, modifier = Modifier.fillMaxWidth())
+            Row {
+                OutlinedTextField(value = capacity, onValueChange = { capacity = it }, label = { Text("Cupo") }, modifier = Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                OutlinedTextField(value = duration, onValueChange = { duration = it }, label = { Text("Min") }, modifier = Modifier.weight(1f))
+            }
+        }
+        
+        PlannerSectionCard("Contenido (Rutina)") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = createWod, onCheckedChange = { createWod = it })
+                Text("Incluir Rutina", color = ColorTextPrimary)
+            }
+            if (createWod) {
+                OutlinedTextField(
+                    value = wodDescription, 
+                    onValueChange = { wodDescription = it }, 
+                    label = { Text("Descripción") }, 
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    maxLines = 5
+                )
+            }
+        }
+        
+        Button(
+            onClick = {
+                 viewModel.createOrUpdateBatch(
+                    startDate = startDate,
+                    selectedTimes = selectedTimes, 
+                    selectedWeekdays = selectedWeekdays,
+                    repeatMonths = repeatMonths,
+                    className = className,
+                    coachName = coachName,
+                    description = wodDescription,
+                    capacity = capacity.toIntOrNull() ?: 15,
+                    durationMinutes = duration.toIntOrNull() ?: 60,
+                    createWod = createWod,
+                    wodScoreType = "Time",
+                    isUpdateMode = isEditMode
                 )
             },
-            containerColor = Color.Transparent
-        ) { localPadding ->
-            Column(
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = if (isEditMode) Color.Green else ColorPrimaryAction),
+            enabled = (isEditMode || selectedTimes.isNotEmpty()) && !isLoading
+        ) {
+            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+            else Text(if (isEditMode) "Guardar Cambios" else "Generar Clases", fontWeight = FontWeight.Bold, color = if(isEditMode) Color.Black else Color.White)
+        }
+        
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+fun PlannerClassItem(
+    gymClass: GymClass,
+    isSelected: Boolean,
+    isSelectionMode: Boolean,
+    onToggle: () -> Unit
+) {
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val timeStr = gymClass.dateTime?.let { timeFormat.format(it) } ?: "--:--"
+    
+    // Style matching iOS "Neon" card
+    val stripColor = try { Color(android.graphics.Color.parseColor(gymClass.hexColor)) } catch(e:Exception) { ColorPrimaryAction }
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() },
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left Time Column
+            Text(
+                text = timeStr,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = ColorPrimaryAction,
+                modifier = Modifier.width(50.dp)
+            )
+            
+            // Vertical Color Strip
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(localPadding)
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                
-                // DATA CARD
-                PlannerSectionCard(title = "Fecha y Repetición") {
-                    // Date Picker Trigger
-                    OutlinedTextField(
-                        value = dateFormatter.format(startDate),
-                        onValueChange = {},
-                        label = { Text("Fecha de Inicio") },
-                        readOnly = true,
-                        trailingIcon = { Icon(Icons.Default.CalendarMonth, null) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                val cal = Calendar.getInstance()
-                                cal.time = startDate
-                                DatePickerDialog(
-                                    context,
-                                    { _, y, m, d ->
-                                        val c = Calendar.getInstance()
-                                        c.set(y, m, d)
-                                        startDate = c.time
-                                    },
-                                    cal.get(Calendar.YEAR),
-                                    cal.get(Calendar.MONTH),
-                                    cal.get(Calendar.DAY_OF_MONTH)
-                                ).show()
-                            },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = ColorTextPrimary,
-                            unfocusedTextColor = ColorTextPrimary,
-                            focusedBorderColor = ColorPrimaryAction,
-                            unfocusedBorderColor = ColorTextSecondary
-                        ),
-                        enabled = false // Disable direct editing, but clickable logic above handles it? Compose nuances.
-                        // Actually better to use a Row or Box with clickable.
-                    )
-                    
-                    // Simple hack for clickability over disabled textfield:
-                    // Just put a transparent box over it if needed, or rely on readOnly=true (which works fine with clickable modifier usually)
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Text("Repetir durante:", color = ColorTextSecondary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(0 to "Solo Hoy", 1 to "1 Mes", 2 to "2 Meses").forEach { (valMonths, label) ->
-                            FilterChip(
-                                selected = repeatMonths == valMonths,
-                                onClick = { repeatMonths = valMonths },
-                                label = { Text(label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = ColorPrimaryAction,
-                                    labelColor = ColorTextPrimary
-                                )
-                            )
-                        }
-                    }
+                    .width(4.dp)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(stripColor)
+            )
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            // Details
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = gymClass.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ColorTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Person, null, modifier = Modifier.size(12.dp), tint = ColorTextSecondary)
+                    Spacer(Modifier.width(4.dp))
+                    Text(gymClass.coachName, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
                 }
-
-                // WEEKDAYS
-                PlannerSectionCard(title = "Días de la Semana") {
-                    Text("Selecciona los días a repetir:", color = ColorTextSecondary, style = MaterialTheme.typography.bodySmall)
-                    val days = listOf(
-                        Calendar.MONDAY to "Lun", Calendar.TUESDAY to "Mar", Calendar.WEDNESDAY to "Mié",
-                        Calendar.THURSDAY to "Jue", Calendar.FRIDAY to "Vie", Calendar.SATURDAY to "Sáb", Calendar.SUNDAY to "Dom"
-                    )
-                    
-                    @OptIn(ExperimentalLayoutApi::class)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        days.forEach { (calDay, label) ->
-                            val isSelected = selectedWeekdays.contains(calDay)
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    if (isSelected) selectedWeekdays = selectedWeekdays - calDay
-                                    else selectedWeekdays = selectedWeekdays + calDay
-                                },
-                                label = { Text(label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = ColorPrimaryAction,
-                                    selectedLabelColor = Color.White,
-                                    labelColor = ColorTextSecondary
-                                )
-                            )
-                        }
-                    }
-                }
-
-                // TIMES
-                PlannerSectionCard(title = "Horarios (Plantilla)") {
-                    if (templateTimes.isEmpty()) {
-                        Text("No hay horarios definidos en configuración.", color = ColorTextSecondary)
-                    } else {
-                        @OptIn(ExperimentalLayoutApi::class)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            templateTimes.forEach { time ->
-                                val isSelected = selectedTimes.contains(time)
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        if (isSelected) selectedTimes = selectedTimes - time
-                                        else selectedTimes = selectedTimes + time
-                                    },
-                                    label = { Text(time) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = ColorPrimaryAction,
-                                        selectedLabelColor = Color.White,
-                                        labelColor = ColorTextSecondary
-                                    )
-                                )
-                            }
-                        }
-                    }
-                    
-                    Text(
-                        "${selectedTimes.size} horarios seleccionados",
-                        color = ColorTextSecondary,
-                        style = MaterialTheme.typography.labelSmall
-                    )
+            }
+            
+            // Badges
+            Column(horizontalAlignment = Alignment.End) {
+                if (gymClass.wodId != null || gymClass.description?.isNotEmpty() == true) {
+                    Icon(Icons.Default.CheckCircle, null, tint = Color.Green, modifier = Modifier.size(16.dp))
                 }
                 
-                // DETAILS
-                PlannerSectionCard(title = "Detalles de la Clase") {
-                    OutlinedTextField(
-                        value = className, onValueChange = { className = it }, label = { Text("Nombre") },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary)
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = coachName, onValueChange = { coachName = it }, label = { Text("Coach") },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary)
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row {
-                        OutlinedTextField(
-                            value = capacity, onValueChange = { capacity = it }, label = { Text("Cupo") },
-                            modifier = Modifier.weight(1f),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedTextField(
-                            value = duration, onValueChange = { duration = it }, label = { Text("Minutos") },
-                            modifier = Modifier.weight(1f),
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary)
-                        )
-                    }
-                }
-                
-                // WOD
-                PlannerSectionCard(title = "WOD del Día") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = createWod, onCheckedChange = { createWod = it })
-                        Text("Crear WOD automáticamente", color = ColorTextPrimary)
-                    }
-                    
-                    if (createWod) {
-                        OutlinedTextField(
-                            value = wodDescription,
-                            onValueChange = { wodDescription = it },
-                            label = { Text("Descripción del WOD") },
-                            modifier = Modifier.fillMaxWidth().height(100.dp),
-                            maxLines = 5,
-                            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary)
-                        )
-                        Text(
-                             "Nota: Si repites por mes, este mismo WOD se asignará a todos los días (útil para ciclos o benchmarks, o editar después).",
-                             style = MaterialTheme.typography.bodySmall,
-                             color = Color.Gray
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = {
-                        viewModel.createClassesBatch(
-                            startDate = startDate,
-                            selectedTimes = selectedTimes,
-                            selectedWeekdays = selectedWeekdays,
-                            repeatMonths = repeatMonths,
-                            className = className,
-                            coachName = coachName,
-                            description = wodDescription,
-                            capacity = capacity.toIntOrNull() ?: 15,
-                            durationMinutes = duration.toIntOrNull() ?: 60,
-                            createWod = createWod,
-                            wodScoreType = "Time" // Default
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction),
-                    enabled = !isLoading && selectedTimes.isNotEmpty()
+                Surface(
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                 ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                    } else {
-                        Text("Generar Clases", fontWeight = FontWeight.Bold)
-                    }
+                    Text(
+                        "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ColorTextPrimary,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
                 }
-                Spacer(modifier = Modifier.height(32.dp))
+            }
+            
+            // Checkmark for selection
+            if (isSelectionMode) {
+                Spacer(Modifier.width(16.dp))
+                Icon(
+                    imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (isSelected) ColorPrimaryAction else Color.Gray,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }
@@ -315,8 +525,7 @@ fun AdminSchedulePlannerScreen(
 
 @Composable
 fun PlannerSectionCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+    GlassCard(
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {

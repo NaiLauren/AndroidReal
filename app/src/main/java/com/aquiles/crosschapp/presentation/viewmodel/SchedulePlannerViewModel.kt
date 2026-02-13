@@ -3,11 +3,12 @@ package com.aquiles.crosschapp.presentation.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.aquiles.crosschapp.data.model.GymClass // Assuming this is the equivalent of ClassSession
-import com.aquiles.crosschapp.data.model.Wod
+import com.aquiles.crosschapp.data.model.GymClass
+// import com.aquiles.crosschapp.presentation.viewmodel.UserSession // Same package, not needed
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -36,26 +37,273 @@ class SchedulePlannerViewModel : ViewModel() {
     private val gymId: String?
         get() = UserSession.currentUserGymId.value
 
-    fun fetchScheduleTemplate() {
+    fun fetchScheduleTemplate(date: Date? = null) {
         val gid = gymId ?: return
         viewModelScope.launch {
             try {
-                val snapshot = db.collection("gyms").document(gid)
-                    .collection("settings").document("schedule_template")
+                // 1. Try to fetch Weekly Schedule First
+                val weeklyDoc = db.collection("gyms").document(gid)
+                    .collection("settings").document("weekly_schedule_template")
                     .get().await()
-                
-                if (snapshot.exists()) {
-                    val times = snapshot.get("available_times") as? List<String> ?: emptyList()
-                    _scheduleTemplate.value = times.sorted()
+
+                var foundWeekly = false
+                if (weeklyDoc.exists() && date != null) {
+                    val data = weeklyDoc.data
+                    if (data != null) {
+                        val calendar = Calendar.getInstance()
+                        calendar.time = date
+                        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK) // 1=Sun, 2=Mon...
+                        
+                        // Keys are strings "1", "2"...
+                        val times = (data[dayOfWeek.toString()] as? List<*>)?.filterIsInstance<String>()
+                        
+                        if (times != null) {
+                            _scheduleTemplate.value = times.sorted()
+                            foundWeekly = true
+                        }
+                    }
+                }
+
+                // 2. Fallback to general template if no weekly schedule found for this day
+                if (!foundWeekly) {
+                    val snapshot = db.collection("gyms").document(gid)
+                        .collection("settings").document("schedule_template")
+                        .get().await()
+                    
+                    if (snapshot.exists()) {
+                        val times = (snapshot.get("available_times") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+                        _scheduleTemplate.value = times.sorted()
+                    } else {
+                         _scheduleTemplate.value = emptyList()
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("SchedulePlannerVM", "Error fetching template", e)
+                _scheduleTemplate.value = emptyList()
             }
         }
     }
 
-    // Main Batch Creation Logic (Ported from Swift)
-    fun createClassesBatch(
+    // --- NEW STATE FOR PARITY ---
+    private val _classesForSelectedDate = MutableStateFlow<List<GymClass>>(emptyList())
+    val classesForSelectedDate = _classesForSelectedDate.asStateFlow()
+
+    private val _selectedClassIds = MutableStateFlow<Set<String>>(emptySet())
+    val selectedClassIds = _selectedClassIds.asStateFlow()
+
+    private val _isSelectionMode = MutableStateFlow(false)
+    val isSelectionMode = _isSelectionMode.asStateFlow()
+
+    private var classesListener: ListenerRegistration? = null
+    
+    // --- ACTIONS ---
+
+    fun fetchClasses(date: Date) {
+        val gid = gymId ?: return
+        
+        // Calculate start and end of day
+        val calendar = Calendar.getInstance()
+        calendar.time = date
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val startOfDay = calendar.time
+        
+        calendar.add(Calendar.DAY_OF_MONTH, 1)
+        val endOfDay = calendar.time
+
+        classesListener?.remove()
+        classesListener = db.collection("gymClasses")
+            .whereEqualTo("gym_id", gid)
+            .whereGreaterThanOrEqualTo("dateTime", Timestamp(startOfDay))
+            .whereLessThan("dateTime", Timestamp(endOfDay))
+            // .orderBy("dateTime") // Requires index, usually fine or sort locally
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("SchedulePlannerVM", "Listen failed", e)
+                    return@addSnapshotListener
+                }
+                
+                if (snapshot != null) {
+                    val classes = snapshot.toObjects(GymClass::class.java)
+                    // Sort locally to avoid index issues for now
+                    _classesForSelectedDate.value = classes.sortedBy { it.dateTime }
+                    
+                    // Auto-Cancel Logic (Parity)
+                    autoCancelEmptyClassesIfNeeded(classes)
+                }
+            }
+    }
+
+    private fun autoCancelEmptyClassesIfNeeded(classes: List<GymClass>) {
+        val now = Date()
+        val calendar = Calendar.getInstance()
+        calendar.time = now
+        calendar.add(Calendar.MINUTE, 30) // Close enough to start
+        val threshold = calendar.time
+        
+        val batch = db.batch()
+        var ops = 0
+        
+        classes.forEach { gymClass ->
+            if (!gymClass.isCancelled && gymClass.enrolledUserIds.isEmpty()) {
+                val classTime = gymClass.dateTime ?: return@forEach
+                // Logic: If class is in the past OR starting very soon (e.g. within 30 mins) and EMPTY -> Cancel
+                // iOS logic might be strictly "past" or configurable. Let's assume "past or imminent"
+                if (classTime.before(threshold)) {
+                    val ref = db.collection("gymClasses").document(gymClass.id)
+                    batch.update(ref, "cancelled", true) // Field name in Firestore is 'cancelled'? Model says @PropertyName("cancelled") val isCancelled
+                    // Update: Firestore field is likely "cancelled" based on model annotation.
+                    ops++
+                }
+            }
+        }
+        
+        if (ops > 0) {
+            batch.commit().addOnSuccessListener { Log.d("SchedulePlannerVM", "Auto-cancelled $ops classes") }
+        }
+    }
+
+    fun toggleSelection(classId: String) {
+        val current = _selectedClassIds.value.toMutableSet()
+        if (current.contains(classId)) {
+            current.remove(classId)
+        } else {
+            current.add(classId)
+        }
+        _selectedClassIds.value = current
+        _isSelectionMode.value = current.isNotEmpty()
+    }
+
+    fun selectAll() {
+        val allIds = _classesForSelectedDate.value.map { it.id }.toSet()
+        _selectedClassIds.value = allIds
+        _isSelectionMode.value = allIds.isNotEmpty()
+    }
+
+    fun clearSelection() {
+        _selectedClassIds.value = emptySet()
+        _isSelectionMode.value = false
+    }
+    
+    fun prepareBatchEdit() {
+        // Just ensures mode is on, logic is mainly in UI
+        _isSelectionMode.value = true
+    }
+    
+    fun getFirstSelectedClass(): GymClass? {
+        val firstId = _selectedClassIds.value.firstOrNull() ?: return null
+        return _classesForSelectedDate.value.find { it.id == firstId }
+    }
+
+    // Combined Create/Update
+    fun createOrUpdateBatch(
+        startDate: Date,
+        selectedTimes: Set<String>,
+        selectedWeekdays: Set<Int>,
+        repeatMonths: Int,
+        className: String,
+        coachName: String,
+        description: String,
+        capacity: Int,
+        durationMinutes: Int,
+        createWod: Boolean,
+        wodScoreType: String,
+        isUpdateMode: Boolean = false
+    ) {
+        if (isUpdateMode) {
+            updateBatchClasses(className, coachName, description, capacity, durationMinutes, createWod, wodScoreType, startDate)
+        } else {
+            createClassesBatch(startDate, selectedTimes, selectedWeekdays, repeatMonths, className, coachName, description, capacity, durationMinutes, createWod, wodScoreType)
+        }
+    }
+
+    private fun updateBatchClasses(
+        className: String,
+        coachName: String,
+        description: String,
+        capacity: Int,
+        durationMinutes: Int,
+        createWod: Boolean,
+        wodScoreType: String,
+        dateForWod: Date // Used for WOD date if creating new
+    ) {
+        val idsToUpdate = _selectedClassIds.value
+        if (idsToUpdate.isEmpty()) return
+        
+        _isLoading.value = true
+        _creationState.value = "Actualizando..."
+        
+        viewModelScope.launch {
+            try {
+                // 1. Prepare WOD if needed (reuse logic or create new one for the batch?)
+                // If updating multiple classes, usually they might share the WOD if they are on same day. 
+                // But if we selected classes across multiple days (not possible with current UI which selects per day), they would share one WOD date?
+                // Simplified: If creating WOD, create ONE for the batch (assuming same day) OR update existing?
+                // Let's assume Create WOD = Create NEW WOD and link to all.
+                
+                var newWodId: String? = null
+                if (createWod) {
+                     // Check if they already have same WOD? rare. Create new.
+                    val newWodRef = db.collection("wods").document()
+                    val newWod = hashMapOf(
+                        "title" to className,
+                        "type" to "Daily",
+                        "description" to description,
+                        "date" to Timestamp(dateForWod), // Use the date passed (start date currently)
+                        "scoreType" to wodScoreType,
+                        "notes" to "Batch Updated",
+                        "createdAt" to Timestamp.now(),
+                        "gym_id" to (gymId ?: "")
+                    )
+                    newWodId = newWodRef.id
+                    newWodRef.set(newWod).await()
+                }
+
+                // 2. Batch Update
+                val batch = db.batch()
+                var batchCount = 0
+                
+                for (id in idsToUpdate) {
+                    val ref = db.collection("gymClasses").document(id)
+                    val updates = mutableMapOf<String, Any>(
+                        "name" to className,
+                        "coachName" to coachName,
+                        "description" to description,
+                        "maxCapacity" to capacity,
+                        "durationMinutes" to durationMinutes
+                    )
+                    if (newWodId != null) {
+                        updates["wod_id"] = newWodId
+                    }
+                    // If we want to CLEAR wod? Assume if createWod=false we don't clear, just don't add new.
+                    
+                    batch.update(ref, updates)
+                    batchCount++
+                    
+                    if (batchCount >= 400) {
+                         batch.commit().await()
+                         batchCount = 0
+                    }
+                }
+                
+                if (batchCount > 0) batch.commit().await()
+                
+                _creationState.value = "Success: Actualizadas ${idsToUpdate.size} clases."
+                _isLoading.value = false
+                clearSelection()
+                
+            } catch (e: Exception) {
+                Log.e("SchedulePlannerVM", "Update error", e)
+                _creationState.value = "Error: ${e.message}"
+                _isLoading.value = false
+            }
+        }
+    }
+    
+    // Original Batch Creation Logic (Renamed/Kept)
+    private fun createClassesBatch(
         startDate: Date,
         selectedTimes: Set<String>,
         selectedWeekdays: Set<Int>, // Calendar.SUNDAY = 1, etc.

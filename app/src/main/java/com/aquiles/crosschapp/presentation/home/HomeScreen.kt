@@ -50,7 +50,7 @@ import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
-private val ColorPrimaryAction = Color(0xFFFC5200)
+val LocalPrimaryColor = androidx.compose.runtime.compositionLocalOf { Color(0xFFFC5200) } // Dynamic Color Provider
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
@@ -73,6 +73,18 @@ fun HomeScreen(
     val pendingRequestsCount by adminViewModel.pendingRequestsCount.collectAsState()
     val personalMessageState by homeViewModel.personalMessageState.collectAsState()
     val notices by noticeViewModel.notices.collectAsState()
+
+    val userClasses by homeViewModel.userClasses.collectAsState()
+
+    // --- DYNAMIC THEMING ---
+    val gym by UserSession.currentGym.collectAsState()
+    val primaryColor = remember(gym) {
+        try {
+            if (gym?.primaryColor != null) Color(android.graphics.Color.parseColor(gym!!.primaryColor)) else Color(0xFFFC5200)
+        } catch (e: Exception) {
+            Color(0xFFFC5200)
+        }
+    }
 
     LaunchedEffect(Unit) {
         noticeViewModel.loadNotices() 
@@ -98,7 +110,8 @@ fun HomeScreen(
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.4f))
     ) {
-        Scaffold(
+        CompositionLocalProvider(LocalPrimaryColor provides primaryColor) {
+            Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
                     title = { Text("Inicio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
@@ -118,7 +131,7 @@ fun HomeScreen(
                             Icon(
                                 imageVector = Icons.Outlined.MailOutline,
                                 contentDescription = "Archivo",
-                                tint = ColorPrimaryAction
+                                tint = LocalPrimaryColor.current
                             )
                         }
 
@@ -135,7 +148,7 @@ fun HomeScreen(
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Send,
                                     contentDescription = "Notificaciones",
-                                    tint = if (hasUnreadNotifications) ColorPrimaryAction else Color.White
+                                    tint = if (hasUnreadNotifications) LocalPrimaryColor.current else Color.White
                                 )
                                 if (hasUnreadNotifications) {
                                     Box(
@@ -156,7 +169,7 @@ fun HomeScreen(
             val user = currentUser
             if (user == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = ColorPrimaryAction)
+                    CircularProgressIndicator(color = LocalPrimaryColor.current)
                 }
             } else {
                 Box(modifier = Modifier
@@ -165,6 +178,7 @@ fun HomeScreen(
                 ) {
                     HomeScreenContent(
                         user = user,
+                        userClasses = userClasses,
                         personalMessageState = personalMessageState,
                         onMarkMessageAsRead = { messageId ->
                             homeViewModel.markPersonalMessageAsRead(messageId)
@@ -186,12 +200,14 @@ fun HomeScreen(
                 }
             }
         }
+        }
     }
 }
 
 @Composable
 private fun HomeScreenContent(
     user: User,
+    userClasses: List<GymClass>,
     personalMessageState: PersonalMessageState,
     onMarkMessageAsRead: (String) -> Unit,
     localScaffoldPadding: PaddingValues,
@@ -245,7 +261,7 @@ private fun HomeScreenContent(
                     state = androidx.compose.foundation.pager.rememberPagerState { notices.size },
                     contentPadding = PaddingValues(horizontal = 0.dp),
                     pageSpacing = 16.dp,
-                    modifier = Modifier.height(160.dp)
+                    modifier = Modifier.height(280.dp)
                 ) { page ->
                      NoticeBoardCard(
                          notice = notices[page],
@@ -274,7 +290,7 @@ private fun HomeScreenContent(
                                 .weight(1f)
                                 .fillMaxHeight()
                                 .clip(CircleShape)
-                                .background(if (isSelected) ColorPrimaryAction else Color.Transparent)
+                                .background(if (isSelected) LocalPrimaryColor.current else Color.Transparent)
                                 .clickable { onTabSelected(tab) },
                             contentAlignment = Alignment.Center
                         ) {
@@ -292,24 +308,9 @@ private fun HomeScreenContent(
         
         // ========== FEED CONTENT ==========
 
-        // TAB HOY: Daily WOD + Daily Feed
-        if (currentTab == FeedTab.TODAY) {
-            if (feedItems.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                         Text("Sin actividad hoy. ¡Sé el primero!", color = ColorTextSecondary)
-                    }
-                }
-            } else {
-                items(feedItems) { item ->
-                    SocialFeedItem(item = item, rankingPosition = null, onLongClick = {})
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-            }
-        }
-
-        // TAB RECORDS (Wrapped in Glass)
-        else if (currentTab == FeedTab.RECORDS) {
+        // TAB HOY y RECORDS: Ambos muestran el Feed Social (Ranking/Resultados)
+        // La diferencia de qué items se muestran (solo hoy vs históricos/récords) la maneja el BenchmarkFeedViewModel
+        if (currentTab == FeedTab.TODAY || currentTab == FeedTab.RECORDS) {
             item {
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
@@ -330,7 +331,7 @@ private fun HomeScreenContent(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = selectedWodFilter ?: "Filtrar por WOD",
+                                    text = selectedWodFilter ?: "Filtrar por Entrenamiento", // [User Req: WOD -> Entrenamiento]
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -339,7 +340,7 @@ private fun HomeScreenContent(
                                 // Sort Toggle
                                 Text(
                                     text = sortCriteria ?: "Ordenar", 
-                                    color = ColorPrimaryAction, 
+                                    color = LocalPrimaryColor.current, 
                                     style = MaterialTheme.typography.labelSmall,
                                     modifier = Modifier.clickable { onToggleSort() }
                                 )
@@ -355,7 +356,7 @@ private fun HomeScreenContent(
                                         selected = selectedWodFilter == null,
                                         onClick = { onWodFilterSelected(null) },
                                         label = { Text("Todos") },
-                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ColorPrimaryAction, labelColor = Color.White)
+                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = LocalPrimaryColor.current, labelColor = Color.White)
                                     )
                                 }
                                 items(availableBenchmarks) { bench ->
@@ -363,7 +364,7 @@ private fun HomeScreenContent(
                                         selected = selectedWodFilter == bench,
                                         onClick = { onWodFilterSelected(bench) },
                                         label = { Text(bench) },
-                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ColorPrimaryAction, labelColor = Color.White)
+                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = LocalPrimaryColor.current, labelColor = Color.White)
                                     )
                                 }
                             }
@@ -373,7 +374,7 @@ private fun HomeScreenContent(
                         when(feedState) {
                             is FeedState.Loading -> {
                                 Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(color = ColorPrimaryAction)
+                                    CircularProgressIndicator(color = LocalPrimaryColor.current)
                                 } 
                             }
                             is FeedState.Success -> {
@@ -404,7 +405,7 @@ private fun HomeScreenContent(
                                                 Icon(
                                                     imageVector = if (dropdownExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                                     contentDescription = "Seleccionar ejercicio",
-                                                    tint = ColorPrimaryAction,
+                                                    tint = LocalPrimaryColor.current,
                                                     modifier = Modifier.size(24.dp)
                                                 )
                                             }
@@ -419,14 +420,14 @@ private fun HomeScreenContent(
                                              DropdownMenuItem(
                                                 text = { Text("Todo (Feed completo)", color = if (selectedWodFilter == null) Color.White else ColorTextSecondary) },
                                                 onClick = { benchmarkFeedViewModel.setWodFilter(null); dropdownExpanded = false }
-                                            )
-                                            HorizontalDivider(color = Color.White.copy(0.1f))
-                                            availableBenchmarks.forEach { benchmark ->
-                                                DropdownMenuItem(
-                                                    text = { Text(benchmark, color = if (benchmark == selectedWodFilter) Color.White else ColorTextSecondary) },
-                                                    onClick = { benchmarkFeedViewModel.setWodFilter(benchmark); dropdownExpanded = false }
-                                                )
-                                            }
+                                             )
+                                             HorizontalDivider(color = Color.White.copy(0.1f))
+                                             availableBenchmarks.forEach { benchmark ->
+                                                 DropdownMenuItem(
+                                                     text = { Text(benchmark, color = if (benchmark == selectedWodFilter) Color.White else ColorTextSecondary) },
+                                                     onClick = { benchmarkFeedViewModel.setWodFilter(benchmark); dropdownExpanded = false }
+                                                 )
+                                             }
                                         }
                                     }
                                     
@@ -451,9 +452,9 @@ private fun HomeScreenContent(
                                             // Gender Chips
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 Text("Filtrar:", color = ColorTextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.CenterVertically))
-                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter(null) }, label = { Text("Todos") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == null) ColorPrimaryAction else Color.Transparent))
-                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("male") }, label = { Text("Hombre") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "male") ColorPrimaryAction else Color.Transparent))
-                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("female") }, label = { Text("Mujer") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "female") ColorPrimaryAction else Color.Transparent))
+                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter(null) }, label = { Text("Todos") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == null) LocalPrimaryColor.current else Color.Transparent))
+                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("male") }, label = { Text("Hombre") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "male") LocalPrimaryColor.current else Color.Transparent))
+                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("female") }, label = { Text("Mujer") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "female") LocalPrimaryColor.current else Color.Transparent))
                                             }
                                         }
                                     }
@@ -531,6 +532,62 @@ private fun HomeScreenContent(
 // =====================================================
 
 @Composable
+fun UserClassItem(gymClass: GymClass) {
+    val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+    val timeStr = gymClass.dateTime?.let { timeFormat.format(it) } ?: "--:--"
+    
+    // Style matching iOS "Neon" card
+    val stripColor = try { Color(android.graphics.Color.parseColor(gymClass.hexColor)) } catch(e:Exception) { LocalPrimaryColor.current }
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left Time Column
+            Text(
+                text = timeStr,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = LocalPrimaryColor.current,
+                modifier = Modifier.width(50.dp)
+            )
+            
+            // Vertical Color Strip
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(stripColor)
+            )
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            // Details
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = gymClass.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ColorTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Person, null, modifier = Modifier.size(12.dp), tint = ColorTextSecondary)
+                    Spacer(Modifier.width(4.dp))
+                    Text(gymClass.coachName, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                }
+            }
+            
+            // Status Icon (e.g. Registered Check)
+            Icon(Icons.Default.CheckCircle, null, tint = Color.Green, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
 fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit) {
     val context = LocalContext.current
 
@@ -545,10 +602,10 @@ fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(ColorPrimaryAction.copy(alpha = 0.2f), CircleShape),
+                        .background(LocalPrimaryColor.current.copy(alpha = 0.2f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.EditNote, contentDescription = null, tint = ColorPrimaryAction)
+                    Icon(Icons.Default.EditNote, contentDescription = null, tint = LocalPrimaryColor.current)
                 }
                 Column {
                     Text(
@@ -599,7 +656,7 @@ fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit
                         border = BorderStroke(1.dp, ColorBorder),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = ColorPrimaryAction)
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = LocalPrimaryColor.current)
                         Spacer(Modifier.size(8.dp))
                         Text("Ver Rutina Adjunta (PDF)", color = ColorTextPrimary)
                     }
@@ -608,7 +665,7 @@ fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onAcknowledge) {
-                    Text("Marcar como Leído", color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
+                    Text("Marcar como Leído", color = LocalPrimaryColor.current, fontWeight = FontWeight.Bold)
                 }
             }
         }

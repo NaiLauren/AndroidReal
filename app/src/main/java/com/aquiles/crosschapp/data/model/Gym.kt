@@ -17,5 +17,8 @@ data class Gym(
     @get:PropertyName("primary_color")
     @set:PropertyName("primary_color")
     @PropertyName("primary_color")
-    var primaryColor: String? = null // Hex Color for Dynamic Theming
+    var primaryColor: String? = null, // Hex Color for Dynamic Theming
+    
+    @PropertyName("last_daily_closing")
+    val lastDailyClosing: com.google.firebase.Timestamp? = null // Para cierre diario automático
 )

@@ -152,9 +152,56 @@ fun BenchmarkCard(wod: BenchmarkWod, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = wod.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White)
+                // Nombre del benchmark + Badge
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = wod.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // 🆕 BADGE: GLOBAL o LOCAL
+                    if (wod.gym_id.isEmpty()) {
+                        // Benchmark Global
+                        Text(
+                            text = "GLOBAL",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFD700), // Oro
+                            modifier = Modifier
+                                .background(
+                                    Color(0xFFFFD700).copy(alpha = 0.2f),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    } else {
+                        // Benchmark Local
+                        Text(
+                            text = "LOCAL",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2196F3), // Azul
+                            modifier = Modifier
+                                .background(
+                                    Color(0xFF2196F3).copy(alpha = 0.2f),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(text = wod.measurementUnit, style = MaterialTheme.typography.labelSmall, color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
+                Text(
+                    text = wod.measurementUnit,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ColorPrimaryAction,
+                    fontWeight = FontWeight.Bold
+                )
             }
             Icon(Icons.Default.ChevronRight, null, tint = ColorTextSecondary)
         }

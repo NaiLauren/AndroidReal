@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.automirrored.filled.ArrowForward // [New Import]
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -55,7 +56,6 @@ import java.util.*
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
 private val ColorGlassInput = Color(0xFFFFFFFF).copy(alpha = 0.07f)
-private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
@@ -76,6 +76,16 @@ fun WodsScreen(
 ) {
     val currentUser by UserSession.currentUser.collectAsState()
     val currentUserGymId by UserSession.currentUserGymId.collectAsState()
+
+    // --- DYNAMIC THEMING ---
+    val gym by UserSession.currentGym.collectAsState()
+    val primaryColor = remember(gym) {
+        try {
+            if (gym?.primaryColor != null) Color(android.graphics.Color.parseColor(gym!!.primaryColor)) else Color(0xFFFC5200)
+        } catch (e: Exception) {
+            Color(0xFFFC5200)
+        }
+    }
 
     // Estados de Datos
     val dailyClassesState by wodsViewModel.dailyClassesState.collectAsState()
@@ -110,7 +120,7 @@ fun WodsScreen(
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     
     // Helper fecha
-    val dayFormat = remember { SimpleDateFormat("EEEE", Locale("es", "ES")) }
+    val dayFormat = remember { SimpleDateFormat("EEEE", Locale.forLanguageTag("es-ES")) }
 
     // --- LAUNCHERS ---
     val cameraLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.TakePicture()) { success ->
@@ -162,7 +172,8 @@ fun WodsScreen(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        Image(
+        CompositionLocalProvider(LocalPrimaryColor provides primaryColor) {
+            Image(
             painter = painterResource(id = R.drawable.fondo_principal),
             contentDescription = null,
             contentScale = ContentScale.Crop,
@@ -175,7 +186,7 @@ fun WodsScreen(
         val user = currentUser
         if (user == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ColorPrimaryAction)
+                CircularProgressIndicator(color = LocalPrimaryColor.current)
             }
         } else {
             val hasValidAccess = user.canAccessSchedule
@@ -211,13 +222,26 @@ fun WodsScreen(
 
                 if (dailyClassesState.isLoading) {
                     GlassLoadingCard(height = 400.dp)
-                } else if (dailyClassesState.classes.isEmpty()) {
-                    RestDayWodCard(imageUrl = restDayImageUrl)
                 } else {
-                    val pagerState = rememberPagerState(
-                        initialPage = dailyClassesState.initialScrollIndex,
-                        pageCount = { dailyClassesState.classes.size }
-                    )
+                    // [Fix] Filtrar clases para mostrar SOLO las reservas del usuario
+                    // Asumimos que user != null porque está verificado arriba
+                    val enrolledClasses = remember(dailyClassesState.classes, user.id) {
+                        dailyClassesState.classes.filter { 
+                            it.enrolledUserIds.contains(user.id) || it.checkedInUserIds.contains(user.id)
+                        }
+                    }
+
+                    if (enrolledClasses.isEmpty()) {
+                        InfoCardSmall(
+                            icon = Icons.Default.EventBusy, 
+                            title = "Sin Reservas para Hoy", 
+                            message = "Ve a Horarios para inscribirte en una clase."
+                        )
+                    } else {
+                        val pagerState = rememberPagerState(
+                            initialPage = 0, // Siempre empezar en el primero si son pocos
+                            pageCount = { enrolledClasses.size }
+                        )
 
                     LaunchedEffect(dailyClassesState.initialScrollIndex) {
                         if (dailyClassesState.classes.isNotEmpty()) {
@@ -233,7 +257,7 @@ fun WodsScreen(
                                 pageSpacing = 16.dp,
                                 contentPadding = PaddingValues(horizontal = 32.dp) // Add horizontal padding for peek effect
                             ) { pageIndex ->
-                                val gymClass = dailyClassesState.classes.getOrNull(pageIndex)
+                                val gymClass = enrolledClasses.getOrNull(pageIndex)
                                 if (gymClass != null) {
                                     val isCurrentPage = pagerState.currentPage == pageIndex
                                     
@@ -301,7 +325,7 @@ fun WodsScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             repeat(pagerState.pageCount) { iteration ->
-                                val color = if (pagerState.currentPage == iteration) ColorPrimaryAction else Color.Gray.copy(alpha = 0.5f)
+                                val color = if (pagerState.currentPage == iteration) LocalPrimaryColor.current else Color.Gray.copy(alpha = 0.5f)
                                 Box(
                                     modifier = Modifier
                                         .padding(2.dp)
@@ -312,6 +336,8 @@ fun WodsScreen(
                             }
                         }
                     }
+                }
+
                 }
 
                 // PRÓXIMA RESERVA / MAÑANA
@@ -353,15 +379,18 @@ fun WodsScreen(
             }
 
             if (todayWod != null) {
-                FloatingCameraButton(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 50.dp, end = 16.dp),
-                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    FloatingCameraButton(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 50.dp, end = 16.dp),
+                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }
+                    )
+                }
             }
         }
     }
+}
 }
 
 // =====================================================
@@ -381,7 +410,7 @@ fun VerticalPagerIndicator(
     ) {
         repeat(itemCount) { iteration ->
             val isSelected = pagerState.currentPage == iteration
-            val color = if (isSelected) ColorPrimaryAction else Color.White.copy(alpha = 0.3f)
+            val color = if (isSelected) LocalPrimaryColor.current else Color.White.copy(alpha = 0.3f)
             val size = if (isSelected) 10.dp else 6.dp
 
             Box(
@@ -424,7 +453,7 @@ fun WodPagerCard(
                     contentDescription = "WOD Image",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
-                    loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) } }
+                    loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalPrimaryColor.current) } }
                 )
                 Box(
                     modifier = Modifier
@@ -437,7 +466,7 @@ fun WodPagerCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Box(modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                        Text(text = "${timeFormatter.format(gymClass.dateTime ?: Date())} HS", color = ColorPrimaryAction, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                        Text(text = "${timeFormatter.format(gymClass.dateTime ?: Date())} HS", color = LocalPrimaryColor.current, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                     }
                     if (gymClass.coachName.isNotBlank()) {
                         Box(modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
@@ -468,7 +497,7 @@ fun WodPagerCard(
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { isRx = !isRx }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White))
+                        Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = LocalPrimaryColor.current, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White))
                         Text("RX", fontWeight = FontWeight.Bold, color = if (isRx) ColorTextPrimary else ColorTextSecondary)
                     }
                     
@@ -477,7 +506,7 @@ fun WodPagerCard(
                     Button(
                         onClick = { onSaveResult(userResult, isRx, userNotes) },
                         enabled = userResult.isNotBlank() && !isSavingResult,
-                        colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction, disabledContainerColor = ColorPrimaryAction.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.buttonColors(containerColor = LocalPrimaryColor.current, disabledContainerColor = LocalPrimaryColor.current.copy(alpha = 0.5f)),
                         shape = RoundedCornerShape(12.dp),
                         contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
                     ) {
@@ -495,7 +524,7 @@ fun WodPagerCard(
 
 @Composable
 fun FloatingCameraButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier = modifier.size(50.dp).clip(CircleShape).background(Brush.linearGradient(colors = listOf(ColorPrimaryAction, Color(0xFFFF8A50)))).clickable(onClick = onClick).border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape), contentAlignment = Alignment.Center) {
+    Box(modifier = modifier.size(50.dp).clip(CircleShape).background(Brush.linearGradient(colors = listOf(LocalPrimaryColor.current, Color(0xFFFF8A50)))).clickable(onClick = onClick).border(1.dp, Color.White.copy(alpha = 0.5f), CircleShape), contentAlignment = Alignment.Center) {
         Icon(imageVector = Icons.Default.CameraAlt, contentDescription = "Compartir WOD", tint = Color.White, modifier = Modifier.size(24.dp))
     }
 }
@@ -538,7 +567,7 @@ fun NextBookingCardSmall(gymClass: GymClass, onClick: () -> Unit) {
                 Text(text = gymClass.dateTime?.let { dayFormatter.format(it) }?.uppercase() ?: "", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AccessTime, contentDescription = null, tint = ColorPrimaryAction, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.AccessTime, contentDescription = null, tint = LocalPrimaryColor.current, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(text = gymClass.dateTime?.let { timeFormatter.format(it) } ?: "", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
             }
@@ -552,7 +581,7 @@ fun TomorrowWodCardSmall(wod: Wod, onClick: () -> Unit) {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             Text(text = wod.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Icon(Icons.Default.ArrowForward, contentDescription = "Ver", tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Ver", tint = LocalPrimaryColor.current, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -585,9 +614,9 @@ fun InfoCardSmall(icon: ImageVector, title: String, message: String) {
 
 @Composable
 fun AccessBlockedCard(title: String, message: String, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().height(140.dp).clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, ColorPrimaryAction.copy(alpha = 0.6f)), colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)) {
+    Card(modifier = Modifier.fillMaxWidth().height(140.dp).clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, LocalPrimaryColor.current.copy(alpha = 0.6f)), colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)) {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Lock, contentDescription = null, tint = ColorPrimaryAction)
+            Icon(Icons.Default.Lock, contentDescription = null, tint = LocalPrimaryColor.current)
             Spacer(modifier = Modifier.height(8.dp))
             Text(text = title, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
             Text(text = message, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
@@ -612,7 +641,7 @@ fun InfoCard(icon: ImageVector, title: String, message: String) {
 fun GlassLoadingCard(height: androidx.compose.ui.unit.Dp = 200.dp) {
     GlassCard(modifier = Modifier.height(height)) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = ColorPrimaryAction)
+            CircularProgressIndicator(color = LocalPrimaryColor.current)
         }
     }
 }
@@ -631,7 +660,7 @@ fun BenchmarkAccessCard(onClick: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = "REGISTRAR TU PROGRESO", style = MaterialTheme.typography.labelSmall, color = ColorPrimaryAction, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Text(text = "REGISTRAR TU PROGRESO", style = MaterialTheme.typography.labelSmall, color = LocalPrimaryColor.current, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = "Ir a Benchmarks", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White)
                 Text(text = "Registra tus PRs: Fran, Murph, Max Lifts...", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
@@ -640,10 +669,10 @@ fun BenchmarkAccessCard(onClick: () -> Unit) {
                 modifier = Modifier
                     .size(50.dp)
                     .clip(CircleShape)
-                    .background(ColorPrimaryAction),
+                    .background(LocalPrimaryColor.current),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.ArrowForward, null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Color.White)
             }
         }
     }
@@ -662,7 +691,7 @@ fun GlassTextField(
         onValueChange = onValueChange,
         label = { Text(label, color = ColorTextSecondary) },
         modifier = Modifier.fillMaxWidth(),
-        colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = ColorGlassInput, unfocusedContainerColor = ColorGlassInput, focusedBorderColor = Color.White.copy(alpha = 0.5f), unfocusedBorderColor = ColorBorder, focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary, cursorColor = ColorPrimaryAction),
+        colors = OutlinedTextFieldDefaults.colors(focusedContainerColor = ColorGlassInput, unfocusedContainerColor = ColorGlassInput, focusedBorderColor = Color.White.copy(alpha = 0.5f), unfocusedBorderColor = ColorBorder, focusedTextColor = ColorTextPrimary, unfocusedTextColor = ColorTextPrimary, cursorColor = LocalPrimaryColor.current),
         shape = RoundedCornerShape(12.dp),
         singleLine = true,
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType)

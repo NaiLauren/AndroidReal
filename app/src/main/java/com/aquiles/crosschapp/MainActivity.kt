@@ -39,6 +39,8 @@ import com.aquiles.crosschapp.presentation.navigation.BottomNavItem
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import com.aquiles.crosschapp.ui.theme.CrossChAppTheme
 import com.aquiles.crosschapp.presentation.home.AdminPaymentConfigScreen // IMPORTANTE: Importar la nueva pantalla
+import com.aquiles.crosschapp.presentation.home.AdminCompetitionManagerScreen
+import com.aquiles.crosschapp.presentation.home.AdminCompetitionDetailScreen
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
@@ -145,11 +147,20 @@ fun MainApp(shouldOpenNotifications: Boolean = false) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     
-    // Si estamos chequeando sesión, mostramos Splash
-    if (isCheckingSession) {
-        VideoSplashScreen(onVideoEnded = { /* No-op, esperamos check */ })
-        return
+    // --- LÓGICA DE SPLASH SCREEN SINCRONIZADO ---
+    // El splash termina cuando: 1) El video termina (o no hay video) Y 2) La sesión se ha verificado
+    var isSplashFinished by remember { mutableStateOf(false) }
+
+    if (!isSplashFinished) {
+        VideoSplashScreen(
+            canProceed = !isCheckingSession, // Esperamos a que termine el check de sesión
+            onVideoEnded = { 
+                isSplashFinished = true 
+            }
+        )
+        return // No mostramos el resto de la app hasta que el splash termine
     }
+    // ----------------------------------------------
 
     val startDestination = if (currentUser != null) "main_graph" else "auth_graph"
     val routesWithBottomBar = setOf(
@@ -503,6 +514,27 @@ fun NavGraphBuilder.mainGraph(
             )
         }
         // -------------------------------
+
+        // --- TORNEOS Y COMPETENCIAS ---
+        composable("admin_competition_manager") {
+            AdminCompetitionManagerScreen(
+                navController = navController
+            )
+        }
+        
+        composable(
+            route = "admin_competition_detail/{competitionId}",
+            arguments = listOf(navArgument("competitionId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val competitionId = backStackEntry.arguments?.getString("competitionId")
+            if (competitionId != null) {
+                AdminCompetitionDetailScreen(
+                    navController = navController,
+                    competitionId = competitionId
+                )
+            }
+        }
+        // ------------------------------
         
         // --- NUEVA RUTA: HISTORIAL XP ---
         composable("xp_history_screen") {

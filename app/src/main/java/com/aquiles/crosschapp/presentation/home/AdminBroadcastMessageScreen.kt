@@ -30,6 +30,7 @@ import androidx.navigation.NavController
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 import com.aquiles.crosschapp.presentation.viewmodel.SendMessageState
 import kotlinx.coroutines.delay
+import com.aquiles.crosschapp.presentation.components.GlassCard
 import kotlinx.coroutines.launch
 
 // --- DESIGN SYSTEM CONSTANTS ---
@@ -85,7 +86,7 @@ fun AdminBroadcastMessageScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            // .background(Color.Black.copy(alpha = 0.4f)) // Removed for glass background
     ) {
         Scaffold(
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -204,11 +205,9 @@ private fun GlassFileChipBroadcast(uri: Uri, context: Context, onClear: () -> Un
     val fileName = getFileNameBroadcast(context, uri)
     val isPdf = fileName.endsWith(".pdf", ignoreCase = true)
 
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

@@ -28,6 +28,7 @@ import androidx.navigation.NavController
 import com.aquiles.crosschapp.data.model.BenchmarkWod
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 import com.aquiles.crosschapp.presentation.viewmodel.BenchmarkOperationState
+import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.BenchmarkWodsState
 
 // --- DESIGN SYSTEM CONSTANTS ---
@@ -75,7 +76,7 @@ fun AdminManageBenchmarksScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            // .background(Color.Black.copy(alpha = 0.4f)) // Removed for glass background
     ) {
         Scaffold(
             topBar = {
@@ -116,11 +117,14 @@ fun AdminManageBenchmarksScreen(
                     }
                     is BenchmarkWodsState.Success -> {
                         if (state.wods.isEmpty()) {
-                            Text(
-                                "No hay Benchmarks creados.",
-                                modifier = Modifier.align(Alignment.Center),
-                                color = ColorTextSecondary
-                            )
+                            GlassCard(modifier = Modifier.align(Alignment.Center).padding(32.dp)) {
+                                Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        "No hay Benchmarks creados.",
+                                        color = ColorTextSecondary
+                                    )
+                                }
+                            }
                         } else {
                             LazyColumn(
                                 contentPadding = PaddingValues(
@@ -170,11 +174,9 @@ private fun GlassBenchmarkCard(
     onEdit: (BenchmarkWod) -> Unit,
     onDelete: (BenchmarkWod) -> Unit
 ) {
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Row(
             modifier = Modifier.padding(20.dp),

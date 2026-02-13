@@ -19,6 +19,8 @@ data class GymClass(
     
     @PropertyName("wod_id")
     val wodId: String? = null,
+    
+    val wodScoreType: String? = null,
 
     val enrolledUserIds: List<String> = emptyList(),
 

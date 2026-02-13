@@ -38,6 +38,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.RequestUpdateState
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
@@ -85,7 +86,7 @@ fun AdminCreditRequestsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            // .background(Color.Black.copy(alpha = 0.4f)) // Removed to show AppBackground
     ) {
         Scaffold(
             topBar = {
@@ -113,8 +114,10 @@ fun AdminCreditRequestsScreen(
                     }
                 }
                 is CreditRequestsListState.Empty -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No hay solicitudes pendientes.", color = ColorTextSecondary)
+                    GlassCard(modifier = Modifier.align(Alignment.Center).padding(32.dp)) {
+                        Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("No hay solicitudes pendientes.", color = ColorTextSecondary)
+                        }
                     }
                 }
                 is CreditRequestsListState.Success -> {
@@ -198,11 +201,9 @@ fun GlassCreditRequestItem(
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -287,11 +288,9 @@ fun GlassProcessedRequestItem(
     val icon = if (isApproved) Icons.Default.CheckCircle else Icons.Default.DoNotDisturbOn
     val iconColor = if (isApproved) ColorSuccess else ColorError
 
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),

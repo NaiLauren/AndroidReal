@@ -1,5 +1,6 @@
 package com.aquiles.crosschapp.presentation.home
 
+import com.aquiles.crosschapp.presentation.components.GlassCard
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -77,7 +78,7 @@ fun AdminGymSettingsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            // .background(Color.Black) // Removed for glass background
     ) {
         Scaffold(
             topBar = {
@@ -123,8 +124,7 @@ fun AdminGymSettingsScreen(
                 )
 
                 // --- NEW: Activity Images Management ---
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+                GlassCard(
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth().clickable { navController.navigate("admin_manage_activity_images") }
                 ) {
@@ -192,8 +192,7 @@ fun AdminGymSettingsScreen(
                 Spacer(modifier = Modifier.height(32.dp))
 
                 // Preview Section
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+                GlassCard(
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {

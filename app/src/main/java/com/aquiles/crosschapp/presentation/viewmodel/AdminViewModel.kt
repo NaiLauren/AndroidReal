@@ -315,6 +315,88 @@ class AdminViewModel : ViewModel() {
 
     fun clearScheduleOperationMessage() { _scheduleOperationState.value = null }
 
+    // --- WEEKLY SCHEDULE TEMPLATE (Smart Scheduling) ---
+
+    // Map: DayOfWeek (1=Sun, 2=Mon...) -> List of Strings ("08:00")
+    private val _weeklyScheduleState = MutableStateFlow<Map<Int, List<String>>>(emptyMap())
+    val weeklyScheduleState = _weeklyScheduleState.asStateFlow()
+
+    fun loadWeeklyScheduleTemplate() {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            try {
+                val doc = firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("weekly_schedule_template")
+                    .get().await()
+
+                if (doc.exists()) {
+                    val data = doc.data ?: emptyMap()
+                    // Convert Map<String, Any> to Map<Int, List<String>>
+                    // Firestore keys are Strings. We assume keys are "1", "2", ... "7"
+                    // Values should be List<String>
+                    val result = mutableMapOf<Int, List<String>>()
+                    data.forEach { (key, value) ->
+                        val dayInt = key.toIntOrNull()
+                        val timesList = (value as? List<*>)?.filterIsInstance<String>()
+                        if (dayInt != null && timesList != null) {
+                            result[dayInt] = timesList.sorted()
+                        }
+                    }
+                    _weeklyScheduleState.value = result
+                } else {
+                    _weeklyScheduleState.value = emptyMap()
+                }
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error loading weekly template", e)
+                _weeklyScheduleState.value = emptyMap()
+            }
+        }
+    }
+
+    fun saveTimeForDay(day: Int, time: String) {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            try {
+                // Key is string "1", "2", etc.
+                val docRef = firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("weekly_schedule_template")
+
+                val updateMap = mapOf(
+                    day.toString() to FieldValue.arrayUnion(time)
+                )
+                // Set with merge ensures document exists and we update only that field
+                docRef.set(updateMap, SetOptions.merge()).await()
+                
+                _scheduleOperationState.value = "Horario semanal añadido."
+                loadWeeklyScheduleTemplate()
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error saving time for day $day", e)
+                _scheduleOperationState.value = "Error: ${e.message}"
+            }
+        }
+    }
+
+    fun removeTimeFromDay(day: Int, time: String) {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            try {
+                val docRef = firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("weekly_schedule_template")
+
+                val updateMap = mapOf(
+                    day.toString() to FieldValue.arrayRemove(time)
+                )
+                docRef.update(updateMap).await()
+                
+                _scheduleOperationState.value = "Horario eliminado."
+                loadWeeklyScheduleTemplate()
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error removing time from day $day", e)
+                _scheduleOperationState.value = "Error: ${e.message}"
+            }
+        }
+    }
+
 
     // =================================================================
     // 2. GESTIÓN DE WODS Y CLASES (BATCH)
@@ -387,6 +469,7 @@ class AdminViewModel : ViewModel() {
                             maxCapacity = maxCapacity,
                             coachName = coachName,
                             wodId = newWodId,
+                            wodScoreType = if (isWodType) wodScoreType else null,
                             classType = if (isWodType) "WOD" else "Other",
                             hexColor = if (isWodType) wodColor else otherColor,
                             enrolledUserIds = emptyList()
@@ -400,6 +483,182 @@ class AdminViewModel : ViewModel() {
                 loadFutureClasses()
             } catch (e: Exception) {
                 _classOperationState.value = ClassOperationState.Error("Error: ${e.message}")
+            }
+        }
+    }
+
+    // =================================================================
+    // 2.1 SMART MONTH GENERATION (NUEVO)
+    // =================================================================
+
+    data class GenerationPreview(
+        val startDate: Date,
+        val endDate: Date,
+        val totalNewClasses: Int,
+        val existingClassesCount: Int,
+        val conflicts: List<Date> = emptyList()
+    )
+
+    private val _generationPreviewState = MutableStateFlow<GenerationPreview?>(null)
+    val generationPreviewState = _generationPreviewState.asStateFlow()
+
+    private val _generationStatusState = MutableStateFlow<String?>(null)
+    val generationStatusState = _generationStatusState.asStateFlow()
+
+    fun clearGenerationState() {
+        _generationPreviewState.value = null
+        _generationStatusState.value = null
+    }
+
+    /**
+     * Preview month generation with custom date range
+     * @param startDate Starting date for class generation (inclusive)
+     * @param endDate Ending date for class generation (inclusive)
+     */
+    fun previewMonthGeneration(startDate: Date, endDate: Date) {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            
+            // Validate date range
+            if (endDate.before(startDate) || endDate == startDate) {
+                _generationStatusState.value = "Error: La fecha fin debe ser posterior a la fecha inicio"
+                return@launch
+            }
+            
+            _generationStatusState.value = "Calculando..."
+
+            // 1. Calculate Theoretical Classes based on Template
+            var totalNew = 0
+            val weeklyMap = _weeklyScheduleState.value
+            
+            val tempCal = Calendar.getInstance()
+            tempCal.time = startDate
+            
+            while (tempCal.time.before(endDate)) {
+                val day = tempCal.get(Calendar.DAY_OF_WEEK)
+                val times = weeklyMap[day] ?: emptyList()
+                totalNew += times.size
+                tempCal.add(Calendar.DAY_OF_YEAR, 1)
+            }
+
+            // 2. Check Existing Classes in Range
+            try {
+                val snapshot = firestore.collection("gymClasses")
+                    .whereEqualTo("gym_id", gymId)
+                    .whereGreaterThanOrEqualTo("dateTime", startDate)
+                    .whereLessThan("dateTime", endDate)
+                    .get().await()
+                
+                val existingCount = snapshot.size()
+
+                _generationPreviewState.value = GenerationPreview(
+                    startDate = startDate,
+                    endDate = endDate,
+                    totalNewClasses = totalNew,
+                    existingClassesCount = existingCount
+                )
+                _generationStatusState.value = null // Ready for UI to show dialog
+
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error previewing generation", e)
+                _generationStatusState.value = "Error al calcular vista previa."
+            }
+        }
+    }
+
+    enum class GenerationMode {
+        APPEND, OVERWRITE
+    }
+
+    fun executeGeneration(mode: GenerationMode) {
+        val preview = _generationPreviewState.value ?: return
+        val gymId = currentUserGymId ?: return
+        
+        viewModelScope.launch {
+            _generationStatusState.value = "Generando..."
+            val batchLimit = 500
+            var batch = firestore.batch()
+            var operationCount = 0
+
+            try {
+                // 1. Handle Overwrite (Delete existing first)
+                if (mode == GenerationMode.OVERWRITE && preview.existingClassesCount > 0) {
+                     val existingDocs = firestore.collection("gymClasses")
+                        .whereEqualTo("gym_id", gymId)
+                        .whereGreaterThanOrEqualTo("dateTime", preview.startDate)
+                        .whereLessThan("dateTime", preview.endDate)
+                        .get().await()
+                    
+                    for (doc in existingDocs) {
+                        batch.delete(doc.reference)
+                        operationCount++
+                        if (operationCount >= batchLimit) {
+                            batch.commit().await()
+                            batch = firestore.batch()
+                            operationCount = 0
+                        }
+                    }
+                }
+
+                // 2. Generate New Classes
+                val tempCal = Calendar.getInstance()
+                tempCal.time = preview.startDate
+                val endCal = Calendar.getInstance()
+                endCal.time = preview.endDate // Loop until this date
+
+                val weeklyMap = _weeklyScheduleState.value
+
+                while (tempCal.time.before(endCal.time) || tempCal.time == endCal.time) { // Inclusive? implementation plan said < endDate. Let's stick to strict < 
+                       if (tempCal.time.after(preview.endDate)) break
+                       
+                       val dayOfWeek = tempCal.get(Calendar.DAY_OF_WEEK)
+                       val times = weeklyMap[dayOfWeek] ?: emptyList()
+
+                       for (timeStr in times) {
+                           val parts = timeStr.split(":")
+                           if (parts.size == 2) {
+                               val classCal = tempCal.clone() as Calendar
+                               classCal.set(Calendar.HOUR_OF_DAY, parts[0].toInt())
+                               classCal.set(Calendar.MINUTE, parts[1].toInt())
+                               classCal.set(Calendar.SECOND, 0)
+                               
+                               val newRef = firestore.collection("gymClasses").document()
+                               val newClass = GymClass(
+                                   documentId = newRef.id,
+                                   gym_id = gymId,
+                                   name = "WOD", // Default name
+                                   description = "Clase Generada Automáticamente",
+                                   dateTime = classCal.time,
+                                   durationMinutes = 60,
+                                   maxCapacity = 15, // Default capacity
+                                   coachName = "Coach", // Default coach
+                                   classType = "WOD",
+                                   hexColor = "#FC5200",
+                                   enrolledUserIds = emptyList()
+                               )
+                               batch.set(newRef, newClass)
+                               operationCount++
+                               
+                               if (operationCount >= batchLimit) {
+                                   batch.commit().await()
+                                   batch = firestore.batch()
+                                   operationCount = 0
+                               }
+                           }
+                       }
+                       tempCal.add(Calendar.DAY_OF_YEAR, 1)
+                }
+
+                if (operationCount > 0) {
+                    batch.commit().await()
+                }
+
+                _generationStatusState.value = "Generación Exitosa."
+                loadFutureClasses() // Refresh list
+
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error executing generation", e)
+                _generationStatusState.value = "Error: ${e.message}"
             }
         }
     }
@@ -1155,6 +1414,7 @@ class AdminViewModel : ViewModel() {
                     "description" to if (isWodType) wodDesc else otherDesc,
                     "coachName" to coach, "durationMinutes" to duration, "maxCapacity" to capacity,
                     "classType" to if (isWodType) "WOD" else "Other",
+                    "wodScoreType" to if (isWodType) scoreType else null,
                     "hexColor" to hexColor, "dateTime" to Timestamp(date)
                 )
                 if(!isWodType) updates["wodId"] = null
@@ -1200,9 +1460,37 @@ class AdminViewModel : ViewModel() {
             val gymId = currentUserGymId ?: return@launch
             _benchmarkWodsState.value = BenchmarkWodsState.Loading
             try {
-                val snap = firestore.collection("benchmark_wods").whereEqualTo("gym_id", gymId).orderBy("name").get().await()
-                _benchmarkWodsState.value = BenchmarkWodsState.Success(snap.toObjects(BenchmarkWod::class.java))
-            } catch (e: Exception) { _benchmarkWodsState.value = BenchmarkWodsState.Error(e.message ?: "Error") }
+                // 1. Cargar benchmarks locales
+                val localSnap = firestore.collection("benchmark_wods")
+                    .whereEqualTo("gym_id", gymId)
+                    .orderBy("name")
+                    .get().await()
+                val local = localSnap.toObjects(BenchmarkWod::class.java)
+                
+                // 2. Cargar benchmarks globales
+                val globalSnap = firestore.collection("benchmark_wods")
+                    .whereEqualTo("gym_id", "")
+                    .get().await()
+                val allGlobal = globalSnap.toObjects(BenchmarkWod::class.java)
+                
+                // 🆕 FILTRAR por allowedGymIds
+                val global = allGlobal.filter { benchmark ->
+                    val allowedIds = benchmark.allowedGymIds
+                    if (!allowedIds.isNullOrEmpty()) {
+                        // Si tiene allowedGymIds, verificar que contenga el gymId actual
+                        allowedIds.contains(gymId)
+                    } else {
+                        // Si es null o vacío, disponible para todos
+                        true
+                    }
+                }
+                
+                // 3. Merge y ordenar
+                val all = (local + global).sortedBy { it.name }
+                _benchmarkWodsState.value = BenchmarkWodsState.Success(all)
+            } catch (e: Exception) { 
+                _benchmarkWodsState.value = BenchmarkWodsState.Error(e.message ?: "Error") 
+            }
         }
     }
     fun saveBenchmark(bench: BenchmarkWod) {
@@ -1562,6 +1850,30 @@ class AdminViewModel : ViewModel() {
                 }
             }
         }
+    }
+    
+    // =================================================================
+    // 7. CIERRE DIARIO (PARIDAD IOS)
+    // =================================================================
+    
+    fun checkAndCloseYesterday() {
+        viewModelScope.launch {
+            // TODO: Implementar lógica completa de cierre diario
+            // Por ahora solo logueamos para cumplir con la llamada de la UI
+            Log.d("AdminViewModel", "Checking daily closing status (Placeholder)")
+            
+            val gymId = currentUserGymId ?: return@launch
+            
+            // Aquí iría la lógica para verificar si lastDailyClosing < yesterday
+            // y ejecutar el cierre si corresponde.
+        }
+    }
+    
+    fun loadPendingRequests() {
+        // Esta función es redundante si ya tenemos el listener en init, 
+        // pero la UI la llama en LaunchedEffect para asegurar actualización.
+        // Podemos simplemente loguear o refrescar si fuera necesario manual.
+        Log.d("AdminViewModel", "Load pending requests triggered manually")
     }
 
     override fun onCleared() {

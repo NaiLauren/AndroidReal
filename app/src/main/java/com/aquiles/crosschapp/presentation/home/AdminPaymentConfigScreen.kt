@@ -1,5 +1,6 @@
 package com.aquiles.crosschapp.presentation.home
 
+import com.aquiles.crosschapp.presentation.components.GlassCard
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -28,6 +29,7 @@ private val ColorBackground = Color(0xFF121212)
 private val ColorSurface = Color(0xFF1E1E1E)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.Gray
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,10 +82,10 @@ fun AdminPaymentConfigScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Volver", tint = ColorTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = ColorBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        containerColor = ColorBackground
+        containerColor = Color.Transparent
     ) { padding ->
         Box(modifier = Modifier
             .fillMaxSize()
@@ -97,8 +99,7 @@ fun AdminPaymentConfigScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // Tarjeta de Información
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = ColorSurface),
+                GlassCard(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -129,8 +130,8 @@ fun AdminPaymentConfigScreen(
                             .height(150.dp),
                         placeholder = { Text("Ej: Banco Galicia\nCBU: 000000...\nAlias: MI.GIMNASIO", color = Color.Gray) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = ColorSurface,
-                            unfocusedContainerColor = ColorSurface,
+                            focusedContainerColor = ColorGlassSurface,
+                            unfocusedContainerColor = ColorGlassSurface,
                             focusedTextColor = ColorTextPrimary,
                             unfocusedTextColor = ColorTextPrimary,
                             cursorColor = ColorPrimaryAction,
@@ -153,8 +154,8 @@ fun AdminPaymentConfigScreen(
                             .height(150.dp),
                         placeholder = { Text("Ej: Enviar dinero a...\nCVU: 0000...\nAlias: mp.gimnasio", color = Color.Gray) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = ColorSurface,
-                            unfocusedContainerColor = ColorSurface,
+                            focusedContainerColor = ColorGlassSurface,
+                            unfocusedContainerColor = ColorGlassSurface,
                             focusedTextColor = ColorTextPrimary,
                             unfocusedTextColor = ColorTextPrimary,
                             cursorColor = ColorPrimaryAction,

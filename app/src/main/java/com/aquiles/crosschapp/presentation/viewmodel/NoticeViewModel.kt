@@ -11,6 +11,7 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.Date
 
 class NoticeViewModel : ViewModel() {
@@ -32,7 +33,7 @@ class NoticeViewModel : ViewModel() {
 
         android.util.Log.d("NoticeViewModel", "Loading notices for gym: ${user.gym_id}")
 
-        // iOS path: /gyms/{gymId}/news
+            // iOS path: /gyms/{gymId}/news
         firestore.collection("gyms")
             .document(user.gym_id)
             .collection("news")
@@ -55,7 +56,7 @@ class NoticeViewModel : ViewModel() {
                 
                 android.util.Log.d("NoticeViewModel", "Deserialized ${items.size} notices")
                 items.forEach { notice ->
-                    android.util.Log.d("NoticeViewModel", "Notice: id=${notice.id}, title=${notice.title}, imageUrl=${notice.imageUrl}, type=${notice.type}, priority=${notice.priority}")
+                    android.util.Log.d("NoticeViewModel", "Notice: id=${notice.id}, title=${notice.title}, imageUrl=${notice.imageUrl}, type=${notice.type}, priority=${notice.priority}, createdAt=${notice.createdAt}")
                 }
                 
                 // Filtrar expirados localmente para asegurar (si aplica)
@@ -69,31 +70,40 @@ class NoticeViewModel : ViewModel() {
             }
     }
 
-    fun createNotice(
+    suspend fun createNotice(
         title: String?,
         imageUrl: String,
-        message: String = "" // Optional message, defaults to empty for iOS compatibility
+        message: String = "" 
     ) {
         val user = UserSession.currentUser.value ?: return
 
-        val newDocRef = firestore.collection("gyms")
-            .document(user.gym_id)
-            .collection("news")
-            .document()
+        try {
+            android.util.Log.d("NoticeViewModel", "Creating notice for user ${user.id} in gym ${user.gym_id}")
             
-        val notice = GymNotice(
-            id = newDocRef.id,
-            gymId = user.gym_id,
-            title = title,
-            message = message,
-            imageUrl = imageUrl,
-            authorId = user.id,
-            authorName = user.name,
-            isActive = true
-            // type, priority, expiresAt remain null (iOS-style)
-        )
+            val newDocRef = firestore.collection("gyms")
+                .document(user.gym_id)
+                .collection("news")
+                .document()
+            
+            val notice = GymNotice(
+                id = newDocRef.id,
+                gymId = user.gym_id,
+                title = title,
+                message = message,
+                imageUrl = imageUrl,
+                authorId = user.id,
+                authorName = user.name,
+                isActive = true,
+                createdAt = Timestamp.now()
+            )
 
-        newDocRef.set(notice)
+            newDocRef.set(notice).await()
+            android.util.Log.d("NoticeViewModel", "Notice created successfully: ${newDocRef.id}")
+            
+        } catch (e: Exception) {
+            android.util.Log.e("NoticeViewModel", "Error creating notice", e)
+            throw e // Re-throw to be caught by UI
+        }
     }
 
     fun deleteNotice(noticeId: String) {

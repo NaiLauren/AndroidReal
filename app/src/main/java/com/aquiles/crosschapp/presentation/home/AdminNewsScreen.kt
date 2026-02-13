@@ -31,6 +31,7 @@ import com.aquiles.crosschapp.data.model.GymNotice
 import com.aquiles.crosschapp.presentation.viewmodel.NoticeViewModel
 import java.text.SimpleDateFormat // Consider java.time for new code, but SimpleDateFormat is common in legacy
 import java.util.Locale
+import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS (Reused for consistency) ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
@@ -58,7 +59,7 @@ fun AdminNewsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f)) // Overlay dim
+            // .background(Color.Black.copy(alpha = 0.4f)) // Removed to show AppBackground
     ) {
         Scaffold(
             topBar = {
@@ -95,17 +96,21 @@ fun AdminNewsScreen(
             ) {
                 if (notices.isEmpty() && !isLoading) {
                     item {
-                        Box(
+                        GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
+                                .padding(32.dp)
                         ) {
-                            Text(
-                                "No hay avisos publicados.",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = ColorTextSecondary
-                            )
+                            Box(
+                                modifier = Modifier.padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "No hay avisos publicados.",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = ColorTextSecondary
+                                )
+                            }
                         }
                     }
                 } else {
@@ -161,11 +166,9 @@ fun AdminNoticeItem(
         )
     }
 
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-        border = BorderStroke(1.dp, ColorBorder)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
