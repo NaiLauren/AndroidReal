@@ -7,19 +7,26 @@ import com.google.firebase.firestore.ServerTimestamp
 
 data class GymNotice(
     @DocumentId val id: String = "",
-    @get:PropertyName("gym_id") val gymId: String = "",
+    @PropertyName("gym_id") val gymId: String = "",
     val title: String? = null, // iOS compatible - can be null
     val message: String = "", // Default empty for iOS docs (iOS doesn't have this field)
-    val imageUrl: String = "",
-    val type: NoticeType? = null, // Nullable - iOS doesn't have this
-    val priority: NoticePriority? = null, // Nullable - iOS doesn't have this
-    val authorId: String = "", // Default empty - iOS doesn't have this
-    val authorName: String = "", // Default empty - iOS doesn't have this
+    @PropertyName("image_url") val imageUrl: String = "",
+    @PropertyName("imageUrl") val imageUrlLegacy: String = "", // Fallback for iOS camelCase
+    val type: NoticeType? = null,
+    val priority: NoticePriority? = null,
+    @PropertyName("author_id") val authorId: String = "",
+    @PropertyName("author_name") val authorName: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     val expiresAt: Timestamp? = null,
-    @get:PropertyName("isActive") val isActive: Boolean = true,
+    @PropertyName("isActive") val isActive: Boolean = true,
     val viewCount: Int = 0 // Default 0 - iOS doesn't have this
-)
+) {
+    // Helper to get the actual image URL regardless of field name
+    val actualImageUrl: String
+        get() {
+             return if (imageUrl.isNotBlank()) imageUrl else imageUrlLegacy
+        }
+}
 
 enum class NoticeType {
     GENERAL,

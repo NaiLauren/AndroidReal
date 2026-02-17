@@ -48,15 +48,20 @@ fun PodiumCard(
     // GlassCard acts as container
     GlassCard(
         modifier = Modifier.width(size)
-        // .border logic could be added here if GlassCard supported it, or via wrapper.
-        // For now, let's just use GlassCard style. Or maybe wrap content.
     ) {
          Box(modifier = Modifier.matchParentSize().border(2.dp, borderBrush, RoundedCornerShape(20.dp))) // Add border manually inside
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            // Centering the column in the box. 
+            // Since GlassCard is a Box, we can use align modifier on the direct child if it was a BoxScope, 
+            // but here we just ensure the Column fills width or we wrap it in a Box with Center alignment.
+            // Simplest is to make Column fill width and centering is already set horizontally.
+            // To center vertically as well:
+            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+            modifier = Modifier
+                .fillMaxSize() 
+                .padding(12.dp)
         ) {
             // Medalla emoji
             val medalEmoji = when (position) {

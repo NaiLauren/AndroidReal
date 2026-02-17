@@ -37,7 +37,6 @@ class NoticeViewModel : ViewModel() {
         firestore.collection("gyms")
             .document(user.gym_id)
             .collection("news")
-            .whereEqualTo("isActive", true)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .limit(10)
             .addSnapshotListener { snapshot, error ->
@@ -56,7 +55,7 @@ class NoticeViewModel : ViewModel() {
                 
                 android.util.Log.d("NoticeViewModel", "Deserialized ${items.size} notices")
                 items.forEach { notice ->
-                    android.util.Log.d("NoticeViewModel", "Notice: id=${notice.id}, title=${notice.title}, imageUrl=${notice.imageUrl}, type=${notice.type}, priority=${notice.priority}, createdAt=${notice.createdAt}")
+                    android.util.Log.d("NoticeViewModel", "Notice: id=${notice.id}, title=${notice.title}, imageUrl='${notice.imageUrl}', legacy='${notice.imageUrlLegacy}', ACTUAL='${notice.actualImageUrl}'")
                 }
                 
                 // Filtrar expirados localmente para asegurar (si aplica)

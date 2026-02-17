@@ -2,6 +2,8 @@ package com.aquiles.crosschapp.presentation.messages
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +19,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
@@ -90,7 +93,7 @@ fun MessageArchiveScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             items(state.messages, key = { it.id }) { message ->
-                                GlassMessageItemCard(
+                                MessageBubble(
                                     message = message,
                                     onDeleteClick = { viewModel.deleteMessage(message.id) }
                                 )
@@ -104,83 +107,90 @@ fun MessageArchiveScreen(
 }
 
 @Composable
-fun GlassMessageItemCard(
+fun MessageBubble(
     message: PersonalMessage,
     onDeleteClick: () -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
+    val isFromCurrentUser = false // Read-only archive, mostly received.
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalAlignment = if (isFromCurrentUser) Alignment.End else Alignment.Start
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
+        // Sender Name (only if not from me)
+        if (!isFromCurrentUser) {
+            Text(
+                text = message.sender_name,
+                style = MaterialTheme.typography.labelSmall,
+                color = ColorTextSecondary,
+                modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .clip(
+                    RoundedCornerShape(
+                        topStart = 16.dp,
+                        topEnd = 16.dp,
+                        bottomEnd = 16.dp,
+                        bottomStart = 4.dp
+                    )
+                )
+                .background(ColorGlassSurface)
+                .border(1.dp, ColorBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp))
+                .padding(12.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = message.sender_name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorTextPrimary
-                    )
-                    Text(
-                        text = formatTimestamp(message.timestamp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ColorTextSecondary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Content
+            Column {
                 if (message.content.isNotBlank()) {
                     Text(
                         text = message.content,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = ColorTextPrimary.copy(alpha = 0.9f),
-                        lineHeight = 20.sp
+                        color = ColorTextPrimary
                     )
                 }
 
-                // Attachment Button
                 if (!message.attachmentUrl.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = { uriHandler.openUri(message.attachmentUrl) },
                         modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.dp, ColorBorder),
+                        border = BorderStroke(1.dp, ColorPrimaryAction.copy(alpha = 0.5f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorPrimaryAction),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Icon(Icons.Default.Attachment, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Ver Adjunto", style = MaterialTheme.typography.labelLarge)
+                        Text("Ver Adjunto", style = MaterialTheme.typography.labelSmall)
                     }
                 }
-            }
-
-            // Delete Button
-            Spacer(modifier = Modifier.width(8.dp))
-            IconButton(
-                onClick = onDeleteClick,
-                modifier = Modifier.size(24.dp) // Botón pequeño
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Borrar",
-                    tint = ColorError.copy(alpha = 0.6f),
-                    modifier = Modifier.size(20.dp)
-                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.align(Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = formatTimestamp(message.timestamp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ColorTextSecondary.copy(alpha = 0.6f),
+                        fontSize = 10.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Borrar",
+                        tint = ColorError.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .size(14.dp)
+                            .clickable { onDeleteClick() }
+                    )
+                }
             }
         }
     }

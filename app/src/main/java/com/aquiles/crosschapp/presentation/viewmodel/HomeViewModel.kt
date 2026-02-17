@@ -47,8 +47,13 @@ class HomeViewModel : ViewModel() {
 
     private val _userClasses = MutableStateFlow<List<com.aquiles.crosschapp.data.model.GymClass>>(emptyList())
     val userClasses: StateFlow<List<com.aquiles.crosschapp.data.model.GymClass>> = _userClasses.asStateFlow()
+    
+    // Competitions
+    private val _activeCompetitions = MutableStateFlow<List<com.aquiles.crosschapp.data.model.Competition>>(emptyList())
+    val activeCompetitions: StateFlow<List<com.aquiles.crosschapp.data.model.Competition>> = _activeCompetitions.asStateFlow()
 
     private var classesJob: Job? = null
+    private var competitionsJob: Job? = null
 
     init {
         Log.d(TAG, "ViewModel inicializado.")
@@ -57,9 +62,11 @@ class HomeViewModel : ViewModel() {
                 Log.d(TAG, "Observando sesión. El usuario es: ${user?.id} en gym: ${user?.gym_id}")
                 if (user != null && user.gym_id.isNotBlank()) {
                     Log.d(TAG, "Usuario VÁLIDO detectado. Iniciando listeners...")
+                    Log.d(TAG, "Usuario VÁLIDO detectado. Iniciando listeners...")
                     listenForUnreadNotifications(user.id, user.gym_id)
                     listenForPersonalMessage(user.id, user.gym_id)
                     listenForUserClasses(user.id, user.gym_id)
+                    listenForActiveCompetitions(user.gym_id)
                 } else {
                     Log.d(TAG, "Usuario NULO o inválido. Limpiando listeners y estado.")
                     clearListenersAndSetEmptyState()
@@ -167,9 +174,36 @@ class HomeViewModel : ViewModel() {
         notificationsJob?.cancel()
         personalMessageJob?.cancel()
         classesJob?.cancel()
+        competitionsJob?.cancel()
         _notificationsState.value = NotificationsState.Success(emptyList())
         _personalMessageState.value = PersonalMessageState.Empty
         _userClasses.value = emptyList()
+    }
+
+    private fun listenForActiveCompetitions(gymId: String) {
+        competitionsJob?.cancel()
+        competitionsJob = viewModelScope.launch {
+            com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("competitions")
+                .whereEqualTo("gym_id", gymId)
+                .whereEqualTo("isActive", true)
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        Log.e(TAG, "Error listening for competitions", e)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot != null) {
+                        val comps = snapshot.toObjects(com.aquiles.crosschapp.data.model.Competition::class.java)
+                        val validComps = comps.filter { 
+                            val now = java.util.Date()
+                            val end = it.endDate ?: now
+                            end.after(now) || end == now
+                        }.sortedBy { it.endDate }
+                        
+                        _activeCompetitions.value = validComps
+                    }
+                }
+        }
     }
 
     override fun onCleared() {

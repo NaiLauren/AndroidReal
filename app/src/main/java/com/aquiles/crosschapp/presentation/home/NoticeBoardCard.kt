@@ -54,12 +54,13 @@ fun NoticeBoardCard(
             .padding(vertical = 8.dp)
             .height(260.dp) // Fixed height for immersive look
     ) {
-        val hasImage = !notice.imageUrl.isNullOrEmpty()
+        val imageUrl = notice.actualImageUrl
+        val hasImage = imageUrl.isNotBlank()
 
         // 1. Background Image (if exists)
         if (hasImage) {
              AsyncImage(
-                model = notice.imageUrl,
+                model = imageUrl,
                 contentDescription = null,
                 modifier = Modifier.matchParentSize(),
                 contentScale = ContentScale.Crop

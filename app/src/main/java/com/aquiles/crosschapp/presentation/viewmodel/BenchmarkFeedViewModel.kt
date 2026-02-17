@@ -194,12 +194,60 @@ class BenchmarkFeedViewModel : ViewModel() {
 
     fun setWodFilter(wodName: String?) {
         _selectedWodFilter.value = wodName
-        applyFilters()
+        
+        // Si estamos en Records y se seleccionó un WOD específico, cargar RANKING REAL
+        if (_currentTab.value == FeedTab.RECORDS && wodName != null) {
+            loadRankingForBenchmark(wodName)
+        } else if (_currentTab.value == FeedTab.RECORDS && wodName == null) {
+            // Si se deselecciona, volver al feed general (actividad reciente)
+            loadFeed()
+        } else {
+            applyFilters()
+        }
     }
     
     fun toggleSortOrder() {
         _isSortAscending.value = !_isSortAscending.value
         applyFilters()
+    }
+    
+    private fun loadRankingForBenchmark(benchmarkName: String) {
+        val currentUser = UserSession.currentUser.value ?: return
+        if (currentUser.gym_id.isBlank()) return
+
+        listenerRegistration?.remove()
+        _feedState.value = FeedState.Loading
+        
+        // Para un Ranking real, necesitamos TRAER TODOS (o muchos) resultados de ese benchmark
+        // No podemos limitar por fecha porque el mejor timestamp puede ser antiguo.
+        // Limitamos a 200 por seguridad de rendimiento, idealmente paginado o query ordenado por score.
+        // Nota: Ordenar por 'numericScore' en Firestore requiere saber si es ASC o DESC de antemano.
+        // Por simplicidad y robustez híbrida: Traemos los últimos 200 (o mejores si pudiéramos) y ordenamos en memoria.
+        
+        listenerRegistration = firestore.collection("benchmark_results")
+            .whereEqualTo("gym_id", currentUser.gym_id)
+            .whereEqualTo("benchmarkName", benchmarkName)
+            .limit(200) 
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    _feedState.value = FeedState.Error("Error cargando ranking")
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val items = snapshot.toObjects(BenchmarkResult::class.java)
+                    _allFeedItems.value = items
+                    
+                    // Asegurar que el filtro WOD esté aplicado (redundante pero seguro)
+                    // _selectedWodFilter.value = benchmarkName 
+                    
+                    // Aplicar filtros (que hará el sort correcto en memoria)
+                    applyFilters()
+                    
+                    // Emitir estado
+                    _feedState.value = FeedState.Success(items)
+                }
+            }
     }
 
     private fun applyFilters() {

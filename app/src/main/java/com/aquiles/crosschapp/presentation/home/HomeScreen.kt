@@ -3,6 +3,7 @@ package com.aquiles.crosschapp.presentation.home
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -43,7 +44,6 @@ import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import com.aquiles.crosschapp.presentation.viewmodel.FeedTab
 import com.aquiles.crosschapp.presentation.viewmodel.FeedUiItem
-import com.aquiles.crosschapp.presentation.home.BenchmarkFeedItem as SocialFeedItem // Alias for clarity
 import com.aquiles.crosschapp.presentation.viewmodel.NoticeViewModel
 import com.aquiles.crosschapp.data.model.GymNotice
 import com.aquiles.crosschapp.presentation.components.GlassCard
@@ -66,14 +66,16 @@ fun HomeScreen(
     performanceViewModel: PerformanceViewModel = viewModel(),
     onNavigateToNotifications: () -> Unit,
     onNavigateToMessageArchive: () -> Unit,
-    onNavigateToCreateNotice: () -> Unit
+    onNavigateToCreateNotice: () -> Unit,
+    onNavigateToCompetition: (String) -> Unit
 ) {
     val currentUser by UserSession.currentUser.collectAsState()
     val notificationsState by homeViewModel.notificationsState.collectAsState()
     val pendingRequestsCount by adminViewModel.pendingRequestsCount.collectAsState()
     val personalMessageState by homeViewModel.personalMessageState.collectAsState()
     val notices by noticeViewModel.notices.collectAsState()
-
+    val activeCompetitions by homeViewModel.activeCompetitions.collectAsState()
+    
     val userClasses by homeViewModel.userClasses.collectAsState()
 
     // --- DYNAMIC THEMING ---
@@ -108,7 +110,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            .background(Color.Black.copy(alpha = 0.1f))
     ) {
         CompositionLocalProvider(LocalPrimaryColor provides primaryColor) {
             Scaffold(
@@ -195,7 +197,9 @@ fun HomeScreen(
                         selectedWodFilter = selectedWodFilter,
                         onWodFilterSelected = { benchmarkFeedViewModel.setWodFilter(it) },
                         onToggleSort = { benchmarkFeedViewModel.toggleSortOrder() },
-                        sortCriteria = sortCriteria
+                        sortCriteria = sortCriteria,
+                        activeCompetitions = activeCompetitions,
+                        onNavigateToCompetition = onNavigateToCompetition
                     )
                 }
             }
@@ -222,7 +226,9 @@ private fun HomeScreenContent(
     selectedWodFilter: String? = null,
     onWodFilterSelected: (String?) -> Unit = {},
     onToggleSort: () -> Unit = {},
-    sortCriteria: String? = null
+    sortCriteria: String? = null,
+    activeCompetitions: List<com.aquiles.crosschapp.data.model.Competition> = emptyList(),
+    onNavigateToCompetition: (String) -> Unit = {}
 ) {
     var showRulesDialog by remember { mutableStateOf(false) }
     
@@ -254,6 +260,17 @@ private fun HomeScreenContent(
             }
         }
 
+        // 1.8 ACTIVE COMPETITIONS
+        if (activeCompetitions.isNotEmpty()) {
+            item {
+                FeaturedCompetitionsRow(
+                    competitions = activeCompetitions,
+                    onCompetitionClick = onNavigateToCompetition
+                )
+            }
+        }
+
+
         // 2. NEWS CAROUSEL (Muro del Inicio)
         if (notices.isNotEmpty()) {
             item {
@@ -272,84 +289,78 @@ private fun HomeScreenContent(
             }
         }
 
-        // 3. TABS (Hoy / Récords)
+        // 3. UNIFIED FEED CARD (Tabs + Content)
         item {
-            // Segmented Control Style
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .background(ColorGlassSurface, CircleShape)
-                    .padding(4.dp)
+            GlassCard(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             ) {
-                Row(modifier = Modifier.fillMaxSize()) {
-                    listOf(FeedTab.TODAY to "Hoy \uD83D\uDCC5", FeedTab.RECORDS to "Récords \uD83C\uDFC6").forEach { (tab, label) ->
-                        val isSelected = currentTab == tab
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(if (isSelected) LocalPrimaryColor.current else Color.Transparent)
-                                .clickable { onTabSelected(tab) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = label,
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            )
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // --- TABS (Integrated) ---
+                    // --- TABS (Integrated Segmented Control) ---
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.1f)) // More visible track
+                            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape) // Subtle border
+                            .padding(4.dp)
+                    ) {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            listOf(FeedTab.TODAY to "Hoy \uD83D\uDCC5", FeedTab.RECORDS to "Récords \uD83C\uDFC6").forEach { (tab, label) ->
+                                val isSelected = currentTab == tab
+                                val animatedColor by animateColorAsState(
+                                    targetValue = if (isSelected) LocalPrimaryColor.current else Color.Transparent,
+                                    label = "tabColor"
+                                )
+                                val textColor by animateColorAsState(
+                                    targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
+                                    label = "tabText"
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clip(CircleShape)
+                                        .background(animatedColor)
+                                        .clickable { 
+                                            // Feedback haptic or sound could go here
+                                            benchmarkFeedViewModel.setTab(tab) 
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = textColor,
+                                        style = MaterialTheme.typography.bodyLarge, // Slightly larger
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-            }
-        }
-        
-        // ========== FEED CONTENT ==========
 
-        // TAB HOY y RECORDS: Ambos muestran el Feed Social (Ranking/Resultados)
-        // La diferencia de qué items se muestran (solo hoy vs históricos/récords) la maneja el BenchmarkFeedViewModel
-        if (currentTab == FeedTab.TODAY || currentTab == FeedTab.RECORDS) {
-            item {
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // 1. HEADER & FILTERS
+                    // --- CONTENT AREA ---
+                    
+                    // A) IF RECORDS TAB -> Show Filters & Sort
+                    if (currentTab == FeedTab.RECORDS) {
+                         // Header & Chips
                         Column {
-                            // Header con Dropdown
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { /* TODO: Open Sheet */ }
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = selectedWodFilter ?: "Filtrar por Entrenamiento", // [User Req: WOD -> Entrenamiento]
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                
-                                // Sort Toggle
-                                Text(
-                                    text = sortCriteria ?: "Ordenar", 
-                                    color = LocalPrimaryColor.current, 
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.clickable { onToggleSort() }
-                                )
-                            }
+                            Text(
+                                text = selectedWodFilter ?: "Filtrar por Entrenamiento",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
                             
-                            // Chips Scrollable
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(vertical = 8.dp)
+                                contentPadding = PaddingValues(vertical = 4.dp)
                             ) {
                                 item {
                                     FilterChip(
@@ -370,144 +381,97 @@ private fun HomeScreenContent(
                             }
                         }
 
-                        // 2. FEED CONTENT
-                        when(feedState) {
-                            is FeedState.Loading -> {
-                                Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(color = LocalPrimaryColor.current)
-                                } 
-                            }
-                            is FeedState.Success -> {
-                                val allItems = (feedState as FeedState.Success).items
-                                
-                                if (allItems.isNotEmpty()) {
-                                    // Dropdown de Ejercicios (Inside Glass)
-                                    val availableBenchmarks by benchmarkFeedViewModel.availableBenchmarks.collectAsState()
-                                    var dropdownExpanded by remember { mutableStateOf(false) }
-                                    
-                                    if (availableBenchmarks.isNotEmpty()) {
-                                         Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { dropdownExpanded = true }
-                                                .padding(vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    text = selectedWodFilter ?: "Seleccionar Ejercicio",
-                                                    style = MaterialTheme.typography.headlineSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (selectedWodFilter != null) Color.White else ColorTextSecondary
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Icon(
-                                                    imageVector = if (dropdownExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                                    contentDescription = "Seleccionar ejercicio",
-                                                    tint = LocalPrimaryColor.current,
-                                                    modifier = Modifier.size(24.dp)
-                                                )
-                                            }
-                                        }
-                                        
-                                        // Dropdown Menu
-                                        DropdownMenu(
-                                            expanded = dropdownExpanded,
-                                            onDismissRequest = { dropdownExpanded = false },
-                                            modifier = Modifier.background(Color(0xFF2a2a2a))
-                                        ) {
-                                             DropdownMenuItem(
-                                                text = { Text("Todo (Feed completo)", color = if (selectedWodFilter == null) Color.White else ColorTextSecondary) },
-                                                onClick = { benchmarkFeedViewModel.setWodFilter(null); dropdownExpanded = false }
-                                             )
-                                             HorizontalDivider(color = Color.White.copy(0.1f))
-                                             availableBenchmarks.forEach { benchmark ->
-                                                 DropdownMenuItem(
-                                                     text = { Text(benchmark, color = if (benchmark == selectedWodFilter) Color.White else ColorTextSecondary) },
-                                                     onClick = { benchmarkFeedViewModel.setWodFilter(benchmark); dropdownExpanded = false }
-                                                 )
-                                             }
+                        // Sorting UI (Only valid if bench selected or items exist)
+                        AnimatedVisibility(visible = selectedWodFilter != null) {
+                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                sortCriteria?.let { criteria ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { benchmarkFeedViewModel.toggleSortOrder() }
+                                            .background(Brush.horizontalGradient(listOf(Color(0xFFFF6B35), Color(0xFFFFB340))), RoundedCornerShape(12.dp))
+                                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                                    ) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text("ORDENADO POR: ${criteria.replace("🏆 ", "").replace("⏱️ ", "")}", style = MaterialTheme.typography.labelMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                                            Icon(Icons.Default.SwapVert, null, tint = Color.White.copy(0.7f), modifier = Modifier.size(24.dp))
                                         }
                                     }
-                                    
-                                    // UI Premium del Ranking (Sort & Gender)
-                                    AnimatedVisibility(visible = selectedWodFilter != null) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            // Badge Sort
-                                            sortCriteria?.let { criteria ->
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clickable { benchmarkFeedViewModel.toggleSortOrder() }
-                                                        .background(Brush.horizontalGradient(listOf(Color(0xFFFF6B35), Color(0xFFFFB340))), RoundedCornerShape(12.dp))
-                                                        .padding(horizontal = 16.dp, vertical = 12.dp)
-                                                ) {
-                                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                        Text("ORDENADO POR: ${criteria.replace("🏆 ", "").replace("⏱️ ", "")}", style = MaterialTheme.typography.labelMedium, color = Color.White, fontWeight = FontWeight.Bold)
-                                                        Icon(Icons.Default.SwapVert, null, tint = Color.White.copy(0.7f), modifier = Modifier.size(24.dp))
-                                                    }
-                                                }
-                                            }
-                                            // Gender Chips
-                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                Text("Filtrar:", color = ColorTextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.CenterVertically))
-                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter(null) }, label = { Text("Todos") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == null) LocalPrimaryColor.current else Color.Transparent))
-                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("male") }, label = { Text("Hombre") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "male") LocalPrimaryColor.current else Color.Transparent))
-                                                SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("female") }, label = { Text("Mujer") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "female") LocalPrimaryColor.current else Color.Transparent))
-                                            }
-                                        }
-                                    }
-
-                                    // EMPTY STATE check
-                                    if (feedItems.isEmpty()) {
-                                        Text("No hay resultados.", style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
-                                    } else {
-                                        // LIST / PODIUM
-                                        if (selectedWodFilter != null && feedItems.size >= 3) {
-                                             // PODIUM ROW
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                                verticalAlignment = Alignment.Bottom
-                                            ) {
-                                                PodiumCard(feedItems[1], 2, MedalColor.Silver, false)
-                                                PodiumCard(feedItems[0], 1, MedalColor.Gold, true)
-                                                PodiumCard(feedItems[2], 3, MedalColor.Bronze, false)
-                                            }
-                                            // REMAINING LIST
-                                            if (feedItems.size > 3) {
-                                                feedItems.drop(3).forEach { feedItem ->
-                                                    SocialFeedItem(
-                                                        item = feedItem, 
-                                                        rankingPosition = feedItems.indexOf(feedItem) + 1,
-                                                        onLongClick = { if (user.isAdmin || user.role == "owner") benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified) }
-                                                    )
-                                                    Spacer(modifier = Modifier.height(12.dp))
-                                                }
-                                            }
-                                        } else {
-                                            // NORMAL LIST (No Podium)
-                                            feedItems.forEach { feedItem ->
-                                                 SocialFeedItem(
-                                                    item = feedItem, 
-                                                    rankingPosition = if(selectedWodFilter != null) feedItems.indexOf(feedItem) + 1 else null,
-                                                    onLongClick = { if (user.isAdmin || user.role == "owner") benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified) }
-                                                )
-                                                Spacer(modifier = Modifier.height(12.dp))
-                                            }
-                                        }
-                                    }
-
-                                } else {
-                                     Text("No hay resultados.", style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
+                                }
+                                // Gender Chips
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Filtrar:", color = ColorTextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.CenterVertically))
+                                    SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter(null) }, label = { Text("Todos") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == null) LocalPrimaryColor.current else Color.Transparent))
+                                    SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("male") }, label = { Text("Masculino") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "male") LocalPrimaryColor.current else Color.Transparent))
+                                    SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("female") }, label = { Text("Femenino") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "female") LocalPrimaryColor.current else Color.Transparent))
                                 }
                             }
-                            is FeedState.Error -> {
-                                Text((feedState as FeedState.Error).message, color = MaterialTheme.colorScheme.error)
-                            }
-                            else -> {}
                         }
+                    } 
+                    // B) IF TODAY TAB -> Just simple Title
+                    else {
+                         Text(
+                            text = "Actividad Reciente (Hoy)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    // --- FEED LIST ---
+                    when(feedState) {
+                        is FeedState.Loading -> {
+                            Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = LocalPrimaryColor.current)
+                            } 
+                        }
+                        is FeedState.Success -> {
+                            // Unified List from ViewModel (already filtered/sorted for current Tab)
+                            val displayItems = feedItems
+                            
+                            if (displayItems.isEmpty()) {
+                                Text("No hay resultados aún.", style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
+                            } else {
+                                // PODIUM ONLY FOR RECORDS TAB AND SPECIFIC WOD
+                                if (currentTab == FeedTab.RECORDS && selectedWodFilter != null && displayItems.size >= 3) {
+                                     // PODIUM LOGIC ...
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                        verticalAlignment = Alignment.Bottom
+                                    ) {
+                                        if (displayItems.size > 1) PodiumCard(displayItems[1], 2, MedalColor.Silver, false)
+                                        if (displayItems.isNotEmpty()) PodiumCard(displayItems[0], 1, MedalColor.Gold, true)
+                                        if (displayItems.size > 2) PodiumCard(displayItems[2], 3, MedalColor.Bronze, false)
+                                    }
+                                    if (displayItems.size > 3) {
+                                        displayItems.drop(3).forEach { feedItem ->
+                                            BenchmarkFeedItem(
+                                                item = feedItem, 
+                                                rankingPosition = displayItems.indexOf(feedItem) + 1,
+                                                onLongClick = { if (user.isAdmin || user.role == "owner") benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified) }
+                                            )
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                        }
+                                    }
+                                } else {
+                                    // STANDARD LIST (TODAY or RECORDS generic)
+                                    displayItems.forEach { feedItem ->
+                                         BenchmarkFeedItem(
+                                            item = feedItem, 
+                                            rankingPosition = if(currentTab == FeedTab.RECORDS && selectedWodFilter != null) displayItems.indexOf(feedItem) + 1 else null,
+                                            onLongClick = { if (user.isAdmin || user.role == "owner") benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified) }
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                    }
+                                }
+                            }
+
+                        }
+                        is FeedState.Error -> {
+                            Text((feedState as FeedState.Error).message, color = MaterialTheme.colorScheme.error)
+                        }
+                        else -> {}
                     }
                 }
             }

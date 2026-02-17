@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Shape
 
 // Colors mimicking iOS "Ultra Thin Material" Dark Mode
 private val GlassSurfaceStart = Color(0xFF252525).copy(alpha = 0.70f)
@@ -26,23 +27,33 @@ private val GlassBorderEnd = Color.White.copy(alpha = 0.05f)
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    shape: RoundedCornerShape = RoundedCornerShape(20.dp),
+    shape: Shape = RoundedCornerShape(20.dp),
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(GlassSurfaceStart, GlassSurfaceEnd)
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF2C2C2E).copy(alpha = 0.75f), // More opaque (frosted)
+                        Color(0xFF0C0C0C).copy(alpha = 0.90f)  // Darker and opaque
+                    ),
+                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                    end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                 ),
                 shape = shape
             )
             .border(
                 border = BorderStroke(
                     width = 1.dp,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(GlassBorderStart, GlassBorderEnd)
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.25f), // Stronger highlight top-left
+                            Color.White.copy(alpha = 0.05f)  // Subtle fade bottom-right
+                        ),
+                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                     )
                 ),
                 shape = shape
@@ -56,7 +67,7 @@ fun GlassCard(
 @Composable
 fun GlassCardSurface(
     modifier: Modifier = Modifier,
-    shape: RoundedCornerShape = RoundedCornerShape(20.dp),
+    shape: Shape = RoundedCornerShape(20.dp),
     content: @Composable () -> Unit
 ) {
     Card(
@@ -68,15 +79,25 @@ fun GlassCardSurface(
         Box(
             modifier = Modifier
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(GlassSurfaceStart, GlassSurfaceEnd)
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF2C2C2E).copy(alpha = 0.75f),
+                            Color(0xFF0C0C0C).copy(alpha = 0.90f)
+                        ),
+                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                     )
                 )
                 .border(
                     border = BorderStroke(
                         width = 1.dp,
-                        brush = Brush.verticalGradient(
-                            colors = listOf(GlassBorderStart, GlassBorderEnd)
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.25f),
+                                Color.White.copy(alpha = 0.05f)
+                            ),
+                            start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                            end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                         )
                     ),
                     shape = shape

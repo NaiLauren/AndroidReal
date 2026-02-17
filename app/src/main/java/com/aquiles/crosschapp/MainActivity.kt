@@ -41,6 +41,7 @@ import com.aquiles.crosschapp.ui.theme.CrossChAppTheme
 import com.aquiles.crosschapp.presentation.home.AdminPaymentConfigScreen // IMPORTANTE: Importar la nueva pantalla
 import com.aquiles.crosschapp.presentation.home.AdminCompetitionManagerScreen
 import com.aquiles.crosschapp.presentation.home.AdminCompetitionDetailScreen
+import com.aquiles.crosschapp.presentation.competition.StudentCompetitionDetailScreen
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
@@ -277,7 +278,8 @@ fun NavGraphBuilder.mainGraph(
                 adminViewModel = viewModel(),
                 onNavigateToNotifications = { navController.navigate("notifications_screen") },
                 onNavigateToMessageArchive = { navController.navigate("message_archive") },
-                onNavigateToCreateNotice = { navController.navigate("create_notice") }
+                onNavigateToCreateNotice = { navController.navigate("create_notice") },
+                onNavigateToCompetition = { competitionId -> navController.navigate("student_competition/$competitionId") }
             )
         }
 
@@ -536,6 +538,21 @@ fun NavGraphBuilder.mainGraph(
         }
         // ------------------------------
         
+        // ------------------------------
+
+        composable(
+            route = "student_competition/{competitionId}",
+            arguments = listOf(navArgument("competitionId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val competitionId = backStackEntry.arguments?.getString("competitionId")
+            if (competitionId != null) {
+                StudentCompetitionDetailScreen(
+                    navController = navController,
+                    competitionId = competitionId
+                )
+            }
+        }
+        
         // --- NUEVA RUTA: HISTORIAL XP ---
         composable("xp_history_screen") {
             // Importación en línea o agregar import manual si falla.
@@ -584,6 +601,17 @@ fun NavGraphBuilder.mainGraph(
             AdminBroadcastMessageScreen(
                 navController = navController,
                 userIds = userIdsList
+            )
+        }
+
+        composable(
+            route = "student_competition/{competitionId}",
+            arguments = listOf(navArgument("competitionId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val competitionId = backStackEntry.arguments?.getString("competitionId") ?: ""
+            StudentCompetitionDetailScreen(
+                competitionId = competitionId,
+                navController = navController
             )
         }
     }
