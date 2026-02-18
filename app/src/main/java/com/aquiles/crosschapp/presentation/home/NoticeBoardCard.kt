@@ -14,8 +14,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.aquiles.crosschapp.data.model.GymNotice
 import com.aquiles.crosschapp.data.model.NoticePriority
 import com.aquiles.crosschapp.data.model.NoticeType
@@ -59,11 +61,41 @@ fun NoticeBoardCard(
 
         // 1. Background Image (if exists)
         if (hasImage) {
-             AsyncImage(
-                model = imageUrl,
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(imageUrl)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                loading = {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = gymPrimaryColor, modifier = Modifier.size(32.dp))
+                    }
+                },
+                error = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFF2C2C2E),
+                                        Color.Black
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ImageNotSupported,
+                            contentDescription = "Image Error",
+                            tint = Color.Gray.copy(alpha = 0.5f),
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                }
             )
             
             // 2. Scrim (Gradient Overlay for readability)
@@ -78,6 +110,20 @@ fun NoticeBoardCard(
                                 Color.Black.copy(alpha = 0.9f)
                             ),
                             startY = 100f // Start gradient earlier
+                        )
+                    )
+            )
+        } else {
+             // Fallback for no image URL at all (same as error state but cleaner)
+             Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF2C2C2E),
+                                Color.Black
+                            )
                         )
                     )
             )

@@ -88,11 +88,13 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        noticeViewModel.loadNotices() 
-        adminViewModel.loadAppConfig()
-        adminViewModel.loadActivityImages()
-        performanceViewModel.loadInitialData()
+    LaunchedEffect(currentUser) {
+        if (currentUser != null) {
+            noticeViewModel.loadNotices() 
+            adminViewModel.loadAppConfig()
+            adminViewModel.loadActivityImages()
+            performanceViewModel.loadInitialData()
+        }
     }
 
     // Social Feed State
@@ -282,8 +284,8 @@ private fun HomeScreenContent(
                 ) { page ->
                      NoticeBoardCard(
                          notice = notices[page],
-                         onDelete = { if (user.isAdmin || user.role == "owner") onDeleteNotice(notices[page].id) },
-                         isAdmin = user.isAdmin || user.role == "owner"
+                         onDelete = { if (user.isAdmin) onDeleteNotice(notices[page].id) },
+                         isAdmin = user.isAdmin
                      )
                 }
             }

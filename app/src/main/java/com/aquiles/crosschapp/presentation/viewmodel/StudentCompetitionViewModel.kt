@@ -31,6 +31,9 @@ class StudentCompetitionViewModel : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _myEntry = MutableStateFlow<RankingEntry?>(null)
+    val myEntry: StateFlow<RankingEntry?> = _myEntry.asStateFlow()
+
     fun loadCompetition(competitionId: String) {
         _isLoading.value = true
         viewModelScope.launch {
@@ -107,6 +110,10 @@ class StudentCompetitionViewModel : ViewModel() {
             }
             
             _ranking.value = finalRanking
+            
+            // 5. Asignar Ranking de Usuario Actual
+            val currentUserId = UserSession.getCurrentUserId()
+            _myEntry.value = finalRanking.find { it.userId == currentUserId }
             
         } catch (e: Exception) {
             _errorMessage.value = "Error calculando ranking: ${e.message}"

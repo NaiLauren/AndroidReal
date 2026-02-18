@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,10 +26,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.aquiles.crosschapp.data.model.GymNotice
 import com.aquiles.crosschapp.presentation.viewmodel.NoticeViewModel
+import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import java.text.SimpleDateFormat // Consider java.time for new code, but SimpleDateFormat is common in legacy
 import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
@@ -51,9 +53,13 @@ fun AdminNewsScreen(
     val notices by noticeViewModel.notices.collectAsState()
     val isLoading by noticeViewModel.isLoading.collectAsState()
     
-    // Refresh data on enter
-    LaunchedEffect(Unit) {
-        noticeViewModel.loadNotices()
+    val currentUser by UserSession.currentUser.collectAsState()
+    
+    // Refresh data on enter or user change
+    LaunchedEffect(currentUser) {
+        if (currentUser != null) {
+            noticeViewModel.loadNotices()
+        }
     }
 
     Box(
@@ -176,9 +182,9 @@ fun AdminNoticeItem(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Image Thumbnail
-            AsyncImage(
+            SubcomposeAsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(if (notice.imageUrl.isNotBlank()) notice.imageUrl else "https://via.placeholder.com/150") // Fallback
+                    .data(if (notice.actualImageUrl.isNotBlank()) notice.actualImageUrl else "https://via.placeholder.com/150") // Fallback
                     .crossfade(true)
                     .build(),
                 contentDescription = null,
@@ -186,7 +192,17 @@ fun AdminNoticeItem(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, ColorBorder, RoundedCornerShape(12.dp))
+                    .border(1.dp, ColorBorder, RoundedCornerShape(12.dp)),
+                loading = {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp), color = ColorPrimaryAction)
+                    }
+                },
+                error = {
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Gray.copy(0.3f)), contentAlignment = Alignment.Center) {
+                         Icon(Icons.Default.Image, null, tint = Color.Gray)
+                    }
+                }
             )
 
             // Content

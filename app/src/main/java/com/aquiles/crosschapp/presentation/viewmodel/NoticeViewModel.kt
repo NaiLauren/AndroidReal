@@ -28,13 +28,27 @@ class NoticeViewModel : ViewModel() {
         loadNotices()
     }
 
+    private var listenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
+    private var currentGymId: String? = null
+
+    // Called automatically in init, but also safe to call manually to refresh/retry
     fun loadNotices() {
         val user = UserSession.currentUser.value ?: return
+        
+        // If we represent the same user/gym and have an active listener, don't reload
+        if (listenerRegistration != null && currentGymId == user.gym_id) {
+            android.util.Log.d("NoticeViewModel", "Listener already active for gym ${user.gym_id}, skipping reload")
+            return
+        }
 
-        android.util.Log.d("NoticeViewModel", "Loading notices for gym: ${user.gym_id}")
+        // Prevent duplicate listeners
+        listenerRegistration?.remove()
+        currentGymId = user.gym_id
+
+        android.util.Log.d("NoticeViewModel", "Loading notices for gym: ${user.gym_id} (New Listener)")
 
             // iOS path: /gyms/{gymId}/news
-        firestore.collection("gyms")
+        listenerRegistration = firestore.collection("gyms")
             .document(user.gym_id)
             .collection("news")
             .orderBy("createdAt", Query.Direction.DESCENDING)
@@ -55,13 +69,14 @@ class NoticeViewModel : ViewModel() {
                 
                 android.util.Log.d("NoticeViewModel", "Deserialized ${items.size} notices")
                 items.forEach { notice ->
-                    android.util.Log.d("NoticeViewModel", "Notice: id=${notice.id}, title=${notice.title}, imageUrl='${notice.imageUrl}', legacy='${notice.imageUrlLegacy}', ACTUAL='${notice.actualImageUrl}'")
+                    val isActive = notice.isEffectivelyActive()
+                    android.util.Log.d("NoticeViewModel", "Notice: id=${notice.id}, isActive=${notice.isActiveField}, active=${notice.active} -> EFFECTIVE=$isActive")
                 }
                 
                 // Filtrar expirados localmente para asegurar (si aplica)
                 val now = Timestamp.now()
                 val filtered = items.filter { notice ->
-                    notice.expiresAt == null || notice.expiresAt > now
+                    (notice.expiresAt == null || notice.expiresAt > now) && notice.isEffectivelyActive() && notice.id.isNotBlank()
                 }
                 
                 android.util.Log.d("NoticeViewModel", "After filter: ${filtered.size} notices")
@@ -92,7 +107,7 @@ class NoticeViewModel : ViewModel() {
                 imageUrl = imageUrl,
                 authorId = user.id,
                 authorName = user.name,
-                isActive = true,
+                isActiveField = true, // Set strictly true
                 createdAt = Timestamp.now()
             )
 
@@ -108,10 +123,36 @@ class NoticeViewModel : ViewModel() {
     fun deleteNotice(noticeId: String) {
         val user = UserSession.currentUser.value ?: return
         
+        if (noticeId.isBlank()) {
+            android.util.Log.e("NoticeViewModel", "Cannot delete notice with empty ID")
+            return
+        }
+        
+        android.util.Log.d("NoticeViewModel", "Attempting to delete notice: $noticeId")
+
+        // Update BOTH fields to be false to cover all bases
+        val updates = mapOf(
+            "isActive" to false,
+            "active" to false
+        )
+
         firestore.collection("gyms")
             .document(user.gym_id)
             .collection("news")
             .document(noticeId)
-            .update("isActive", false)
+            .update(updates)
+            .addOnSuccessListener {
+                 android.util.Log.d("NoticeViewModel", "Notice $noticeId marked as inactive successfully")
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("NoticeViewModel", "Error deleting notice $noticeId", e)
+            }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        listenerRegistration?.remove()
+        listenerRegistration = null
+        currentGymId = null
     }
 }

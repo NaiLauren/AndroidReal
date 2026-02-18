@@ -8,24 +8,30 @@ import com.google.firebase.firestore.ServerTimestamp
 data class GymNotice(
     @DocumentId val id: String = "",
     @PropertyName("gym_id") val gymId: String = "",
-    val title: String? = null, // iOS compatible - can be null
-    val message: String = "", // Default empty for iOS docs (iOS doesn't have this field)
+    val title: String? = null,
+    val message: String = "",
     @PropertyName("image_url") val imageUrl: String = "",
-    @PropertyName("imageUrl") val imageUrlLegacy: String = "", // Fallback for iOS camelCase
+    @PropertyName("imageUrl") val imageUrlLegacy: String = "",
     val type: NoticeType? = null,
     val priority: NoticePriority? = null,
     @PropertyName("author_id") val authorId: String = "",
     @PropertyName("author_name") val authorName: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
     val expiresAt: Timestamp? = null,
-    @PropertyName("isActive") val isActive: Boolean = true,
-    val viewCount: Int = 0 // Default 0 - iOS doesn't have this
+    // Use direct nullable names to match Firestore keys exactly
+    @PropertyName("isActive") val isActiveField: Boolean? = null, 
+    val active: Boolean? = null, // Legacy field
+    val viewCount: Int = 0
 ) {
     // Helper to get the actual image URL regardless of field name
     val actualImageUrl: String
-        get() {
-             return if (imageUrl.isNotBlank()) imageUrl else imageUrlLegacy
-        }
+        get() = if (imageUrl.isNotBlank()) imageUrl else imageUrlLegacy
+
+    // Logic to determine if notice is effectively active
+    // Prioritize 'isActive' if present. Fallback to 'active'. Default to true.
+    fun isEffectivelyActive(): Boolean {
+        return isActiveField ?: active ?: true
+    }
 }
 
 enum class NoticeType {
