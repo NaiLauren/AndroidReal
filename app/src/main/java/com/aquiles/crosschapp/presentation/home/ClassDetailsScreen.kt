@@ -36,18 +36,21 @@ import com.aquiles.crosschapp.data.model.GymClass
 import com.aquiles.crosschapp.data.model.User
 import com.aquiles.crosschapp.data.model.Wod
 import com.aquiles.crosschapp.presentation.viewmodel.*
+import com.aquiles.crosschapp.presentation.components.FeedbackDialog
+import com.aquiles.crosschapp.presentation.components.FeedbackType
 import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.material.icons.filled.CheckCircle
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
-private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorError = Color(0xFFEF5350)
+private val ColorTextSecondary = Color(0xFFAAAAAA)
 private val ColorSuccess = Color(0xFF4CAF50)
+private val ColorError = Color(0xFFCF6679)
+private val ColorBorder = Color.White.copy(alpha = 0.15f)
 
 @Composable
 fun ClassDetailsScreen(
@@ -58,25 +61,20 @@ fun ClassDetailsScreen(
     adminViewModel: AdminViewModel = viewModel()
 ) {
     val currentUser by UserSession.currentUser.collectAsState()
-
-    LaunchedEffect(key1 = classId) {
+    
+    LaunchedEffect(classId) {
         scheduleViewModel.loadClassDetails(classId)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = innerPadding.calculateBottomPadding())
-            .background(Color.Black.copy(alpha = 0.4f))
-    ) {
-        currentUser?.let { user ->
-            ClassDetailsContent(
-                navController = navController,
-                scheduleViewModel = scheduleViewModel,
-                adminViewModel = adminViewModel,
-                currentUser = user
-            )
-        } ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    if (currentUser != null) {
+        ClassDetailsContent(
+            navController = navController,
+            scheduleViewModel = scheduleViewModel,
+            adminViewModel = adminViewModel,
+            currentUser = currentUser!!
+        )
+    } else {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = ColorPrimaryAction)
         }
     }
@@ -118,25 +116,53 @@ private fun ClassDetailsContent(
         }
     }
 
+    // --- FEEDBACK DIALOG STATES ---
+    var showFeedbackDialog by remember { mutableStateOf(false) }
+    var feedbackType by remember { mutableStateOf(FeedbackType.INFO) }
+    var feedbackTitle by remember { mutableStateOf("") }
+    var feedbackMessage by remember { mutableStateOf("") }
+
+    // --- HANDLERS ---
     LaunchedEffect(bookingState) {
         if (bookingState is BookingState.Success) {
-            Toast.makeText(context, (bookingState as BookingState.Success).message, Toast.LENGTH_SHORT).show()
+            feedbackType = FeedbackType.SUCCESS
+            feedbackTitle = "¡Reserva Exitosa!"
+            feedbackMessage = (bookingState as BookingState.Success).message
+            showFeedbackDialog = true
             scheduleViewModel.resetBookingState()
         } else if (bookingState is BookingState.Error) {
-            Toast.makeText(context, (bookingState as BookingState.Error).message, Toast.LENGTH_LONG).show()
+            feedbackType = FeedbackType.ERROR
+            feedbackTitle = "Error al Reservar"
+            feedbackMessage = (bookingState as BookingState.Error).message
+            showFeedbackDialog = true
             scheduleViewModel.resetBookingState()
         }
     }
 
     LaunchedEffect(adminOperationState) {
         if (adminOperationState is ClassOperationState.Success) {
-            Toast.makeText(context, (adminOperationState as ClassOperationState.Success).message, Toast.LENGTH_SHORT).show()
+            feedbackType = FeedbackType.SUCCESS
+            feedbackTitle = "Operación Exitosa"
+            feedbackMessage = (adminOperationState as ClassOperationState.Success).message
+            showFeedbackDialog = true
             adminViewModel.resetClassOperationState()
         } else if (adminOperationState is ClassOperationState.Error) {
-            Toast.makeText(context, (adminOperationState as ClassOperationState.Error).message, Toast.LENGTH_LONG).show()
-            adminViewModel.resetClassOperationState() // Reset to stop showing loading/error if we want to retry
+            feedbackType = FeedbackType.ERROR
+            feedbackTitle = "Error de Admin"
+            feedbackMessage = (adminOperationState as ClassOperationState.Error).message
+            showFeedbackDialog = true
+            adminViewModel.resetClassOperationState()
         }
     }
+
+    // --- DIALOG COMPONENT ---
+    FeedbackDialog(
+        show = showFeedbackDialog,
+        type = feedbackType,
+        title = feedbackTitle,
+        message = feedbackMessage,
+        onDismiss = { showFeedbackDialog = false }
+    )
 
     LaunchedEffect(detailsState) {
         if (detailsState is ClassDetailsState.Success) {
@@ -162,7 +188,8 @@ private fun ClassDetailsContent(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Detalles", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
+                title = { Text("Detalles", fontWeight = FontWeight.Bold, color =
+                    ColorTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
@@ -395,7 +422,7 @@ private fun fetchRealTimeAttendance(classId: String, gymId: String, onResult: (S
 
 @Composable
 fun ClassHeaderSection(gymClass: GymClass) {
-    val dateFormatter = SimpleDateFormat("EEEE dd, MMMM", Locale("es", "ES"))
+    val dateFormatter = SimpleDateFormat("EEEE dd, MMMM", Locale.forLanguageTag("es-ES"))
     val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {

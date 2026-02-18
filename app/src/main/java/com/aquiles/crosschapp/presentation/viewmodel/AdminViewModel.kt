@@ -775,6 +775,9 @@ class AdminViewModel : ViewModel() {
                 val userRef = firestore.collection("users").document(request.userId)
                 val userDoc = userRef.get().await()
 
+                // N-FIX: Usar durationDays del request (paridad con iOS). Default 30 si null.
+                val durationDays = request.durationDays ?: 30
+
                 // Calcular fechas
                 val currentValidUntil = userDoc.getDate("creditValidUntil")
                 val calendar = Calendar.getInstance()
@@ -783,17 +786,22 @@ class AdminViewModel : ViewModel() {
                 } else {
                     calendar.time = Date()
                 }
-                calendar.add(Calendar.DAY_OF_YEAR, 30) // +30 días
+                calendar.add(Calendar.DAY_OF_YEAR, durationDays)
                 val newValidUntilDate = calendar.time
 
-                // Calcular créditos totales para el mensaje unificado
-                val currentCredits = userDoc.getLong("credits") ?: 0L
-                val creditsToAdd = request.creditsRequested.toLong()
-                val finalCredits = currentCredits + creditsToAdd
-
-                // Operaciones de base de datos
-                batch.update(userRef, "credits", FieldValue.increment(creditsToAdd))
-                batch.update(userRef, "creditValidUntil", newValidUntilDate)
+                // N-FIX: Soporte para Pase Libre (isUnlimited), paridad con iOS
+                if (request.isUnlimited == true) {
+                    // Pase Libre: activar flag, no sumar créditos numéricos
+                    batch.update(userRef, mapOf(
+                        "hasFreePass" to true,
+                        "creditValidUntil" to newValidUntilDate
+                    ))
+                } else {
+                    // Pack normal: sumar créditos
+                    val creditsToAdd = request.creditsRequested.toLong()
+                    batch.update(userRef, "credits", FieldValue.increment(creditsToAdd))
+                    batch.update(userRef, "creditValidUntil", newValidUntilDate)
+                }
 
                 // Actualizar Request
                 val requestRef = firestore.collection("creditRequests").document(request.id)
@@ -801,7 +809,8 @@ class AdminViewModel : ViewModel() {
                     "status" to CreditRequestStatus.APPROVED.name,
                     "processedByAdminId" to adminUser.id,
                     "processedByAdminName" to adminUser.fullName,
-                    "processedDate" to FieldValue.serverTimestamp()
+                    "processedDate" to FieldValue.serverTimestamp(),
+                    "durationDays" to durationDays
                 ))
 
                 // Crear Transacción
@@ -818,9 +827,7 @@ class AdminViewModel : ViewModel() {
                 // Notificación UNIFICADA (Aprobación + Vencimiento + Total)
                 val notificationRef = firestore.collection("notifications").document()
                 val formattedDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(newValidUntilDate)
-
-                // Mensaje combinado
-                val unifiedMessage = "Pack '${request.comboName}' activado exitosamente. Tienes un total de $finalCredits créditos válidos hasta el $formattedDate."
+                val unifiedMessage = "Pack '${request.comboName}' activado exitosamente. Válido hasta el $formattedDate."
 
                 /*
                 batch.set(notificationRef, Notification(
@@ -838,6 +845,7 @@ class AdminViewModel : ViewModel() {
             } catch (e: Exception) {
                 _updateState.value = RequestUpdateState.Error(e.localizedMessage ?: "Error.")
             }
+
         }
     }
 

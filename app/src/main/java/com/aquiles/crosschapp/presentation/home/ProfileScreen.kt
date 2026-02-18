@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -192,7 +194,7 @@ fun ProfileScreen(
 
                                 ExpandableHistorySection(
                                     title = "Movimientos de Cuenta",
-                                    icon = Icons.Default.ReceiptLong,
+                                    icon = Icons.AutoMirrored.Filled.ReceiptLong,
                                     state = profileViewModel.transactionHistoryState.collectAsState().value
                                 ) { tx -> TransactionHistoryItemRow(tx as CreditTransaction) }
 
@@ -242,7 +244,7 @@ fun ProfileHeaderIOSStyle(
     val progress = ((user.xp - prevLevelLimit) / range).coerceIn(0f, 1f)
     val xpNeeded = nextLevelXP - user.xp
 
-    val dateFormatMonth = SimpleDateFormat("dd 'de' MMMM 'de' yyyy", Locale("es", "ES"))
+    val dateFormatMonth = SimpleDateFormat("dd 'de' MMMM 'de' yyyy", Locale.forLanguageTag("es-ES"))
     val memberSinceStr = user.registrationDate?.let { dateFormatMonth.format(it) } ?: "Enero 2025"
     val validUntilStr = user.creditValidUntil?.let { dateFormatMonth.format(it) } ?: "n/a"
 
@@ -373,12 +375,29 @@ fun ProfileHeaderIOSStyle(
                                 )
                             }
                             Spacer(Modifier.height(6.dp))
-                            LinearProgressIndicator(
-                                progress = { progress },
-                                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = Color.White.copy(alpha = 0.2f),
-                            )
+                            // Custom Gradient Progress Bar
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color.White.copy(alpha = 0.2f)) // Track
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(progress) // Animated by state passed to progress
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(
+                                            brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.primary, // Orange
+                                                    Color(0xFFFFD700) // Gold/Yellow
+                                                )
+                                            )
+                                        )
+                                )
+                            }
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 text = "Próximo nivel en $xpNeeded XP",
@@ -508,7 +527,7 @@ fun GlassCardSection(title: String? = null, content: @Composable ColumnScope.() 
 
 @Composable
 fun ActiveReservationRow(gymClass: GymClass) {
-    val dateFormat = SimpleDateFormat("EEE d, HH:mm", Locale("es", "ES"))
+    val dateFormat = SimpleDateFormat("EEE d, HH:mm", Locale.forLanguageTag("es-ES"))
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.width(4.dp).height(48.dp).background(ColorPrimaryAction, RoundedCornerShape(2.dp)))
         Spacer(modifier = Modifier.width(16.dp))
@@ -567,12 +586,12 @@ fun TransactionHistoryItemRow(tx: CreditTransaction) {
     val isPositive = tx.amount > 0
     val amountColor = if (isPositive) ColorSuccess else ColorTextPrimary
     val sign = if (isPositive) "+" else ""
-    val dateFormat = SimpleDateFormat("dd/MM/yy", Locale("es", "ES"))
+    val dateFormat = SimpleDateFormat("dd/MM/yy", Locale.forLanguageTag("es-ES"))
     val icon = when {
         tx.type.uppercase().contains("RESERVA") -> Icons.Default.ConfirmationNumber
         tx.type.uppercase().contains("DEVOLUCION") || tx.type.uppercase().contains("CANCEL") -> Icons.Default.Restore
         tx.type.uppercase().contains("COMPRA") || tx.type.uppercase().contains("CARGA") -> Icons.Default.CreditCard
-        else -> Icons.Default.List
+        else -> Icons.AutoMirrored.Filled.List
     }
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.size(36.dp).background(Color.White.copy(alpha = 0.1f), CircleShape), contentAlignment = Alignment.Center) {
@@ -594,7 +613,7 @@ fun CreditHistoryItemRow(req: CreditRequest) {
         "REJECTED" -> "Rechazado" to ColorError
         else -> "Pendiente" to Color(0xFFFFD600)
     }
-    val dateFormat = SimpleDateFormat("dd/MM HH:mm", Locale("es", "ES"))
+    val dateFormat = SimpleDateFormat("dd/MM HH:mm", Locale.forLanguageTag("es-ES"))
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Text(text = statusText, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = statusColor)
@@ -608,7 +627,7 @@ fun CreditHistoryItemRow(req: CreditRequest) {
 
 @Composable
 fun AttendanceHistoryItemRow(rec: EnrichedAttendanceRecord) {
-    val dateFormat = SimpleDateFormat("EEEE dd 'de' MMMM, HH:mm", Locale("es", "ES"))
+    val dateFormat = SimpleDateFormat("EEEE dd 'de' MMMM, HH:mm", Locale.forLanguageTag("es-ES"))
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Text(
             text = rec.classDetails?.name ?: "Clase (Sin detalles)",

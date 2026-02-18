@@ -10,7 +10,8 @@ enum class CompetitionType(val value: String) {
     DAILY("Diaria"),
     WEEKLY("Semanal"),
     MONTHLY("Mensual"),
-    ANNUAL("Anual");
+    ANNUAL("Anual"),
+    RANGE("Días / Rango"); // N-NUEVO: Paridad con iOS .range
 
     companion object {
         fun fromValue(value: String): CompetitionType {
@@ -32,6 +33,30 @@ enum class RankingCriteria(val value: String) {
     }
 }
 
+// N-NUEVO: Enums de estrategia de puntaje y validación (paridad con iOS)
+enum class ScoreStrategy(val value: String) {
+    RELATIVE("relative"),
+    ABSOLUTE("absolute"),
+    ROUNDS("rounds");
+
+    companion object {
+        fun fromValue(value: String): ScoreStrategy {
+            return entries.find { it.value == value } ?: ABSOLUTE
+        }
+    }
+}
+
+enum class ValidationRule(val value: String) {
+    AUTOMATIC("automatic"),
+    MANUAL("manual");
+
+    companion object {
+        fun fromValue(value: String): ValidationRule {
+            return entries.find { it.value == value } ?: AUTOMATIC
+        }
+    }
+}
+
 data class Competition(
     @DocumentId val id: String = "",
     @get:PropertyName("gym_id") val gymId: String = "",
@@ -43,19 +68,25 @@ data class Competition(
     val startDate: Date? = null,
     val endDate: Date? = null,
     @get:PropertyName("isActive") val isActive: Boolean = true,
-    
+
     // Linked WODs/Classes
     @get:PropertyName("linked_class_ids") val linkedClassIds: List<String> = emptyList(),
-    
+
     // Rewards
     val prizeDescription: String? = null,
     val xpReward: Int? = null,
     val isIntergym: Boolean? = null,
-    
+
+    // N-NUEVO: Estrategia de puntaje y validación (paridad con iOS)
+    val scoreStrategy: String? = null, // "relative", "absolute", "rounds"
+    val validationRule: String? = null, // "automatic", "manual"
+
     @ServerTimestamp val createdAt: Timestamp? = null
 ) {
     fun getTypeEnum(): CompetitionType = CompetitionType.fromValue(type)
     fun getCriteriaEnum(): RankingCriteria = RankingCriteria.fromValue(criteria)
+    fun getScoreStrategyEnum(): ScoreStrategy = ScoreStrategy.fromValue(scoreStrategy ?: "absolute")
+    fun getValidationRuleEnum(): ValidationRule = ValidationRule.fromValue(validationRule ?: "automatic")
 
     // Helper property for status checks
     fun getStatus(): CompetitionStatus {
@@ -74,3 +105,4 @@ data class Competition(
 enum class CompetitionStatus {
     INACTIVE, UPCOMING, ONGOING, FINISHED
 }
+

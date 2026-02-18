@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.MenuAnchorType // [Fix] Import added
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.aquiles.crosschapp.presentation.components.FeedbackDialog
+import com.aquiles.crosschapp.presentation.components.FeedbackType
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import java.text.NumberFormat
 import java.util.*
@@ -67,21 +70,48 @@ fun RequestCreditsScreen(
     var showConfirmationDialog by remember { mutableStateOf(false) }
     var selectedPackForRequest by remember { mutableStateOf<CreditPack?>(null) }
 
-    // Feedback Toast
+    // Estados para Feedback Dialogs
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var feedbackMessage by remember { mutableStateOf("") }
+
+    // Feedback Handler
     LaunchedEffect(requestOperationState) {
-        when (requestOperationState) {
+        when (val state = requestOperationState) {
             is CreditRequestOperationState.Success -> {
-                Toast.makeText(context, "¡Solicitud enviada! Se procesará pronto.", Toast.LENGTH_LONG).show()
-                creditsViewModel.resetCreditRequestOperationState()
-                onNavigateBack()
+                showSuccessDialog = true
             }
             is CreditRequestOperationState.Error -> {
-                Toast.makeText(context, (requestOperationState as CreditRequestOperationState.Error).message, Toast.LENGTH_LONG).show()
-                creditsViewModel.resetCreditRequestOperationState()
+                feedbackMessage = state.message
+                showErrorDialog = true
             }
             else -> {}
         }
     }
+
+    // Dialogs de Feedback
+    FeedbackDialog(
+        show = showSuccessDialog,
+        type = FeedbackType.SUCCESS,
+        title = "¡Solicitud Enviada!",
+        message = "Tu comprobante se ha subido correctamente. Te notificaremos cuando se acrediten tus créditos.",
+        onDismiss = {
+            showSuccessDialog = false
+            creditsViewModel.resetCreditRequestOperationState()
+            onNavigateBack()
+        }
+    )
+
+    FeedbackDialog(
+        show = showErrorDialog,
+        type = FeedbackType.ERROR,
+        title = "Hubo un problema",
+        message = feedbackMessage,
+        onDismiss = {
+            showErrorDialog = false
+            creditsViewModel.resetCreditRequestOperationState()
+        }
+    )
 
     // --- UI STRUCTURE ---
     Box(
@@ -202,7 +232,7 @@ fun CreditPackItemGlass(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale("es", "AR")) }
+    val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR")) }
 
     Card(
         modifier = modifier
@@ -271,7 +301,7 @@ fun PaymentConfirmationDialogGlass(
     val paymentMethods = listOf("MercadoPago", "Transferencia Bancaria", "Efectivo")
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var showPaymentMethodError by remember { mutableStateOf(false) }
-    val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale("es", "AR")) }
+    val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR")) }
     val paymentDetailsState by creditsViewModel.paymentDetailsState.collectAsState()
 
     // Selector de imagen nuevo
@@ -320,7 +350,10 @@ fun PaymentConfirmationDialogGlass(
                         readOnly = true,
                         label = { Text("Método de Pago", color = ColorTextSecondary) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        modifier = Modifier.menuAnchor(
+                            type = MenuAnchorType.PrimaryNotEditable,
+                            enabled = !isLoading
+                        ).fillMaxWidth(),
                         isError = showPaymentMethodError,
                         enabled = !isLoading,
                         colors = OutlinedTextFieldDefaults.colors(

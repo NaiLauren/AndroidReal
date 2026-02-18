@@ -47,17 +47,20 @@ import coil.compose.SubcomposeAsyncImage
 import com.aquiles.crosschapp.R
 import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
+import com.aquiles.crosschapp.presentation.components.FeedbackDialog
+import com.aquiles.crosschapp.presentation.components.FeedbackType
 import java.io.File
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.format.TextStyle as JavaTextStyle
 import java.util.*
+import androidx.compose.ui.draw.scale // [Fix] Import scale
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
 private val ColorGlassInput = Color(0xFFFFFFFF).copy(alpha = 0.07f)
 private val ColorTextPrimary = Color.White
-private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
+private val ColorTextSecondary = Color(0xFFAAAAAA)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -154,19 +157,34 @@ fun WodsScreen(
         }
     }
 
-    // --- TOASTS ---
+    // --- FEEDBACK DIALOG STATES ---
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var successMessage by remember { mutableStateOf("") }
+
+    // --- HANDLERS ---
     LaunchedEffect(saveWodResultState) {
         if (saveWodResultState is SaveResultState.Success) {
-            Toast.makeText(context, (saveWodResultState as SaveResultState.Success).message, Toast.LENGTH_SHORT).show()
+            successMessage = (saveWodResultState as SaveResultState.Success).message
+            showSuccessDialog = true
             performanceViewModel.resetSaveResultState()
         }
     }
     LaunchedEffect(saveBenchmarkState) {
         if (saveBenchmarkState is BenchmarkSaveState.Success) {
-            Toast.makeText(context, (saveBenchmarkState as BenchmarkSaveState.Success).message, Toast.LENGTH_SHORT).show()
+            successMessage = (saveBenchmarkState as BenchmarkSaveState.Success).message
+            showSuccessDialog = true
             performanceViewModel.resetSaveState()
         }
     }
+
+    // --- DIALOG COMPONENT ---
+    FeedbackDialog(
+        show = showSuccessDialog,
+        type = FeedbackType.SUCCESS,
+        title = "¡Registro Guardado!",
+        message = successMessage,
+        onDismiss = { showSuccessDialog = false }
+    )
 
     // --- UI STRUCTURE ---
     Box(
@@ -295,7 +313,7 @@ fun WodsScreen(
                                             gymClass = gymClass,
                                             imageUrl = dynamicImage,
                                             existingResult = existingResult,
-                                            onSaveResult = { result, isRx, notes ->
+                                            onSaveResult = { result, isRx, notes, isPublic ->
                                                 val wodIdToSave = gymClass.wodId ?: gymClass.id
                                                 // PASAMOS EL CLASSSESSIONID (gymClass.id)
                                                 performanceViewModel.saveWodResult(
@@ -304,7 +322,8 @@ fun WodsScreen(
                                                     notes = notes,
                                                     isRx = isRx,
                                                     classSessionId = gymClass.id,
-                                                    wodName = gymClass.name // [Fix] Save WOD Name
+                                                    wodName = gymClass.name, // [Fix] Save WOD Name
+                                                    isPublic = isPublic
                                                 )
                                             },
                                             isSavingResult = saveWodResultState is SaveResultState.Loading
@@ -429,13 +448,14 @@ fun WodPagerCard(
     gymClass: GymClass,
     imageUrl: String?,
     existingResult: WodResult?, // New Param
-    onSaveResult: (result: String, isRx: Boolean, notes: String) -> Unit,
+    onSaveResult: (result: String, isRx: Boolean, notes: String, isPublic: Boolean) -> Unit,
     isSavingResult: Boolean
 ) {
     // Inicializar estado con resultado existente
     var userResult by remember(existingResult) { mutableStateOf(existingResult?.score ?: "") }
     var userNotes by remember(existingResult) { mutableStateOf(existingResult?.notes ?: "") }
     var isRx by remember(existingResult) { mutableStateOf(existingResult?.isRx ?: true) }
+    var isPublic by remember(existingResult) { mutableStateOf(existingResult?.isPublic ?: true) }
     
     val fallbackImageUrl = "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=2070"
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -495,26 +515,70 @@ fun WodPagerCard(
                 GlassTextField(value = userResult, onValueChange = { userResult = it }, label = "Resultado (Tiempo/Reps)")
                 GlassTextField(value = userNotes, onValueChange = { userNotes = it }, label = "Notas")
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { isRx = !isRx }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = LocalPrimaryColor.current, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White))
+                // Opciones de Guardado (RX & Public)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // RX Checkbox
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { isRx = !isRx }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isRx,
+                            onCheckedChange = { isRx = it },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = LocalPrimaryColor.current,
+                                uncheckedColor = ColorTextSecondary,
+                                checkmarkColor = Color.White
+                            )
+                        )
                         Text("RX", fontWeight = FontWeight.Bold, color = if (isRx) ColorTextPrimary else ColorTextSecondary)
                     }
-                    
-                    // Conditionally change Button Label if updating
-                    val isUpdating = existingResult != null
-                    Button(
-                        onClick = { onSaveResult(userResult, isRx, userNotes) },
-                        enabled = userResult.isNotBlank() && !isSavingResult,
-                        colors = ButtonDefaults.buttonColors(containerColor = LocalPrimaryColor.current, disabledContainerColor = LocalPrimaryColor.current.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+
+                    // Public Toggle
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { isPublic = !isPublic }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isSavingResult) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White) 
-                        } else {
-                            Text(if (isUpdating) "Actualizar" else "Guardar", fontWeight = FontWeight.Bold)
-                        }
+                        Switch(
+                            checked = isPublic,
+                            onCheckedChange = { isPublic = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = LocalPrimaryColor.current,
+                                uncheckedThumbColor = ColorTextSecondary,
+                                uncheckedTrackColor = ColorGlassSurface
+                            ),
+                            modifier = Modifier.scale(0.8f) 
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isPublic) "Público" else "Privado", fontWeight = FontWeight.Bold, color = if (isPublic) ColorTextPrimary else ColorTextSecondary, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                    
+                // Botón Guardar
+                val isUpdating = existingResult != null // [Fix] Restore variable
+                Button(
+                    onClick = { onSaveResult(userResult, isRx, userNotes, isPublic) },
+                    modifier = Modifier.fillMaxWidth(), // Full width button looks better below options
+                    enabled = userResult.isNotBlank() && !isSavingResult,
+                    colors = ButtonDefaults.buttonColors(containerColor = LocalPrimaryColor.current, disabledContainerColor = LocalPrimaryColor.current.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    if (isSavingResult) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White) 
+                    } else {
+                        Text(if (isUpdating) "Actualizar Resultado" else "Guardar Resultado", fontWeight = FontWeight.Bold)
                     }
                 }
             }

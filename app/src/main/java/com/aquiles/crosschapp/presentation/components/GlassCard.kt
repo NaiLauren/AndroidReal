@@ -36,8 +36,8 @@ fun GlassCard(
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF2C2C2E).copy(alpha = 0.75f), // More opaque (frosted)
-                        Color(0xFF0C0C0C).copy(alpha = 0.90f)  // Darker and opaque
+                        Color(0xFF2C2C2E).copy(alpha = 0.50f), // Más translúcido
+                        Color(0xFF0C0C0C).copy(alpha = 0.70f)  // Gradiente sutil
                     ),
                     start = androidx.compose.ui.geometry.Offset(0f, 0f),
                     end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
@@ -49,8 +49,8 @@ fun GlassCard(
                     width = 1.dp,
                     brush = Brush.linearGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.25f), // Stronger highlight top-left
-                            Color.White.copy(alpha = 0.05f)  // Subtle fade bottom-right
+                            Color.White.copy(alpha = 0.15f), // Borde superior sutil
+                            Color.White.copy(alpha = 0.02f)  // Desaparece abajo
                         ),
                         start = androidx.compose.ui.geometry.Offset(0f, 0f),
                         end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)

@@ -66,8 +66,21 @@ fun AdminDashboardScreen(
 
         Scaffold(
             topBar = {
-                // Header personalizado integrado en el scroll o fijo
-                // En iOS es parte del Scroll, aquí lo haremos parte del contenido principal
+                CenterAlignedTopAppBar(
+                    title = { Text("Centro de Mando", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Atrás",
+                                tint = ColorTextPrimary
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent
+                    )
+                )
             },
             containerColor = Color.Transparent
         ) { localScaffoldPadding ->
@@ -75,13 +88,14 @@ fun AdminDashboardScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = localScaffoldPadding.calculateTopPadding() + 16.dp,
-                    bottom = innerPadding.calculateBottomPadding() + 32.dp,
+                    bottom = innerPadding.calculateBottomPadding() + 100.dp, // Extra padding para librar barra de navegación
                     start = 16.dp,
                     end = 16.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                // 1. HEADER SIMPLE
+                // 1. HEADER (Ya no es necesario el título grande aquí si está en la TopBar, pero podemos dejarlo como subtítulo o quitarlo)
+                // Vamos a simplificarlo para que no sea redundante con la TopBar
                 item {
                     GlassCard(modifier = Modifier.fillMaxWidth()) {
                         Column(
@@ -89,14 +103,7 @@ fun AdminDashboardScreen(
                                 .fillMaxWidth()
                                 .padding(16.dp)
                         ) {
-                            Text(
-                                text = "Centro de Mando",
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 28.sp
-                                ),
-                                color = ColorTextPrimary
-                            )
+                             // Eliminamos el título duplicado "Centro de Mando"
                             Text(
                                 text = "Gestiona tu gimnasio en tiempo real",
                                 style = MaterialTheme.typography.bodyMedium,

@@ -47,6 +47,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.FeedUiItem
 import com.aquiles.crosschapp.presentation.viewmodel.NoticeViewModel
 import com.aquiles.crosschapp.data.model.GymNotice
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import com.aquiles.crosschapp.presentation.common.AppBackground
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
@@ -109,11 +110,7 @@ fun HomeScreen(
     val hasUnreadNotifications = notificationsState is NotificationsState.Success &&
             (notificationsState as NotificationsState.Success).notifications.isNotEmpty()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.1f))
-    ) {
+    AppBackground {
         CompositionLocalProvider(LocalPrimaryColor provides primaryColor) {
             Scaffold(
             topBar = {

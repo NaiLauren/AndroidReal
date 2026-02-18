@@ -266,7 +266,7 @@ class PerformanceViewModel : ViewModel() {
                                  val recDate = it.classDate?.toInstant()?.atZone(ZoneId.systemDefault())?.toLocalDate()
                                  recDate == date 
                              }
-                             val dayName = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale("es"))
+                             val dayName = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es"))
                              WeeklyAttendanceDay(dayName.replaceFirstChar { it.uppercase() }, isAttended)
                          }
                          AttendanceData.WeeklySummaryData(days)
@@ -296,7 +296,7 @@ class PerformanceViewModel : ViewModel() {
     }
 
     // --- SAVING ACTIONS ---
-    fun saveWodResult(wodId: String, score: String, notes: String, isRx: Boolean, classSessionId: String?, wodName: String? = null) {
+    fun saveWodResult(wodId: String, score: String, notes: String, isRx: Boolean, classSessionId: String?, wodName: String? = null, isPublic: Boolean = true) {
         val user = UserSession.currentUser.value ?: return
         _saveResultState.value = SaveResultState.Loading
         viewModelScope.launch {
@@ -310,6 +310,7 @@ class PerformanceViewModel : ViewModel() {
                     notes = notes,
                     isRx = isRx,
                     classSessionId = classSessionId,
+                    isPublic = isPublic, // Added field
 
                     wodName = wodName, // [Fix] Persist name
                     

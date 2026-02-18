@@ -14,35 +14,34 @@ import com.aquiles.crosschapp.R
 
 @Composable
 fun AppBackground(
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Tu imagen de fondo original
-        Image(
-            painter = painterResource(id = R.drawable.fondo_principal), // Nombre de tu fondo
-            contentDescription = "Fondo de la aplicación",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
-        // 2. LA CAPA DE OSCURECIMIENTO (El truco para mejorar el contraste)
-        // Este Box se dibuja encima de la imagen pero debajo del contenido.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    // Creamos un degradado radial sutil
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.15f), // Centro mucho más claro
-                            Color.Black.copy(alpha = 0.45f)  // Bordes suaves
-                        ),
-                        radius = 1200f
-                    )
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF2C2C2E), // Centro (Gris Áspero)
+                        Color(0xFF050505)  // Bordes (Negro Profundo)
+                    ),
+                    radius = 1500f
                 )
+            )
+    ) {
+        // 1. Imagen de fondo (con opacidad para fusionarse con el gradiente)
+        Image(
+            painter = painterResource(id = R.drawable.fondo_principal), 
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            alpha = 0.4f // Sutil, para dar textura
         )
 
-        // 3. El contenido de tu app (tus pantallas) se dibuja encima de todo
+        // 2. Overlay opcional si se necesita más oscuridad (ya cubierto por el gradiente base)
+        
+        // 3. Contenido
         content()
     }
 }

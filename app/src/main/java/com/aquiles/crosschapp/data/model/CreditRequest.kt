@@ -30,10 +30,10 @@ data class CreditRequest(
     val contactInfo: String? = null,
     val paymentProofUrl: String? = null,
 
-    // --- CAMBIO CLAVE ---
-    // Guardamos el token del dispositivo que hizo la solicitud.
-    // Esto es para una lógica futura más robusta, aunque no se use de inmediato
-    // en la Cloud Function multidispositivo, es una excelente práctica tenerlo.
+    // N-NUEVO: Campos de CreditPack avanzado (paridad con iOS)
+    val isUnlimited: Boolean? = null,  // true = Pase Libre
+    val durationDays: Int? = null,     // Duración en días (default 30 si null)
+
     val fcmToken: String? = null,
 
     // --- Estado y Fechas del Proceso ---
@@ -46,7 +46,9 @@ data class CreditRequest(
     var processedByAdminId: String? = null,
     var processedByAdminName: String? = null,
 
-    // El @ServerTimestamp aquí es la clave
+    // N-NUEVO: Razón de rechazo (iOS escribe este campo, Android ahora lo lee)
+    var rejectionReason: String? = null,
+
     @ServerTimestamp
     var processedDate: Date? = null,
 

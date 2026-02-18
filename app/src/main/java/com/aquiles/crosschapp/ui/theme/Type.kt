@@ -59,20 +59,20 @@ val AppTypography = Typography(
     ),
     titleLarge = TextStyle(
         fontFamily = Inter,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold, // Más fuerza
         fontSize = 22.sp,
         lineHeight = 28.sp,
     ),
     titleMedium = TextStyle(
         fontFamily = Inter,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold, // Más fuerza
         fontSize = 16.sp,
         lineHeight = 24.sp,
         letterSpacing = 0.15.sp,
     ),
     titleSmall = TextStyle(
         fontFamily = Inter,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Bold, // Más fuerza
         fontSize = 14.sp,
         lineHeight = 20.sp,
         letterSpacing = 0.1.sp,
