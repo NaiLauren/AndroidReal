@@ -5,21 +5,32 @@ import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 import java.util.Date
 
+// MARK: - Tipos sincronizados con iOS (Notification.swift)
+// Los nombres coinciden con los rawValues de iOS para compatibilidad en Firestore.
 enum class NotificationType {
     CREDIT_APPROVED,
     CREDIT_REJECTED,
     CREDIT_PENDING,
     EXPIRATION_WARNING,
-    GENERAL_ANNOUNCEMENT
+    CLASS_CANCELLATION,
+    SYSTEM_ALERT,
+    GENERAL_ANNOUNCEMENT;
+
+    companion object {
+        fun fromString(value: String?): NotificationType {
+            return entries.find { it.name == value } ?: GENERAL_ANNOUNCEMENT
+        }
+    }
 }
 
 data class Notification(
     @DocumentId
     val id: String = "",
     val userId: String = "",
-    val gym_id: String = "", // <-- ¡CRÍTICO! Añadido el campo para el multi-gimnasio
+    val gym_id: String = "",
     val title: String = "",
-    @PropertyName("body")
+    // CRÍTICO: Cambiado de @PropertyName("body") a "message" para sincronizar con iOS.
+    // iOS siempre escribe y lee el campo "message". Android ahora hace lo mismo.
     val message: String = "",
     var isRead: Boolean = false,
     val type: String = NotificationType.GENERAL_ANNOUNCEMENT.name,

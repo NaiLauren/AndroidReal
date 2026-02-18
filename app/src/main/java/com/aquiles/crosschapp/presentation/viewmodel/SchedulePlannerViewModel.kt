@@ -153,8 +153,8 @@ class SchedulePlannerViewModel : ViewModel() {
                 // iOS logic might be strictly "past" or configurable. Let's assume "past or imminent"
                 if (classTime.before(threshold)) {
                     val ref = db.collection("gymClasses").document(gymClass.id)
-                    batch.update(ref, "cancelled", true) // Field name in Firestore is 'cancelled'? Model says @PropertyName("cancelled") val isCancelled
-                    // Update: Firestore field is likely "cancelled" based on model annotation.
+                    // CORREGIDO: Era "cancelled", ahora "isCancelled" para sincronizar con iOS
+                    batch.update(ref, "isCancelled", true)
                     ops++
                 }
             }

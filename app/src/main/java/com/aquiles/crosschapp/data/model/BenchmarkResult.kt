@@ -5,7 +5,7 @@ import com.google.firebase.firestore.ServerTimestamp
 import java.util.Date
 
 data class BenchmarkResult(
-    @DocumentId val id: String = "", // Changed from resultId to match iOS
+    @DocumentId val id: String = "",
     val userId: String = "",
     val gym_id: String = "",
     val benchmarkId: String = "",
@@ -20,15 +20,20 @@ data class BenchmarkResult(
     val userLastName: String = "",
     val userLevel: String = "",
     val userProfileImageUrl: String = "",
-    val userGender: String = "", // Snapshot of user gender
+    val userGender: String = "",
     
     // Smart Ranking
-    val numericScore: Double = 0.0, // For sorting
+    val numericScore: Double = 0.0,
     
     // Verification
     val isVerified: Boolean = false,
 
     // Social
     val isPublic: Boolean = true,
-    val likeCount: Int = 0 // Added for iOS compatibility (social feed likes)
+    val likeCount: Int = 0,
+    
+    // Competencias (sincronizado con iOS — BenchmarkResult.swift)
+    val validationStatus: String? = null, // "pending", "approved", "rejected"
+    val competitionId: String? = null,
+    val facilityName: String? = null      // Para competencias inter-gym
 )

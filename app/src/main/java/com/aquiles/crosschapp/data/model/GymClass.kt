@@ -24,7 +24,9 @@ data class GymClass(
 
     val enrolledUserIds: List<String> = emptyList(),
 
-    @PropertyName("cancelled")
+    // CRÍTICO CORREGIDO: Antes era @PropertyName("cancelled") lo que causaba que
+    // una clase cancelada desde iOS (que escribe "isCancelled") apareciera activa en Android.
+    // Ahora ambas plataformas leen y escriben el campo "isCancelled" en Firestore.
     val isCancelled: Boolean = false,
     val attendanceTaken: Boolean = false,
     val attendedUserIds: List<String> = emptyList(), // Lista manual del admin
