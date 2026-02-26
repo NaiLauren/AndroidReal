@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,7 +68,7 @@ fun XpHistoryScreen(
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent
+                        containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f)
                     )
                 )
             },
@@ -81,7 +82,7 @@ fun XpHistoryScreen(
                 when (val currentState = state) {
                     is XpHistoryState.Loading -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Color(0xFFFC5200))
+                            CircularProgressIndicator(color = LocalPrimaryColor.current)
                         }
                     }
                     is XpHistoryState.Error -> {
@@ -180,7 +181,7 @@ fun XpLogItemGlass(log: com.aquiles.crosschapp.data.model.XpLog) {
                 text = "+${log.amount} XP",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFFFC5200) // Brand Orange
+                color = LocalPrimaryColor.current
             )
         }
     }

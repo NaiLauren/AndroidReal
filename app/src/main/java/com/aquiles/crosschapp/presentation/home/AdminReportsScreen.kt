@@ -22,7 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -38,7 +40,7 @@ import java.util.*
 import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -81,7 +83,7 @@ fun AdminReportsScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -210,7 +212,7 @@ private fun GlassMonthSelector(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit
 ) {
-    val dateFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale("es", "ES")) }
+    val dateFormatter = remember { SimpleDateFormat("MMMM yyyy", Locale.Builder().setLanguage("es").setRegion("ES").build()) }
 
     GlassCard(
         shape = RoundedCornerShape(50), // Pill shape
@@ -290,7 +292,7 @@ private fun GlassMetricCard(
 
 @Composable
 private fun GlassTransactionItem(transaction: CreditRequest) {
-    val dateFormat = remember { SimpleDateFormat("dd MMM", Locale("es", "ES")) }
+    val dateFormat = remember { SimpleDateFormat("dd MMM", Locale.Builder().setLanguage("es").setRegion("ES").build()) }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -324,7 +326,7 @@ private fun GlassTransactionItem(transaction: CreditRequest) {
 }
 
 private fun formatCurrency(amount: Double, currency: String = "ARS"): String {
-    val locale = if (currency == "USD") Locale.US else Locale("es", "AR")
+    val locale = if (currency == "USD") Locale.US else Locale.Builder().setLanguage("es").setRegion("AR").build()
     return NumberFormat.getCurrencyInstance(locale).format(amount)
 }
 
@@ -459,7 +461,8 @@ private fun GlassAppCostCard(
 
 @Composable
 private fun PaymentInfoSection(info: com.aquiles.crosschapp.presentation.viewmodel.AppPaymentInfo) {
-    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     
     Column(
         modifier = Modifier
@@ -482,7 +485,7 @@ private fun PaymentInfoSection(info: com.aquiles.crosschapp.presentation.viewmod
                 Text("Alias", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
                 Text(info.alias, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
             }
-            IconButton(onClick = { clipboardManager.setText(AnnotatedString(info.alias)) }) {
+            IconButton(onClick = { clipboardManager.setPrimaryClip(ClipData.newPlainText("Copied Text", info.alias)) }) {
                 Icon(Icons.Filled.FileCopy, null, tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
             }
         }
@@ -496,7 +499,7 @@ private fun PaymentInfoSection(info: com.aquiles.crosschapp.presentation.viewmod
                 Text("CBU / CVU", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
                 Text(info.cbu, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
             }
-            IconButton(onClick = { clipboardManager.setText(AnnotatedString(info.cbu)) }) {
+            IconButton(onClick = { clipboardManager.setPrimaryClip(ClipData.newPlainText("Copied Text", info.cbu)) }) {
                 Icon(Icons.Filled.FileCopy, null, tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
             }
         }

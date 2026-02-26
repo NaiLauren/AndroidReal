@@ -34,7 +34,7 @@ import com.aquiles.crosschapp.presentation.components.GlassCard
 import kotlinx.coroutines.launch
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -98,7 +98,7 @@ fun AdminBroadcastMessageScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent

@@ -1,7 +1,6 @@
 package com.aquiles.crosschapp.presentation.home
 
 import android.net.Uri
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -13,48 +12,47 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
-import androidx.compose.material3.MenuAnchorType // [Fix] Import added
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
+import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.aquiles.crosschapp.presentation.components.FeedbackDialog
 import com.aquiles.crosschapp.presentation.components.FeedbackType
+import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import java.text.NumberFormat
 import java.util.*
 
-// --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
-private val ColorDialogSurface = Color(0xFF1C1C1E) // Solido para dialogos para evitar transparencias raras
-private val ColorPrimaryAction = Color(0xFFFC5200)
+// --- DESIGN SYSTEM CONSTANTS (PRO) ---
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorDialogSurface = Color(0xFF121212)
+// LocalPrimaryColor.current ahora usa LocalPrimaryColor.current (dinámico por gym)
 private val ColorTextPrimary = Color.White
-private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorBackgroundGradientStart = Color(0xFF000000)
-private val ColorBackgroundGradientEnd = Color(0xFF121212)
+private val ColorTextSecondary = Color.White.copy(alpha = 0.6f)
+private val ColorBorder = Color.White.copy(alpha = 0.15f)
+private val ColorGold = Color(0xFFFFD700)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,8 +91,8 @@ fun RequestCreditsScreen(
     FeedbackDialog(
         show = showSuccessDialog,
         type = FeedbackType.SUCCESS,
-        title = "¡Solicitud Enviada!",
-        message = "Tu comprobante se ha subido correctamente. Te notificaremos cuando se acrediten tus créditos.",
+        title = "¡Solicitud Recibida!",
+        message = "Hemos recibido tu comprobante. Procesaremos tu solicitud a la brevedad.",
         onDismiss = {
             showSuccessDialog = false
             creditsViewModel.resetCreditRequestOperationState()
@@ -105,7 +103,7 @@ fun RequestCreditsScreen(
     FeedbackDialog(
         show = showErrorDialog,
         type = FeedbackType.ERROR,
-        title = "Hubo un problema",
+        title = "Error en la solicitud",
         message = feedbackMessage,
         onDismiss = {
             showErrorDialog = false
@@ -117,18 +115,32 @@ fun RequestCreditsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF2C2C2E),
+                        Color.Black
+                    ),
+                    center = Offset.Unspecified,
+                    radius = 1500f
+                )
+            )
     ) {
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { Text("Comprar Créditos", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
+                    title = {}, // Título custom en el body
                     navigationIcon = {
-                        IconButton(onClick = onNavigateBack) {
+                        IconButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                        ) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -137,19 +149,36 @@ fun RequestCreditsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = localScaffoldPadding.calculateTopPadding())
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // HEADER PRO
+                Text(
+                    text = "TIENDA",
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = ColorTextPrimary,
+                    letterSpacing = 2.sp
+                )
+                Text(
+                    text = "Invierte en tu rendimiento",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = LocalPrimaryColor.current,
+                    fontWeight = FontWeight.Medium
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+
                 when (val state = offeringsState) {
                     is OfferingsState.Loading, OfferingsState.Idle -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = ColorPrimaryAction)
+                            CircularProgressIndicator(color = LocalPrimaryColor.current)
                         }
                     }
                     is OfferingsState.Success -> {
                         // Warning Banner
                         if (state.surchargeApplied) {
-                            GlassWarningBanner("Los precios incluyen recargo por pago fuera de término.")
+                            GlassWarningBanner("Precios actualizados por fecha de pago.")
                             Spacer(modifier = Modifier.height(16.dp))
                         }
 
@@ -160,11 +189,13 @@ fun RequestCreditsScreen(
                         } else {
                             LazyColumn(
                                 contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 20.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                verticalArrangement = Arrangement.spacedBy(20.dp)
                             ) {
                                 items(state.packs, key = { it.id }) { pack ->
-                                    CreditPackItemGlass(
+                                    val isBestValue = pack.credits >= 12 // Lógica simple para destacar packs grandes
+                                    ProCreditCard(
                                         pack = pack,
+                                        isBestValue = isBestValue,
                                         onClick = {
                                             selectedPackForRequest = pack
                                             showConfirmationDialog = true
@@ -176,15 +207,22 @@ fun RequestCreditsScreen(
                     }
                     is OfferingsState.Error -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Error: ${state.message}", color = MaterialTheme.colorScheme.error)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.CloudQueue, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                                Spacer(Modifier.height(16.dp))
+                                Text("No pudimos cargar los packs", color = ColorTextSecondary)
+                                TextButton(onClick = { /* Retry logic if available */ }) {
+                                    Text("Reintentar", color = LocalPrimaryColor.current)
+                                }
+                            }
                         }
                     }
                 }
 
-                // DIALOGO
+                // DIALOGO PRO
                 if (showConfirmationDialog && selectedPackForRequest != null) {
                     val isLoading = requestOperationState is CreditRequestOperationState.Loading
-                    PaymentConfirmationDialogGlass(
+                    ProPaymentDialog(
                         pack = selectedPackForRequest!!,
                         onDismiss = { if (!isLoading) showConfirmationDialog = false },
                         onConfirm = { paymentMethod, imageUri ->
@@ -204,93 +242,170 @@ fun RequestCreditsScreen(
 }
 
 // =====================================================
-// COMPONENTES UI (GLASS STYLE)
+// COMPONENTES PRO (UI ELEVADA)
 // =====================================================
 
 @Composable
 fun GlassWarningBanner(text: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFEF5350).copy(alpha = 0.15f)), // Rojo suave
-        border = BorderStroke(1.dp, Color(0xFFEF5350).copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFFFF5252).copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier
+                .background(Color(0xFFFF5252).copy(alpha = 0.1f))
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Warning, null, tint = Color(0xFFEF5350))
+            Icon(Icons.Default.Warning, null, tint = Color(0xFFFF5252))
             Spacer(modifier = Modifier.width(12.dp))
-            Text(text, style = MaterialTheme.typography.bodySmall, color = Color.White)
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Medium)
         }
     }
 }
 
 @Composable
-fun CreditPackItemGlass(
+fun ProCreditCard(
     pack: CreditPack,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    isBestValue: Boolean,
+    onClick: () -> Unit
 ) {
     val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR")) }
 
-    Card(
-        modifier = modifier
+    Box(
+        modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+            .clip(RoundedCornerShape(24.dp))
+            .clickable { onClick() }
     ) {
-        Row(
+        // Fondo con gradiente y borde activo
+        Box(
             modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = pack.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorTextPrimary
+                .matchParentSize()
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            ColorGlassSurface,
+                            ColorGlassSurface.copy(alpha = 0.4f)
+                        )
+                    )
                 )
-                if (pack.description.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
+                .border(
+                    width = 1.dp,
+                    brush = if (isBestValue) Brush.linearGradient(listOf(ColorGold, LocalPrimaryColor.current)) else Brush.linearGradient(listOf(ColorBorder, Color.Transparent)),
+                    shape = RoundedCornerShape(24.dp)
+                )
+        )
+
+        // Marca de agua
+        Icon(
+            imageVector = if(isBestValue) Icons.Default.WorkspacePremium else Icons.Default.ConfirmationNumber,
+            contentDescription = null,
+            tint = (if(isBestValue) ColorGold else Color.White).copy(alpha = 0.05f),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 20.dp, y = 20.dp)
+                .size(140.dp)
+                .rotate(-15f)
+        )
+
+        // Contenido
+        Column(
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Info Pack
+                Column(modifier = Modifier.weight(1f)) {
+                    if (isBestValue) {
+                        Surface(
+                            color = ColorGold,
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            Text(
+                                "MÁS POPULAR",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                     Text(
-                        text = pack.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = ColorTextSecondary
+                        text = pack.name.uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorTextSecondary,
+                        letterSpacing = 1.sp
                     )
+                    if (pack.isUnlimited) {
+                        Text(
+                            text = "∞ PASE LIBRE",
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Black,
+                            color = ColorTextPrimary
+                        )
+                    } else {
+                        Text(
+                            text = "${pack.credits} CRÉDITOS",
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Black,
+                            color = ColorTextPrimary
+                        )
+                    }
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocalActivity, null, tint = ColorPrimaryAction, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "${pack.credits} créditos",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ColorTextPrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+                
+                // Precio
+                Text(
+                    text = currencyFormatter.format(pack.price),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isBestValue) ColorGold else LocalPrimaryColor.current
+                )
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = currencyFormatter.format(pack.price),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = ColorPrimaryAction
-            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (pack.description.isNotBlank()) {
+                Text(
+                    text = pack.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ColorTextSecondary,
+                    maxLines = 2
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Botón Falso (Visual)
+            Button(
+                onClick = onClick, // Redundante pero buen feedback tactil
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isBestValue) LocalPrimaryColor.current else Color.White.copy(alpha = 0.1f)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    "COMPRAR AHORA",
+                    fontWeight = FontWeight.Bold,
+                    color = if (isBestValue) Color.White else ColorTextPrimary
+                )
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, modifier = Modifier.size(16.dp))
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PaymentConfirmationDialogGlass(
+fun ProPaymentDialog(
     pack: CreditPack,
     onDismiss: () -> Unit,
     onConfirm: (String, Uri?) -> Unit,
@@ -304,76 +419,90 @@ fun PaymentConfirmationDialogGlass(
     val currencyFormatter = remember { NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR")) }
     val paymentDetailsState by creditsViewModel.paymentDetailsState.collectAsState()
 
-    // Selector de imagen nuevo
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            Log.d("IMAGE_PICKER", "Uri: $uri")
-            imageUri = uri
-        }
-    }
+    ) { uri: Uri? -> if (uri != null) imageUri = uri }
 
-    AlertDialog(
+    BasicAlertDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
-        containerColor = ColorDialogSurface, // Color solido oscuro
-        textContentColor = ColorTextSecondary,
-        titleContentColor = ColorTextPrimary,
-        title = { Text("Confirmar Compra", fontWeight = FontWeight.Bold) },
-        text = {
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        // TICKET SHAPE CARD
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = ColorDialogSurface,
+            border = BorderStroke(1.dp, ColorBorder),
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    color = ColorTextSecondary,
-                    text = buildAnnotatedString {
-                        append("Pack seleccionado: ")
-                        withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, color = ColorTextPrimary)) {
-                            append(pack.name)
-                        }
-                        append("\nTotal a pagar: ")
-                        withStyle(style = SpanStyle(fontWeight = FontWeight.Bold, color = ColorPrimaryAction, fontSize = 18.sp)) {
-                            append(currencyFormatter.format(pack.price))
-                        }
+                // Header Ticket
+                Icon(Icons.Default.Description, null, tint = LocalPrimaryColor.current, modifier = Modifier.size(40.dp))
+                Spacer(Modifier.height(16.dp))
+                Text("Resumen de Compra", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                Spacer(Modifier.height(24.dp))
+
+                // Detalles
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Producto", color = ColorTextSecondary)
+                    Text(pack.name, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Créditos", color = ColorTextSecondary)
+                    if (pack.isUnlimited) {
+                        Text("∞ (Pase Libre)", color = ColorTextPrimary, fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("${pack.credits}", color = ColorTextPrimary, fontWeight = FontWeight.Bold)
                     }
-                )
+                }
+                
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = ColorBorder, thickness = 1.dp) // Podría ser dashed
+                Spacer(Modifier.height(16.dp))
+                
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("TOTAL", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                    Text(currencyFormatter.format(pack.price), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = LocalPrimaryColor.current)
+                }
 
-                HorizontalDivider(color = ColorBorder)
+                Spacer(Modifier.height(24.dp))
 
-                // Dropdown Estilizado
+                // Selector de Pago
                 var expanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { if (!isLoading) expanded = !expanded }) {
                     OutlinedTextField(
                         value = selectedPaymentMethod,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Método de Pago", color = ColorTextSecondary) },
+                        label = { Text("Método de Pago") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor(
-                            type = MenuAnchorType.PrimaryNotEditable,
-                            enabled = !isLoading
-                        ).fillMaxWidth(),
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = !isLoading)
+                            .fillMaxWidth(),
                         isError = showPaymentMethodError,
                         enabled = !isLoading,
+                        shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ColorPrimaryAction,
+                            focusedBorderColor = LocalPrimaryColor.current,
                             unfocusedBorderColor = ColorBorder,
-                            focusedTextColor = ColorTextPrimary,
-                            unfocusedTextColor = ColorTextPrimary,
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent
-                        ),
-                        shape = RoundedCornerShape(12.dp)
+                            focusedLabelColor = LocalPrimaryColor.current,
+                            unfocusedLabelColor = ColorTextSecondary
+                        )
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,
                         onDismissRequest = { expanded = false },
-                        modifier = Modifier.background(ColorDialogSurface)
+                        modifier = Modifier.background(Color(0xFF2C2C2E))
                     ) {
                         paymentMethods.forEach { method ->
                             DropdownMenuItem(
-                                text = { Text(method, color = ColorTextPrimary) },
+                                text = { Text(method, color = Color.White) },
                                 onClick = {
                                     selectedPaymentMethod = method
                                     showPaymentMethodError = false
@@ -383,119 +512,89 @@ fun PaymentConfirmationDialogGlass(
                         }
                     }
                 }
-                if (showPaymentMethodError) {
-                    Text("Selecciona un método de pago", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                }
 
-                // Datos de pago dinámicos
+                // Datos Dinámicos
                 if (selectedPaymentMethod == "Transferencia Bancaria" || selectedPaymentMethod == "MercadoPago") {
+                    Spacer(Modifier.height(16.dp))
                     when (val state = paymentDetailsState) {
-                        is PaymentDetailsState.Loading -> Box(Modifier.fillMaxWidth(), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), color = ColorPrimaryAction) }
-                        is PaymentDetailsState.Error -> Text(state.message, color = MaterialTheme.colorScheme.error)
+                        is PaymentDetailsState.Loading -> CircularProgressIndicator(Modifier.size(24.dp), color = LocalPrimaryColor.current)
                         is PaymentDetailsState.Success -> {
-                            PaymentInfoCardGlass(label = "Alias", value = state.details.bankTransferInfo)
-                            PaymentInfoCardGlass(label = "CVU/CBU", value = state.details.mercadoPagoInfo)
+                            PaymentInfoCardGlass(label = "Alias / CBU", value = if(selectedPaymentMethod == "MercadoPago") state.details.mercadoPagoInfo else state.details.bankTransferInfo)
                         }
+                        else -> {}
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Botón Subir Comprobante
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
                     OutlinedButton(
-                        onClick = {
-                            imagePickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
+                        onClick = { imagePickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoading,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorTextPrimary),
-                        border = BorderStroke(1.dp, if (imageUri != null) ColorPrimaryAction else ColorBorder),
-                        shape = RoundedCornerShape(12.dp)
+                        border = BorderStroke(1.dp, if (imageUri != null) ColorSuccess else ColorBorder)
                     ) {
-                        Icon(if(imageUri != null) Icons.Default.Check else Icons.Default.UploadFile, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (imageUri == null) "Adjuntar Comprobante" else "Comprobante Adjuntado")
-                    }
-
-                    if (imageUri != null) {
-                        AsyncImage(
-                            model = imageUri,
-                            contentDescription = "Preview",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.dp, ColorBorder, RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Inside
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(ColorPrimaryAction.copy(alpha = 0.1f), RoundedCornerShape(8.dp)).padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.Info, null, tint = ColorPrimaryAction, modifier = Modifier.size(16.dp))
-                        Text(
-                            text = "Se requiere verificación manual.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = ColorTextSecondary
-                        )
+                         Icon(if(imageUri != null) Icons.Default.CheckCircle else Icons.Default.UploadFile, null, tint = if(imageUri != null) ColorSuccess else ColorTextPrimary)
+                         Spacer(Modifier.width(8.dp))
+                         Text(if (imageUri != null) "Comprobante Cargado" else "Subir Comprobante")
                     }
                 }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (selectedPaymentMethod.isNotBlank()) {
-                        onConfirm(selectedPaymentMethod, imageUri)
-                    } else {
-                        showPaymentMethodError = true
+
+                Spacer(Modifier.height(24.dp))
+
+                // Botones Acción
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorTextSecondary),
+                        border = BorderStroke(1.dp, ColorBorder)
+                    ) {
+                        Text("Cancelar")
                     }
-                },
-                enabled = !isLoading,
-                colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White) else Text("Enviar", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isLoading) {
-                Text("Cancelar", color = ColorTextSecondary)
-            }
-        }
-    )
-}
-
-@Composable
-fun PaymentInfoCardGlass(label: String, value: String) {
-    val clipboardManager = LocalClipboardManager.current
-    val context = LocalContext.current
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.1f))
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(label, style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
-                Text(value, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
-            }
-            IconButton(onClick = {
-                clipboardManager.setText(AnnotatedString(value))
-                Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
-            }) {
-                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
+                    Button(
+                        onClick = {
+                            if (selectedPaymentMethod.isNotBlank()) onConfirm(selectedPaymentMethod, imageUri)
+                            else showPaymentMethodError = true
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading,
+                        colors = ButtonDefaults.buttonColors(containerColor = LocalPrimaryColor.current)
+                    ) {
+                        if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
+                        else Text("Confirmar")
+                    }
+                }
             }
         }
     }
 }
+
+// Reutilizamos PaymentInfoCardGlass pero mejorado
+@Composable
+fun PaymentInfoCardGlass(label: String, value: String) {
+    val context = LocalContext.current
+    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+            .border(1.dp, ColorBorder, RoundedCornerShape(8.dp))
+            .padding(12.dp)
+            .clickable {
+                clipboardManager.setPrimaryClip(ClipData.newPlainText("Copied Text", value))
+                Toast.makeText(context, "Copiado al portapapeles", Toast.LENGTH_SHORT).show()
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
+        }
+        Icon(Icons.Default.ContentCopy, null, tint = LocalPrimaryColor.current, modifier = Modifier.size(18.dp))
+    }
+}
+
+// Helpers
+private val ColorSuccess = Color(0xFF4CAF50)

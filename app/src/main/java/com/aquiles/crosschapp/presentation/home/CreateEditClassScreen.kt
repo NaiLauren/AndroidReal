@@ -38,7 +38,7 @@ private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorError = Color(0xFFEF5350)
 
 private const val TYPE_WOD = "WOD"
@@ -91,7 +91,7 @@ fun CreateEditClassScreen(
     LaunchedEffect(Unit) { adminViewModel.loadScheduleTemplate() }
 
     LaunchedEffect(key1 = classId) {
-        if (isEditMode && classId != null) adminViewModel.loadClassForEditing(classId)
+        if (classId != null) adminViewModel.loadClassForEditing(classId)
     }
 
     LaunchedEffect(key1 = classForEditState) {
@@ -143,7 +143,7 @@ fun CreateEditClassScreen(
                 CenterAlignedTopAppBar(
                     title = { Text(if (isEditMode) "Editar Clase" else "Planificar", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary) } },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -332,7 +332,7 @@ fun GlassEditTextField(value: String, onValueChange: (String) -> Unit, label: St
 @Composable
 fun DateSelectorFieldGlass(selectedDate: Date, onDateSelected: (Date) -> Unit) {
     val context = LocalContext.current
-    val dateFormatter = remember { SimpleDateFormat("EEEE, dd 'de' MMMM", Locale("es", "ES")) }
+    val dateFormatter = remember { SimpleDateFormat("EEEE, dd 'de' MMMM", Locale.forLanguageTag("es-ES")) }
 
     OutlinedTextField(
         value = dateFormatter.format(selectedDate).replaceFirstChar { it.uppercase() },

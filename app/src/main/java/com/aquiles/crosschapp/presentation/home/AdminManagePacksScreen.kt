@@ -40,7 +40,7 @@ import java.util.*
 import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -56,8 +56,27 @@ private val ColorError = Color(0xFFEF5350)
 fun AdminManagePacksScreen(
     innerPadding: PaddingValues,
     navController: NavController,
-    adminViewModel: AdminViewModel = viewModel()
+    adminViewModel: AdminViewModel = viewModel(),
+    setupStepKey: String? = null
 ) {
+    var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
+    
+    if (showSetupPopup) {
+        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+            AlertDialog(
+                onDismissRequest = { showSetupPopup = false },
+                title = { Text(step.title, color = ColorTextPrimary) },
+                text = { Text(step.description, color = ColorTextSecondary) },
+                confirmButton = {
+                    Button(onClick = { showSetupPopup = false }, colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction)) { 
+                        Text("Entendido", color = Color.White) 
+                    }
+                },
+                containerColor = ColorDialogSurface
+            )
+        }
+    }
+    
     val packsState by adminViewModel.creditPacksState.collectAsState()
     val paymentSettingsState by adminViewModel.paymentSettingsState.collectAsState()
     val billingRulesState by adminViewModel.billingRulesState.collectAsState()
@@ -88,7 +107,7 @@ fun AdminManagePacksScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             floatingActionButton = {
@@ -310,7 +329,7 @@ private fun GlassCreditPackItem(
     onEditClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
-    val currencyFormat = remember { NumberFormat.getCurrencyInstance(Locale("es", "AR")) }
+    val currencyFormat = remember { NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR")) }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -324,7 +343,11 @@ private fun GlassCreditPackItem(
                 Text(pack.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${pack.credits} Créditos", style = MaterialTheme.typography.bodyMedium, color = ColorSuccess, fontWeight = FontWeight.Bold)
+                    if (pack.isUnlimited) {
+                        Text("∞ Pase Libre", style = MaterialTheme.typography.bodyMedium, color = ColorSuccess, fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("${pack.credits} Créditos", style = MaterialTheme.typography.bodyMedium, color = ColorSuccess, fontWeight = FontWeight.Bold)
+                    }
                     if(pack.description.isNotBlank()) {
                         Text(" • ${pack.description}", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary, maxLines = 1)
                     }
@@ -369,6 +392,8 @@ private fun GlassEditPackDialog(
     var price by remember { mutableStateOf(pack?.price?.toString() ?: "") }
     var surchargePrice by remember { mutableStateOf(pack?.surchargePrice?.toString() ?: "") }
     var order by remember { mutableStateOf(pack?.order?.toString() ?: "0") }
+    var isUnlimited by remember { mutableStateOf(pack?.isUnlimited ?: false) }
+    var durationDays by remember { mutableStateOf(pack?.durationDays?.toString() ?: "30") }
     val isEditMode = pack != null
 
     AlertDialog(
@@ -379,7 +404,18 @@ private fun GlassEditPackDialog(
             Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 GlassDialogTextField(value = name, onValueChange = { name = it }, label = "Nombre *")
                 GlassDialogTextField(value = description, onValueChange = { description = it }, label = "Descripción")
-                GlassDialogTextField(value = credits, onValueChange = { credits = it.filter { c -> c.isDigit() } }, label = "Créditos *", keyboardType = KeyboardType.Number)
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = isUnlimited, onCheckedChange = { isUnlimited = it }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction))
+                    Text("Es Pase Libre (Ilimitado)", color = ColorTextPrimary)
+                }
+
+                if (!isUnlimited) {
+                    GlassDialogTextField(value = credits, onValueChange = { credits = it.filter { c -> c.isDigit() } }, label = "Créditos *", keyboardType = KeyboardType.Number)
+                } else {
+                    GlassDialogTextField(value = durationDays, onValueChange = { durationDays = it.filter { c -> c.isDigit() } }, label = "Duración en Días * (ej. 30)", keyboardType = KeyboardType.Number)
+                }
+                
                 GlassDialogTextField(value = price, onValueChange = { price = it.filter { c -> c.isDigit() || c == '.' } }, label = "Precio Normal *", keyboardType = KeyboardType.Decimal)
                 GlassDialogTextField(value = surchargePrice, onValueChange = { surchargePrice = it.filter { c -> c.isDigit() || c == '.' } }, label = "Precio c/ Recargo *", keyboardType = KeyboardType.Decimal)
                 GlassDialogTextField(value = order, onValueChange = { order = it.filter { c -> c.isDigit() } }, label = "Orden *", keyboardType = KeyboardType.Number)
@@ -388,10 +424,11 @@ private fun GlassEditPackDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val creditsInt = credits.toIntOrNull()
+                    val creditsInt = if (isUnlimited) 9999 else credits.toIntOrNull()
                     val priceDouble = price.toDoubleOrNull()
                     val surchargePriceDouble = surchargePrice.toDoubleOrNull()
                     val orderInt = order.toIntOrNull()
+                    val durationInt = durationDays.toIntOrNull() ?: 30
 
                     if (name.isBlank() || creditsInt == null || priceDouble == null || surchargePriceDouble == null || orderInt == null) {
                         Toast.makeText(context, "Completa los campos obligatorios.", Toast.LENGTH_SHORT).show()
@@ -404,7 +441,9 @@ private fun GlassEditPackDialog(
                             price = priceDouble,
                             surchargePrice = surchargePriceDouble,
                             order = orderInt,
-                            isActive = pack?.isActive ?: true
+                            isActive = pack?.isActive ?: true,
+                            isUnlimited = isUnlimited,
+                            durationDays = durationInt
                         )
                         onSave(packToSave)
                     }

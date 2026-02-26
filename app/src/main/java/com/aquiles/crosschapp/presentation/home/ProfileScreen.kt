@@ -46,7 +46,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200) // Tu naranja
 private val ColorAdminAction = Color(0xFF673AB7)
 private val ColorTextPrimary = Color.White
@@ -81,21 +81,16 @@ fun ProfileScreen(
     val context = LocalContext.current
 
     // --- Lógica de permisos e imagen (Sin cambios) ---
-    val imagePickerLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) { uri ->
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
         uri?.let { profileViewModel.uploadProfileImage(it) }
-    }
-    val requestPermissionLauncher = rememberLauncherForActivityResult(contract = ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) imagePickerLauncher.launch("image/*")
-        else Toast.makeText(context, "Permiso denegado.", Toast.LENGTH_SHORT).show()
     }
 
     fun launchImagePicker() {
-        val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED) {
-            imagePickerLauncher.launch("image/*")
-        } else {
-            requestPermissionLauncher.launch(perm)
-        }
+        imagePickerLauncher.launch(
+            androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
     }
 
     LaunchedEffect(profileUpdateState) {
@@ -108,11 +103,18 @@ fun ProfileScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.1f)) // Fondo base
     ) {
-        // --- SCAFFOLD SIN TOP BAR ---
+        // --- SCAFFOLD CON TOP BAR DE CRISTAL VACÍO ---
         Scaffold(
-            topBar = { /* Dejamos vacío para quitar el título "Mi Perfil" */ },
+            topBar = { 
+                @OptIn(ExperimentalMaterial3Api::class)
+                CenterAlignedTopAppBar(
+                    title = { }, // Título vacío a petición
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+                    )
+                ) 
+            },
             containerColor = Color.Transparent
         ) { localPadding ->
 
@@ -461,11 +463,8 @@ fun ProfileHeaderIOSStyle(
 
 @Composable
 fun ProfileStatCard(value: String, label: String, icon: ImageVector, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-        border = BorderStroke(1.dp, ColorBorder)
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = modifier
     ) {
         Column(
             modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp).fillMaxWidth(),
@@ -622,6 +621,17 @@ fun CreditHistoryItemRow(req: CreditRequest) {
         Spacer(Modifier.height(4.dp))
         Text(text = req.comboName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = ColorTextPrimary)
         Text(text = "${req.creditsRequested} créditos", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+    }
+}
+
+// Helper para mapear strings de LevelSystem a Iconos
+private fun getIconByName(name: String): ImageVector {
+    return when(name) {
+        "military_tech" -> Icons.Default.MilitaryTech
+        "fitness_center" -> Icons.Default.FitnessCenter
+        "workspace_premium" -> Icons.Default.WorkspacePremium
+        "emoji_events" -> Icons.Default.EmojiEvents
+        else -> Icons.Default.Star
     }
 }
 

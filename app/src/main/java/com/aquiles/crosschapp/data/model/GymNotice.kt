@@ -2,6 +2,7 @@ package com.aquiles.crosschapp.data.model
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.Exclude
 import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 
@@ -12,8 +13,8 @@ data class GymNotice(
     val message: String = "",
     @PropertyName("image_url") val imageUrl: String = "",
     @PropertyName("imageUrl") val imageUrlLegacy: String = "",
-    val type: NoticeType? = null,
-    val priority: NoticePriority? = null,
+    @PropertyName("type") var typeString: String? = null,
+    @PropertyName("priority") var priorityString: String? = null,
     @PropertyName("author_id") val authorId: String = "",
     @PropertyName("author_name") val authorName: String = "",
     @ServerTimestamp val createdAt: Timestamp? = null,
@@ -24,8 +25,33 @@ data class GymNotice(
     val viewCount: Int = 0
 ) {
     // Helper to get the actual image URL regardless of field name
+    @get:Exclude
     val actualImageUrl: String
         get() = if (imageUrl.isNotBlank()) imageUrl else imageUrlLegacy
+
+    // Safe parsing for NoticeType
+    @get:Exclude
+    val type: NoticeType
+        get() {
+            val tStr = typeString?.uppercase()?.trim() ?: return NoticeType.GENERAL
+            return try {
+                NoticeType.valueOf(tStr)
+            } catch (e: Exception) {
+                if (tStr == "INFO") NoticeType.ANNOUNCEMENT else NoticeType.GENERAL
+            }
+        }
+
+    // Safe parsing for NoticePriority
+    @get:Exclude
+    val priority: NoticePriority
+        get() {
+            val pStr = priorityString?.uppercase()?.trim() ?: return NoticePriority.NORMAL
+            return try {
+                NoticePriority.valueOf(pStr)
+            } catch (e: Exception) {
+                NoticePriority.NORMAL
+            }
+        }
 
     // Logic to determine if notice is effectively active
     // Prioritize 'isActive' if present. Fallback to 'active'. Default to true.

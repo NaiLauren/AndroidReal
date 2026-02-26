@@ -9,6 +9,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 
 
 private val AppDarkColorScheme = darkColorScheme(
@@ -32,6 +34,9 @@ private val AppDarkColorScheme = darkColorScheme(
     surfaceTint = BrandOrange
 )
 
+// Provider global para el color primario dinámico de la marca
+val LocalPrimaryColor = compositionLocalOf { BrandOrange }
+
 @Composable
 fun CrossChAppTheme(
     darkTheme: Boolean = true,
@@ -41,6 +46,8 @@ fun CrossChAppTheme(
 ) {
     // Si hay un color personalizado, creamos un esquema en base a él
     // Si no, usamos el por defecto (Orange)
+    val effectivePrimaryColor = overridePrimaryColor ?: BrandOrange
+    
     val colorScheme = if (overridePrimaryColor != null) {
         darkColorScheme(
             primary = overridePrimaryColor,
@@ -81,9 +88,11 @@ fun CrossChAppTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = AppTypography,
-        content = content
-    )
+    CompositionLocalProvider(LocalPrimaryColor provides effectivePrimaryColor) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = AppTypography,
+            content = content
+        )
+    }
 }

@@ -36,7 +36,7 @@ import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS (Reused for consistency) ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -48,8 +48,27 @@ private val ColorDanger = Color(0xFFFF3B30)
 fun AdminNewsScreen(
     innerPadding: PaddingValues = PaddingValues(), // Default to empty if not passed, though usually passed from Scaffold
     navController: NavController,
-    noticeViewModel: NoticeViewModel = viewModel()
+    noticeViewModel: NoticeViewModel = viewModel(),
+    setupStepKey: String? = null
 ) {
+    var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
+    
+    if (showSetupPopup) {
+        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+            AlertDialog(
+                onDismissRequest = { showSetupPopup = false },
+                title = { Text(step.title, color = ColorTextPrimary) },
+                text = { Text(step.description, color = ColorTextSecondary) },
+                confirmButton = {
+                    Button(onClick = { showSetupPopup = false }, colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction)) { 
+                        Text("Entendido", color = Color.White) 
+                    }
+                },
+                containerColor = ColorGlassSurface
+            )
+        }
+    }
+    
     val notices by noticeViewModel.notices.collectAsState()
     val isLoading by noticeViewModel.isLoading.collectAsState()
     
@@ -76,7 +95,7 @@ fun AdminNewsScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             floatingActionButton = {
@@ -166,7 +185,7 @@ fun AdminNoticeItem(
                     Text("Cancelar")
                 }
             },
-            containerColor = Color(0xFF1C1C1E),
+            containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f),
             titleContentColor = ColorTextPrimary,
             textContentColor = ColorTextSecondary
         )

@@ -24,7 +24,7 @@ import com.aquiles.crosschapp.data.model.WodResult
 import java.text.SimpleDateFormat
 import java.util.*
 
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
 private val ColorTextPrimary = Color.White

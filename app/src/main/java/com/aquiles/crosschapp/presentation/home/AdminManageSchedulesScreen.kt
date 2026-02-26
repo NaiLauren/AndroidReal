@@ -36,7 +36,7 @@ import java.util.Calendar
 import java.util.Locale
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -83,12 +83,32 @@ private fun InfoRow(
 fun AdminManageSchedulesScreen(
     navController: NavController,
     adminViewModel: AdminViewModel,
-    innerPadding: PaddingValues
+    innerPadding: PaddingValues,
+    setupStepKey: String? = null
 ) {
     val context = LocalContext.current
     
+    var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
+    
+    if (showSetupPopup) {
+        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+            AlertDialog(
+                onDismissRequest = { showSetupPopup = false },
+                title = { Text(step.title, color = ColorTextPrimary) },
+                text = { Text(step.description, color = ColorTextSecondary) },
+                confirmButton = {
+                    Button(onClick = { showSetupPopup = false }, colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction)) { 
+                        Text("Entendido", color = Color.White) 
+                    }
+                },
+                containerColor = ColorGlassSurface
+            )
+        }
+    }
+    
     // Observe Weekly Schedule
     val weeklySchedule by adminViewModel.weeklyScheduleState.collectAsState()
+    val gymOperatingHours by adminViewModel.gymOperatingHoursState.collectAsState()
     val operationMessage by adminViewModel.scheduleOperationState.collectAsState()
     
     // Get gym and its primary color
@@ -104,7 +124,7 @@ fun AdminManageSchedulesScreen(
     // 1 = Domingo, 2 = Lunes, ... 7 = Sábado (Calendar.SUNDAY is 1)
     // Vamos a iniciar en Lunes (2) por usabilidad
     var selectedDay by remember { mutableStateOf(2) } 
-    var timeToDelete by remember { mutableStateOf<String?>(null) }
+    var timeToDelete by remember { mutableStateOf<AdminViewModel.TemplateSlot?>(null) }
     
     // --- DATE SELECTOR STATE ---
     var showDateRangeSelector by remember { mutableStateOf(false) }
@@ -115,6 +135,7 @@ fun AdminManageSchedulesScreen(
 
     LaunchedEffect(Unit) {
         adminViewModel.loadWeeklyScheduleTemplate()
+        adminViewModel.loadGymOperatingHours()
     }
 
     LaunchedEffect(operationMessage) {
@@ -126,6 +147,33 @@ fun AdminManageSchedulesScreen(
 
     // Get times for selected day
     val timesForDay = weeklySchedule[selectedDay] ?: emptyList()
+    val rangesForDay = gymOperatingHours[selectedDay]?.ranges ?: emptyList()
+    
+    // Rango Dialog State
+    var showRangeDialog by remember { mutableStateOf(false) }
+    var rangeToDelete by remember { mutableStateOf<AdminViewModel.TimeRange?>(null) }
+    
+    // Persistent Range Dialog State
+    var localStart by remember { mutableStateOf("08:00") }
+    var localEnd by remember { mutableStateOf("22:00") }
+    
+    // Helper para mostrar picker de hora regular (Clases)
+    var lastClassHour by remember { mutableStateOf(18) }
+    var lastClassMinute by remember { mutableStateOf(0) }
+    val showTimePicker = {
+        TimePickerDialog(
+            context,
+            { _, hourOfDay, minute ->
+                lastClassHour = hourOfDay
+                lastClassMinute = minute
+                val formattedTime = String.format(Locale.US, "%02d:%02d", hourOfDay, minute)
+                adminViewModel.saveTimeForDay(selectedDay, formattedTime, false)
+            },
+            lastClassHour,
+            lastClassMinute,
+            true
+        ).show()
+    }
 
     // --- UI STRUCTURE ---
     Box(
@@ -140,7 +188,7 @@ fun AdminManageSchedulesScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             floatingActionButton = {}, // Removed FAB, we'll use bottom bar
@@ -162,7 +210,7 @@ fun AdminManageSchedulesScreen(
                     
                     Spacer(Modifier.height(16.dp))
 
-                    if (timesForDay.isEmpty()) {
+                    if (timesForDay.isEmpty() && rangesForDay.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -173,7 +221,7 @@ fun AdminManageSchedulesScreen(
                                 Icon(Icons.Default.AccessTime, null, tint = ColorTextSecondary, modifier = Modifier.size(48.dp))
                                 Spacer(Modifier.height(16.dp))
                                 Text(
-                                    "No hay horarios para el ${getDayNameFull(selectedDay)}.\nPulsa + para añadir.",
+                                    "No hay horarios para el ${getDayNameFull(selectedDay)}.\nPulsa abajo para añadir.",
                                     color = ColorTextSecondary,
                                     textAlign = TextAlign.Center
                                 )
@@ -182,61 +230,50 @@ fun AdminManageSchedulesScreen(
                     } else {
                         LazyColumn(
                             contentPadding = PaddingValues(
-                                bottom = 180.dp, // Increased padding for bottom bar + system UI
+                                bottom = 180.dp,
                                 start = 16.dp,
                                 end = 16.dp
                             ),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            items(timesForDay) { time ->
-                                ScheduleTemplateItemGlass(
-                                    time = time,
-                                    onDeleteClick = { timeToDelete = time },
-                                    primaryColor = gymPrimaryColor
-                                )
+                            if (rangesForDay.isNotEmpty()) {
+                                item {
+                                    Text("Horario de Apertura Libre", style = MaterialTheme.typography.labelMedium, color = Color(0xFF42A5F5), modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+                                }
+                                items(rangesForDay) { range ->
+                                    GlassCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.AccessTime, null, tint = Color(0xFF42A5F5), modifier = Modifier.size(24.dp))
+                                                Spacer(Modifier.width(16.dp))
+                                                Text("De ${range.startTime} a ${range.endTime}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                                            }
+                                            IconButton(onClick = { rangeToDelete = range }) {
+                                                Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = ColorError)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             
-                            // Add button at the end of the list
-                            item {
-                                GlassCard(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                val cal = Calendar.getInstance()
-                                                TimePickerDialog(
-                                                    context,
-                                                    { _, hourOfDay, minute ->
-                                                        val formattedTime = String.format(Locale.US, "%02d:%02d", hourOfDay, minute)
-                                                        adminViewModel.saveTimeForDay(selectedDay, formattedTime)
-                                                    },
-                                                    cal.get(Calendar.HOUR_OF_DAY),
-                                                    cal.get(Calendar.MINUTE),
-                                                    true
-                                                ).show()
-                                            }
-                                            .padding(horizontal = 20.dp, vertical = 20.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Add, 
-                                            "Añadir horario", 
-                                            tint = gymPrimaryColor, 
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(Modifier.width(12.dp))
-                                        Text(
-                                            text = "Añadir Horario",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Bold,
-                                            color = gymPrimaryColor
-                                        )
-                                    }
+                            if (timesForDay.isNotEmpty()) {
+                                item {
+                                    Text("Clases Guiadas", style = MaterialTheme.typography.labelMedium, color = gymPrimaryColor, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+                                }
+                                items(timesForDay) { slot ->
+                                    ScheduleTemplateItemGlass(
+                                        slot = slot,
+                                        onDeleteClick = { timeToDelete = slot },
+                                        primaryColor = gymPrimaryColor
+                                    )
                                 }
                             }
                         }
@@ -260,60 +297,36 @@ fun AdminManageSchedulesScreen(
                     ) {
                         // Generate Month Button (Left)
                         Button(
-                            onClick = { showDateRangeSelector = true }, // Changed: show dialog first
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = gymPrimaryColor
-                            ),
+                            onClick = { showDateRangeSelector = true }, 
+                            colors = ButtonDefaults.buttonColors(containerColor = gymPrimaryColor),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(0.9f)
                         ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Generar Mes",
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text("Generar Mes", fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                         
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(Modifier.width(8.dp))
                         
-                        // Add Time Button (Right) - Only show if list is empty
-                        if (timesForDay.isEmpty()) {
-                            Button(
-                                onClick = {
-                                    val cal = Calendar.getInstance()
-                                    TimePickerDialog(
-                                        context,
-                                        { _, hourOfDay, minute ->
-                                            val formattedTime = String.format(Locale.US, "%02d:%02d", hourOfDay, minute)
-                                            adminViewModel.saveTimeForDay(selectedDay, formattedTime)
-                                        },
-                                        cal.get(Calendar.HOUR_OF_DAY),
-                                        cal.get(Calendar.MINUTE),
-                                        true
-                                    ).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.White.copy(alpha = 0.15f)
-                                ),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    Icons.Default.Add,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "Añadir Horario",
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                        // Add Class Button
+                        Button(
+                            onClick = { showTimePicker() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.15f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(0.8f)
+                        ) {
+                            Text("+ Clase", fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                        
+                        Spacer(Modifier.width(8.dp))
+                        
+                        // Add Open Gym Range Button
+                        Button(
+                            onClick = { showRangeDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF42A5F5).copy(alpha = 0.2f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(0.8f)
+                        ) {
+                            Text("+ Libre", fontWeight = FontWeight.Bold, color = Color(0xFF42A5F5), maxLines = 1)
                         }
                     }
                 }
@@ -327,7 +340,7 @@ fun AdminManageSchedulesScreen(
         
         AlertDialog(
             onDismissRequest = { showDateRangeSelector = false },
-            containerColor = Color(0xFF1C1C1E),
+            containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f),
             title = { Text("Seleccionar Período", color = ColorTextPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
@@ -429,17 +442,17 @@ fun AdminManageSchedulesScreen(
         }
     }
 
-    // Dialogo de confirmación Glass
-    timeToDelete?.let { time ->
+    // Dialogos de confirmación / ingreso
+    timeToDelete?.let { slot ->
         AlertDialog(
             onDismissRequest = { timeToDelete = null },
-            containerColor = Color(0xFF1C1C1E),
+            containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f),
             title = { Text("Eliminar Horario", color = ColorTextPrimary) },
-            text = { Text("¿Eliminar $time del ${getDayNameFull(selectedDay)}?", color = ColorTextSecondary) },
+            text = { Text("¿Eliminar ${slot.time} del ${getDayNameFull(selectedDay)}?", color = ColorTextSecondary) },
             confirmButton = {
                 Button(
                     onClick = {
-                        adminViewModel.removeTimeFromDay(selectedDay, time)
+                        adminViewModel.removeTimeFromDay(selectedDay, slot)
                         timeToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ColorError)
@@ -448,6 +461,103 @@ fun AdminManageSchedulesScreen(
             dismissButton = {
                 TextButton(onClick = { timeToDelete = null }) {
                     Text("Cancelar", color = ColorTextSecondary)
+                }
+            }
+        )
+    }
+
+    rangeToDelete?.let { range ->
+        AlertDialog(
+            onDismissRequest = { rangeToDelete = null },
+            icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = ColorError) },
+            title = { Text("Eliminar bloque libre") },
+            text = { Text("¿Seguro que deseas eliminar el horario de ${range.startTime} a ${range.endTime}?", color = ColorTextSecondary) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newRanges = rangesForDay.filter { it != range }
+                        adminViewModel.saveGymOperatingHours(selectedDay, newRanges)
+                        rangeToDelete = null
+                    }
+                ) {
+                    Text("Eliminar", color = ColorError)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { rangeToDelete = null }) { Text("Cancelar", color = ColorTextPrimary) }
+            },
+            containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f),
+            titleContentColor = ColorTextPrimary,
+            textContentColor = ColorTextSecondary
+        )
+    }
+    
+    // --- ADD OPEN GYM RANGE DIALOG ---
+    if (showRangeDialog) {
+        
+        AlertDialog(
+            onDismissRequest = { showRangeDialog = false },
+            containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f),
+            title = { Text("Nuevo Bloque Libre", color = ColorTextPrimary) },
+            text = {
+                Column {
+                    Text("Define a qué hora abre y cierra el gimnasio para entrenamientos libres.", color = ColorTextSecondary, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Apertura:", color = ColorTextPrimary)
+                        OutlinedButton(
+                            onClick = {
+                                val parts = localStart.split(":")
+                                val initialH = parts.getOrNull(0)?.toIntOrNull() ?: 8
+                                val initialM = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                                TimePickerDialog(context, { _, h, m -> localStart = String.format(Locale.US, "%02d:%02d", h, m) }, initialH, initialM, true).show()
+                            },
+                        ) {
+                            Text(localStart, color = ColorTextPrimary)
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Cierre:", color = ColorTextPrimary)
+                        OutlinedButton(
+                            onClick = {
+                                val parts = localEnd.split(":")
+                                val initialH = parts.getOrNull(0)?.toIntOrNull() ?: 22
+                                val initialM = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                                TimePickerDialog(context, { _, h, m -> localEnd = String.format(Locale.US, "%02d:%02d", h, m) }, initialH, initialM, true).show()
+                            },
+                        ) {
+                            Text(localEnd, color = ColorTextPrimary)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val updatedRanges = rangesForDay + AdminViewModel.TimeRange(localStart, localEnd)
+                        adminViewModel.saveGymOperatingHours(selectedDay, updatedRanges)
+                        showRangeDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF42A5F5))
+                ) {
+                    Text("Añadir", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRangeDialog = false }) {
+                    Text("Cancelar", color = ColorTextPrimary)
                 }
             }
         )
@@ -499,7 +609,7 @@ fun AdminManageSchedulesScreen(
                         )
                     }
                     
-                    Divider(color = Color.White.copy(alpha = 0.1f))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                     
                     // PREVIEW INFO
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -720,7 +830,7 @@ fun getDayNameFull(day: Int): String {
 
 @Composable
 fun ScheduleTemplateItemGlass(
-    time: String,
+    slot: AdminViewModel.TemplateSlot,
     onDeleteClick: () -> Unit,
     primaryColor: Color
 ) {
@@ -734,14 +844,35 @@ fun ScheduleTemplateItemGlass(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AccessTime, null, tint = primaryColor, modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Default.AccessTime, 
+                    null, 
+                    tint = if (slot.isOpenGym) Color(0xFF42A5F5) else primaryColor, 
+                    modifier = Modifier.size(20.dp)
+                )
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    text = time,
+                    text = slot.time,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = ColorTextPrimary
                 )
+                
+                if (slot.isOpenGym) {
+                    Spacer(Modifier.width(12.dp))
+                    Surface(
+                        color = Color(0xFF42A5F5).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "Libre",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF42A5F5),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
             }
             IconButton(onClick = onDeleteClick) {
                 Icon(Icons.Default.Delete, "Eliminar", tint = ColorError.copy(alpha = 0.8f))

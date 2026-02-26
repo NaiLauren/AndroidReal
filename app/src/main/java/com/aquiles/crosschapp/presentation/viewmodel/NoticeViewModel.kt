@@ -112,6 +112,7 @@ class NoticeViewModel : ViewModel() {
             )
 
             newDocRef.set(notice).await()
+            markSetupStepComplete("novedad_lista")
             android.util.Log.d("NoticeViewModel", "Notice created successfully: ${newDocRef.id}")
             
         } catch (e: Exception) {
@@ -154,5 +155,18 @@ class NoticeViewModel : ViewModel() {
         listenerRegistration?.remove()
         listenerRegistration = null
         currentGymId = null
+    }
+
+    // MARK: - Setup Wizard Progress
+    private fun markSetupStepComplete(stepKey: String) {
+        val gymId = com.aquiles.crosschapp.presentation.viewmodel.UserSession.currentUser.value?.gym_id ?: return
+        viewModelScope.launch {
+            try {
+                firestore.collection("gyms").document(gymId)
+                    .set(mapOf("setupProgress" to mapOf(stepKey to true)), com.google.firebase.firestore.SetOptions.merge())
+            } catch (e: Exception) {
+                android.util.Log.e("NoticeViewModel", "Error marking setup step $stepKey complete", e)
+            }
+        }
     }
 }

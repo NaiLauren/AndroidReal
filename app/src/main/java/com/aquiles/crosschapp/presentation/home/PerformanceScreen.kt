@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,8 +43,8 @@ import java.util.*
 import kotlin.math.ceil
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
-private val ColorDialogSurface = Color(0xFF1C1C1E)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorDialogSurface = Color(0xFF1C1C1E).copy(alpha = 0.70f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -57,6 +58,7 @@ private val ColorBackgroundGradientEnd = Color(0xFF121212)
 fun PerformanceScreen(
     innerPadding: PaddingValues,
     performanceViewModel: PerformanceViewModel,
+    userTrainingViewModel: UserTrainingViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onNavigateToLeaderboard: () -> Unit = {}
 ) {
     val benchmarkState by performanceViewModel.benchmarkRecordsState.collectAsState()
@@ -64,6 +66,8 @@ fun PerformanceScreen(
     val achievementsState by performanceViewModel.achievementsState.collectAsState()
     val chartState by performanceViewModel.attendanceChartState.collectAsState()
     val currentUser by UserSession.currentUser.collectAsState()
+    
+    var showingTrainingConfig by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser) {
         if (currentUser != null && benchmarkState is PerformanceState.Idle) {
@@ -84,7 +88,7 @@ fun PerformanceScreen(
                 topBar = {
                     CenterAlignedTopAppBar(
                         title = { Text("Mi Rendimiento", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                     )
                 },
                 containerColor = Color.Transparent
@@ -98,6 +102,12 @@ fun PerformanceScreen(
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
                     Spacer(Modifier.height(4.dp))
+
+                    // 0. ENTRENAMIENTO SEMANAL
+                    TrainingScheduleSummarySectionGlass(
+                        viewModel = userTrainingViewModel,
+                        onConfigure = { showingTrainingConfig = true }
+                    )
 
                     // 1. GRÁFICO DE ASISTENCIA
                     AttendanceChartSectionGlass(
@@ -138,6 +148,48 @@ fun PerformanceScreen(
                     }
 
                     Spacer(Modifier.height(24.dp))
+                }
+            }
+
+            // XP Reward Popup Overlay
+            val xpMessage by userTrainingViewModel.xpRewardMessage.collectAsState()
+            AnimatedVisibility(
+                visible = xpMessage != null,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 100.dp)
+            ) {
+                if (xpMessage != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFFFF9800), Color(0xFFFC5200))))
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = xpMessage!!,
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+            }
+            
+            if (showingTrainingConfig) {
+                ModalBottomSheet(
+                    onDismissRequest = { showingTrainingConfig = false },
+                    containerColor = ColorDialogSurface,
+                    scrimColor = Color.Black.copy(alpha = 0.5f),
+                    dragHandle = { BottomSheetDefaults.DragHandle(color = ColorTextSecondary) }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(bottom = 32.dp)
+                    ) {
+                        TrainingScheduleSectionGlass(viewModel = userTrainingViewModel)
+                    }
                 }
             }
         }
@@ -607,7 +659,7 @@ fun AchievementItem(achievement: AchievementUiModel) {
                     Text(achievement.description, color = ColorTextSecondary, textAlign = TextAlign.Center)
                     if (isUnlocked && achievement.unlockedAt != null) {
                         Spacer(Modifier.height(8.dp))
-                        val dateStr = SimpleDateFormat("dd MMM yyyy", Locale("es")).format(achievement.unlockedAt)
+                        val dateStr = SimpleDateFormat("dd MMM yyyy", Locale.forLanguageTag("es")).format(achievement.unlockedAt)
                         Text("Conseguido el: $dateStr", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50))
                     } else if (!isUnlocked) {
                         Spacer(Modifier.height(8.dp))
@@ -675,7 +727,7 @@ fun RecordHistoryItem(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val data = extractRecordData(record)
-    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale("es")) }
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.forLanguageTag("es")) }
 
     Card(
         modifier = Modifier
@@ -773,4 +825,393 @@ fun RecordHistoryItem(
             }
         }
     }
+}
+
+// =====================================================
+// SMART DAILY TIMELINE (GAMIFIED UI)
+// =====================================================
+
+@Composable
+fun TrainingScheduleSummarySectionGlass(viewModel: UserTrainingViewModel, onConfigure: () -> Unit) {
+    val intentions by viewModel.userIntentions.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, ColorBorder),
+        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Mi Entrenamiento de Hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                    Text("Centro Abierto", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                }
+                IconButton(onClick = onConfigure) {
+                    Icon(Icons.Default.Edit, contentDescription = "Configurar", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            if (isLoading) {
+                Box(Modifier.fillMaxWidth(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
+            } else if (intentions.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, tint = ColorTextSecondary.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
+                    Text("No has configurado tu rutina.", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                    TextButton(onClick = onConfigure) {
+                        Text("Configurar ahora", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val currentWeekday = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+                    val todayIntentions = intentions.filter { it.dayOfWeek == currentWeekday }.sortedBy { it.time }
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    if (todayIntentions.isEmpty()) {
+                        val operatingHours by viewModel.gymOperatingHours.collectAsState()
+                        val heatmapData by viewModel.heatmapData.collectAsState()
+                        val emptyState = getEmptyStateMessage(operatingHours, heatmapData, currentWeekday)
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(
+                                imageVector = emptyState.icon,
+                                contentDescription = null,
+                                tint = if (emptyState.isActive) MaterialTheme.colorScheme.primary else ColorTextSecondary.copy(alpha = 0.8f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = emptyState.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (emptyState.isActive) Color.White else ColorTextSecondary
+                                )
+                                Text(
+                                    text = emptyState.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ColorTextSecondary,
+                                    fontStyle = if (emptyState.isActive) FontStyle.Normal else FontStyle.Italic
+                                )
+                            }
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            todayIntentions.forEach { intention ->
+                                Row(
+                                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(intention.time, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    CapacityIndicatorGlassView(viewModel, currentWeekday, intention.time)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TrainingScheduleSectionGlass(viewModel: UserTrainingViewModel) {
+    val intentions by viewModel.userIntentions.collectAsState()
+    val operatingHours by viewModel.gymOperatingHours.collectAsState()
+    val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
+    val heatmapData by viewModel.heatmapData.collectAsState()
+    
+    var highlightQuietHours by remember { mutableStateOf(false) }
+    
+    val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+    var selectedDayTab by remember { mutableStateOf(today) }
+    
+    val days = listOf(2, 3, 4, 5, 6, 7, 1) // L..D
+    val activeDays = days.filter { day ->
+        val ranges = operatingHours[day]?.ranges
+        ranges != null && ranges.isNotEmpty()
+    }
+    
+    LaunchedEffect(activeDays) {
+        if (activeDays.isNotEmpty() && !activeDays.contains(selectedDayTab)) {
+            selectedDayTab = activeDays.first()
+        }
+    }
+
+    var minHour = 24
+    var maxHour = 0
+    operatingHours[selectedDayTab]?.ranges?.forEach { range ->
+        val startH = range.startTime.split(":").firstOrNull()?.toIntOrNull() ?: 24
+        val endH = range.endTime.split(":").firstOrNull()?.toIntOrNull() ?: 0
+        if (startH < minHour) minHour = startH
+        if (endH > maxHour) maxHour = endH
+    }
+    val activeHours = if (minHour > maxHour) (7..22).toList() else (minHour..maxHour).toList()
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // Header Texts
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            Text("Planificador Pro", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White)
+            Text("Toca una franja horaria para agendar tu entrenamiento y sumar XP \uD83D\uDE80", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+        }
+
+        if (activeDays.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(ColorGlassSurface).padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Schedule, null, tint = Color.Gray, modifier = Modifier.size(32.dp))
+                    Text("No hay horarios configurados.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        } else {
+            // Day Tabs & Equalizer Map
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Day Tabs
+                Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    activeDays.forEach { day ->
+                        val isSelected = selectedDayTab == day
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.08f))
+                                .clickable { selectedDayTab = day }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = getDayNameShort(day),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) Color.White else Color.Gray,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                
+                // Equalizer Timeline
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 12.dp, horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    activeHours.forEach { h ->
+                        val timeStr = String.format(Locale.US, "%02d:00", h)
+                        val isScheduled = intentions.any { it.dayOfWeek == selectedDayTab && it.time == timeStr }
+                        val count = heatmapData[selectedDayTab]?.get(h) ?: 0
+                        
+                        // Height 30 to 120 dp
+                        val barHeight = (30f + (count * 4f)).coerceAtMost(120f).dp
+                        
+                        val isQuiet = count < 5
+                        val baseColor = when {
+                            count == 0 -> Color.Gray.copy(alpha = 0.15f)
+                            isQuiet -> Color.Green.copy(alpha = 0.9f)
+                            count < 15 -> Color.Yellow.copy(alpha = 0.9f)
+                            else -> Color.Red.copy(alpha = 0.9f)
+                        }
+                        
+                        val finalColor = if (highlightQuietHours && !isQuiet && count > 0) baseColor.copy(alpha = 0.3f) else baseColor
+                        
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .width(36.dp)
+                                    .height(barHeight)
+                                    .clip(CircleShape)
+                                    .background(finalColor)
+                                    .run { 
+                                        if (isScheduled) border(3.dp, Color.White, CircleShape) else this 
+                                    }
+                                    .clickable {
+                                        viewModel.toggleIntention(selectedDayTab, timeStr)
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isScheduled) {
+                                    Icon(
+                                        Icons.Default.CheckCircle, 
+                                        contentDescription = null, 
+                                        tint = Color.White, 
+                                        modifier = Modifier.size(20.dp).offset(y = (-barHeight + 20.dp)/2)
+                                    )
+                                }
+                            }
+                            
+                            Text(
+                                text = "${h}h",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                fontWeight = if (isScheduled) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isScheduled) Color.White else Color.Gray
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // My Week Summary
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f))
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Mi Semana", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                
+                if (intentions.isEmpty()) {
+                    Text("Aún no has agendado ningún turno.", color = Color.Gray, fontStyle = FontStyle.Italic, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                } else {
+                    val grouped = intentions.groupBy { it.dayOfWeek }.toSortedMap()
+                    grouped.forEach { (dayId, dayIntentions) ->
+                        val sortedTimes = dayIntentions.map { it.time }.sorted()
+                        if (sortedTimes.isNotEmpty()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(getDayNameShort(dayId), fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.width(60.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                    sortedTimes.forEach { time ->
+                                        Box(
+                                            modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 4.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(time, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Preferences Toggle
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f))
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🔔 Notificarme", color = ColorTextPrimary, style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = notificationsEnabled,
+                        onCheckedChange = { viewModel.setNotificationsEnabled(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary, checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CapacityIndicatorGlassView(viewModel: UserTrainingViewModel, day: Int, time: String) {
+    val heatmapData by viewModel.heatmapData.collectAsState()
+    
+    val hour = time.split(":").firstOrNull()?.toIntOrNull() ?: return
+    val count = heatmapData[day]?.get(hour) ?: 0
+    
+    val color = when {
+        count < 5 -> Color.Green
+        count < 15 -> Color.Yellow
+        else -> Color.Red
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(if (count > 0) color else Color.Green.copy(alpha = 0.5f))
+        )
+        Text(
+            text = "~$count",
+            style = MaterialTheme.typography.bodySmall,
+            color = ColorTextSecondary
+        )
+    }
+}
+
+private fun getDayNameShort(day: Int): String {
+    return when (day) {
+        1 -> "Dom"
+        2 -> "Lun"
+        3 -> "Mar"
+        4 -> "Mié"
+        5 -> "Jue"
+        6 -> "Vie"
+        7 -> "Sáb"
+        else -> ""
+    }
+}
+
+data class EmptyStateMessage(val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String, val message: String, val isActive: Boolean)
+
+fun getEmptyStateMessage(
+    operatingHours: Map<Int, com.aquiles.crosschapp.presentation.viewmodel.UserTrainingViewModel.GymOperatingHours>,
+    heatmapData: Map<Int, Map<Int, Int>>,
+    currentWeekday: Int
+): EmptyStateMessage {
+    val defaultClosed = EmptyStateMessage(Icons.Default.Bedtime, "Día de descanso", "No tienes entrenamiento programado y el centro está cerrado.", false)
+    val hours = operatingHours[currentWeekday] ?: return defaultClosed
+    if (hours.ranges.isEmpty()) return defaultClosed
+
+    val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    val activeHours = mutableListOf<Int>()
+    
+    for (range in hours.ranges) {
+        val startH = range.startTime.substringBefore(":").toIntOrNull()
+        val endH = range.endTime.substringBefore(":").toIntOrNull()
+        if (startH != null && endH != null) {
+            val endCapped = maxOf(startH, endH - 1)
+            activeHours.addAll(startH..endCapped)
+        }
+    }
+
+    val upcomingHours = activeHours.filter { it >= currentHour }
+    if (upcomingHours.isEmpty()) {
+        return EmptyStateMessage(Icons.Default.Bedtime, "Casi termina el día", "El centro está por cerrar. ¡A descansar para mañana!", false)
+    }
+
+    var bestHour = upcomingHours.first()
+    var minCount = Int.MAX_VALUE
+    val heatmap = heatmapData[currentWeekday] ?: java.util.Collections.emptyMap()
+
+    for (hour in upcomingHours) {
+        val count = heatmap[hour] ?: 0
+        if (count < minCount) {
+            minCount = count
+            bestHour = hour
+        }
+    }
+
+    val timeStr = String.format("%02d:00", bestHour)
+    val capacityStr = if (minCount <= 2) "vacío" else "menos concurrido"
+
+    return EmptyStateMessage(Icons.Default.Bolt, "¡Aún estás a tiempo!", "El horario sugerido para hoy es a las ${timeStr}h (suele estar $capacityStr). ¡Te esperamos!", true)
 }

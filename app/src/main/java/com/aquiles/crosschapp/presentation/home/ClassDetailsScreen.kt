@@ -44,7 +44,7 @@ import java.util.*
 import androidx.compose.material.icons.filled.CheckCircle
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color(0xFFAAAAAA)
@@ -195,7 +195,7 @@ private fun ClassDetailsContent(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
             )
         },
         bottomBar = {
@@ -244,8 +244,9 @@ private fun ClassDetailsContent(
                 val diffMinutes = (now.time - classTime.time) / (60 * 1000)
                 val isCheckInTime = diffMinutes in -30..30
 
-                LaunchedEffect(gymClass.enrolledUserIds) {
-                    adminViewModel.loadAttendeesDetails(gymClass.enrolledUserIds)
+                LaunchedEffect(gymClass.enrolledUserIds, gymClass.waitingList) {
+                    val allIds = gymClass.enrolledUserIds + gymClass.waitingList
+                    adminViewModel.loadAttendeesDetails(allIds)
                 }
 
                 // Sincronización de Checkboxes para el Admin
@@ -337,42 +338,65 @@ private fun ClassDetailsContent(
                                     }
                                 } else {
                                     item {
-                                        Card(
-                                            colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-                                            border = BorderStroke(1.dp, ColorBorder),
-                                            shape = RoundedCornerShape(16.dp)
-                                        ) {
-                                            Column(Modifier.padding(16.dp)) {
-                                                attendeesState.attendees.forEachIndexed { index, user ->
+                                        val enrolledUsers = attendeesState.attendees.filter { gymClass.enrolledUserIds.contains(it.id) }
+                                        val waitingUsers = attendeesState.attendees.filter { gymClass.waitingList.contains(it.id) }
 
-                                                    // 1. ¿Está en la lista oficial de la clase?
-                                                    val inClassList = gymClass.checkedInUserIds?.contains(user.id) == true
+                                        if (enrolledUsers.isNotEmpty()) {
+                                            Card(
+                                                colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+                                                border = BorderStroke(1.dp, ColorBorder),
+                                                shape = RoundedCornerShape(16.dp),
+                                                modifier = Modifier.fillMaxWidth().padding(bottom = if (waitingUsers.isNotEmpty()) 16.dp else 0.dp)
+                                            ) {
+                                                Column(Modifier.padding(16.dp)) {
+                                                    enrolledUsers.forEachIndexed { index, user ->
 
-                                                    // 2. ¿Está en el historial recuperado (Admin)?
-                                                    val inHistoryList = verifiedIdsFromHistory.contains(user.id)
+                                                        val inClassList = gymClass.checkedInUserIds?.contains(user.id) == true
+                                                        val inHistoryList = verifiedIdsFromHistory.contains(user.id)
+                                                        val isMeAndLocal = (user.id == currentUser.id && hasLocalAttendance)
+                                                        val isPresent = inClassList || inHistoryList || isMeAndLocal
+                                                        val isCheckedForAdmin = attendedUserIds.contains(user.id) || isPresent
 
-                                                    // 3. ¿Soy yo y mi local dice que sí?
-                                                    val isMeAndLocal = (user.id == currentUser.id && hasLocalAttendance)
+                                                        AttendeeItemRow(
+                                                            attendee = user,
+                                                            isAttendanceMode = currentUser.isAdmin,
+                                                            isChecked = if (currentUser.isAdmin) isCheckedForAdmin else isPresent,
+                                                            onCheckChanged = { shouldCheck ->
+                                                                attendedUserIds = if (shouldCheck) attendedUserIds + user.id else attendedUserIds - user.id
+                                                            },
+                                                            showCheckIcon = isPresent,
+                                                            showQrLabel = inClassList || inHistoryList
+                                                        )
+                                                        if (index < enrolledUsers.size - 1) {
+                                                            HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 12.dp))
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
 
-                                                    // DETERMINAR PRESENCIA VISUAL
-                                                    val isPresent = inClassList || inHistoryList || isMeAndLocal
-
-                                                    // DETERMINAR CHECKBOX DEL ADMIN
-                                                    // Si el admin lo marcó manual O si el sistema detectó presencia
-                                                    val isCheckedForAdmin = attendedUserIds.contains(user.id) || isPresent
-
-                                                    AttendeeItemRow(
-                                                        attendee = user,
-                                                        isAttendanceMode = currentUser.isAdmin,
-                                                        isChecked = if (currentUser.isAdmin) isCheckedForAdmin else isPresent,
-                                                        onCheckChanged = { shouldCheck ->
-                                                            attendedUserIds = if (shouldCheck) attendedUserIds + user.id else attendedUserIds - user.id
-                                                        },
-                                                        showCheckIcon = isPresent,
-                                                        showQrLabel = inClassList || inHistoryList // Mostrar QR si el sistema lo detectó
-                                                    )
-                                                    if (index < attendeesState.attendees.size - 1) {
-                                                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 12.dp))
+                                        if (waitingUsers.isNotEmpty()) {
+                                            Text("En Espera (${waitingUsers.size})", style = MaterialTheme.typography.titleMedium, color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
+                                            Spacer(Modifier.height(12.dp))
+                                            Card(
+                                                colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+                                                border = BorderStroke(1.dp, ColorPrimaryAction.copy(alpha = 0.5f)),
+                                                shape = RoundedCornerShape(16.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Column(Modifier.padding(16.dp)) {
+                                                    waitingUsers.forEachIndexed { index, user ->
+                                                        AttendeeItemRow(
+                                                            attendee = user,
+                                                            isAttendanceMode = false,
+                                                            isChecked = false,
+                                                            onCheckChanged = {},
+                                                            showCheckIcon = false,
+                                                            showQrLabel = false
+                                                        )
+                                                        if (index < waitingUsers.size - 1) {
+                                                            HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 12.dp))
+                                                        }
                                                     }
                                                 }
                                             }
@@ -444,16 +468,18 @@ fun ClassHeaderSection(gymClass: GymClass) {
         Spacer(Modifier.height(24.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            GlassStatCard(
-                icon = Icons.Default.Person,
-                label = "Coach",
-                value = gymClass.coachName.ifBlank { "Staff" },
-                modifier = Modifier.weight(1f)
-            )
+            if (gymClass.isOpenGym != true) {
+                GlassStatCard(
+                    icon = Icons.Default.Person,
+                    label = "Coach",
+                    value = gymClass.coachName.ifBlank { "Staff" },
+                    modifier = Modifier.weight(1f)
+                )
+            }
             GlassStatCard(
                 icon = Icons.Default.Group,
-                label = "Cupos",
-                value = "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}",
+                label = if (gymClass.enrolledUserIds.size >= gymClass.maxCapacity) "Llena/Espera" else "Cupos",
+                value = if (gymClass.enrolledUserIds.size >= gymClass.maxCapacity) "${gymClass.maxCapacity} (+${gymClass.waitingList.size})" else "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}",
                 modifier = Modifier.weight(1f),
                 isWarning = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
             )
@@ -463,11 +489,8 @@ fun ClassHeaderSection(gymClass: GymClass) {
 
 @Composable
 fun GlassStatCard(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, modifier: Modifier = Modifier, isWarning: Boolean = false) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, if (isWarning) ColorError else ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = modifier
     ) {
         Column(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
@@ -608,6 +631,9 @@ fun StudentActionButtons(
     onCancel: () -> Unit
 ) {
     val isEnrolled = gymClass.enrolledUserIds.contains(currentUser.id)
+    val isInWaitlist = gymClass.waitingList.contains(currentUser.id)
+    val isAttached = isEnrolled || isInWaitlist
+
     var buttonText by remember { mutableStateOf("") }
     var isEnabled by remember { mutableStateOf(true) }
 
@@ -615,20 +641,21 @@ fun StudentActionButtons(
     val classTime = gymClass.dateTime ?: now
     val thirtyMinutesBefore = Date(classTime.time - (30 * 60 * 1000))
 
-    if (isEnrolled) {
-        buttonText = "CANCELAR RESERVA"
+    if (isAttached) {
+        buttonText = if (isInWaitlist) "SALIR DE ESPERA" else "CANCELAR RESERVA"
         isEnabled = now.before(thirtyMinutesBefore) || currentUser.isAdmin
     } else {
         val isFull = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
-        buttonText = if (isFull) "CLASE LLENA" else "RESERVAR LUGAR"
-        isEnabled = !isFull && classTime.after(now) && (currentUser.hasValidCredits || currentUser.isAdmin)
+        val actionText = if (gymClass.isOpenGym == true) "AVISAR ASISTENCIA" else "RESERVAR LUGAR"
+        buttonText = if (isFull) "UNIRSE A ESPERA" else actionText
+        isEnabled = classTime.after(now) && (currentUser.hasValidCredits || currentUser.isAdmin)
     }
 
     Button(
-        onClick = { if (isEnrolled) onCancel() else onBook() },
+        onClick = { if (isAttached) onCancel() else onBook() },
         modifier = Modifier.fillMaxWidth().height(50.dp),
         enabled = isEnabled && !isLoading,
-        colors = ButtonDefaults.buttonColors(containerColor = if (isEnrolled) ColorError else ColorPrimaryAction),
+        colors = ButtonDefaults.buttonColors(containerColor = if (isAttached) ColorError else ColorPrimaryAction),
         shape = RoundedCornerShape(12.dp)
     ) {
         if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))

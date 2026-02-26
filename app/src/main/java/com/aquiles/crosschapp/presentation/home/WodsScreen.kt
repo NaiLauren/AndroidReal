@@ -49,6 +49,7 @@ import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import com.aquiles.crosschapp.presentation.components.FeedbackDialog
 import com.aquiles.crosschapp.presentation.components.FeedbackType
+import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor // [Fix] Import LocalPrimaryColor
 import java.io.File
 import java.text.SimpleDateFormat
 import java.time.LocalDate
@@ -57,7 +58,7 @@ import java.util.*
 import androidx.compose.ui.draw.scale // [Fix] Import scale
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorGlassInput = Color(0xFFFFFFFF).copy(alpha = 0.07f)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color(0xFFAAAAAA)
@@ -191,15 +192,7 @@ fun WodsScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         CompositionLocalProvider(LocalPrimaryColor provides primaryColor) {
-            Image(
-            painter = painterResource(id = R.drawable.fondo_principal),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-        Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.75f))
-        )
+        // Fondo eliminado. Se delega a AppBackground que debe rodear el NavHost en MainActivity.
 
         val user = currentUser
         if (user == null) {
@@ -712,11 +705,9 @@ fun GlassLoadingCard(height: androidx.compose.ui.unit.Dp = 200.dp) {
 
 @Composable
 fun BenchmarkAccessCard(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-        border = BorderStroke(1.dp, ColorBorder)
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier.padding(24.dp),

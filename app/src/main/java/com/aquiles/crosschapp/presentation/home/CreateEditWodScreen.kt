@@ -189,7 +189,7 @@ private fun CreateEditWodContent(
                         fontWeight = FontWeight.Bold
                     )
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
             )
         },
         containerColor = Color.Transparent
@@ -310,7 +310,7 @@ fun DropdownMenuWodGlass(label: String, options: List<String>, selectedOption: S
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor(),
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = ColorPrimaryAction,
                 unfocusedBorderColor = ColorBorder,

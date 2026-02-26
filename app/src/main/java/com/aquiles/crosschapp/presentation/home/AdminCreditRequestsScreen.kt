@@ -23,7 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -41,7 +43,7 @@ import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -97,7 +99,7 @@ fun AdminCreditRequestsScreen(
                             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -197,9 +199,9 @@ fun GlassCreditRequestItem(
     isEnabled: Boolean
 ) {
     val dateFormat = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
-    val currencyFormat = NumberFormat.getCurrencyInstance(Locale("es", "AR"))
-    val clipboardManager = LocalClipboardManager.current
+    val currencyFormat = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR"))
     val context = LocalContext.current
+    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -235,7 +237,7 @@ fun GlassCreditRequestItem(
                     Text(request.contactInfo, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = ColorTextPrimary, maxLines = 1)
                     IconButton(
                         onClick = {
-                            clipboardManager.setText(AnnotatedString(request.contactInfo))
+                            clipboardManager.setPrimaryClip(ClipData.newPlainText("Copied Text", request.contactInfo))
                             Toast.makeText(context, "Copiado", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.size(20.dp)
@@ -319,7 +321,7 @@ fun GlassProcessedRequestDetailDialog(
     onDismiss: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-    val currencyFormat = NumberFormat.getCurrencyInstance(Locale("es", "AR"))
+    val currencyFormat = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR"))
 
     AlertDialog(
         onDismissRequest = onDismiss,

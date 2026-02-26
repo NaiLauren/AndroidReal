@@ -44,7 +44,7 @@ fun String.toColorSafe(): Color {
 }
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -76,6 +76,7 @@ fun ScheduleScreen(
 
     val classesState by scheduleViewModel.classesState.collectAsState()
     val bookingState by scheduleViewModel.bookingState.collectAsState()
+    val gymOperatingHoursState by scheduleViewModel.gymOperatingHours.collectAsState()
     val currentUser by UserSession.currentUser.collectAsState()
 
     LaunchedEffect(selectedDate) {
@@ -106,7 +107,7 @@ fun ScheduleScreen(
                 topBar = {
                     CenterAlignedTopAppBar(
                         title = { Text("Horarios", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                     )
                 },
                 containerColor = Color.Transparent
@@ -129,6 +130,7 @@ fun ScheduleScreen(
                     } else {
                         ClassesListContent(
                             classesState = classesState,
+                            gymOperatingHoursState = gymOperatingHoursState,
                             selectedDate = selectedDate,
                             onClassClick = onClassClick
                         )
@@ -142,10 +144,11 @@ fun ScheduleScreen(
 @Composable
 fun ClassesListContent(
     classesState: ClassesState,
+    gymOperatingHoursState: Map<Int, ScheduleViewModel.GymOperatingHours>,
     selectedDate: LocalDate,
     onClassClick: (String) -> Unit
 ) {
-    val dateFormatter = remember { java.time.format.DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", Locale("es", "ES")) }
+    val dateFormatter = remember { java.time.format.DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", Locale.forLanguageTag("es-ES")) }
 
     when (classesState) {
         is ClassesState.Loading -> {
@@ -177,9 +180,77 @@ fun ClassesListContent(
                     )
                 }
 
+                // 1. Mostrar Horarios de "Centro Abierto" (Si existen para este día)
+                val dayOfWeek = selectedDate.dayOfWeek.value // Monday is 1, Sunday is 7 in Java Calendar but we want Sunday = 1 to match iOS/Firebase.
+                // Firebase/iOS uses Sunday = 1, Monday = 2... Saturday = 7. Let's adjust LocalDate logic.
+               val adjustedDayOfWeek = if (selectedDate.dayOfWeek.value == 7) 1 else selectedDate.dayOfWeek.value + 1
+               
+               val openHours = gymOperatingHoursState[adjustedDayOfWeek]
+               if (openHours != null && openHours.ranges.isNotEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.DoorSliding, contentDescription = "Open Gym", tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Horario de Apertura", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            openHours.ranges.forEach { range ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 8.dp)
+                                        .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${range.startTime} - ${range.endTime}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ColorTextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Text(
+                                        text = "Acceso Libre",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ColorTextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+               }
+
                 if (classesState.classes.isEmpty()) {
-                    item { EmptyScheduleCard() }
+                    if (openHours?.ranges.isNullOrEmpty()) {
+                         item { EmptyScheduleCard() }
+                    } else {
+                        item {
+                            Text(
+                                text = "No hay clases guiadas este día.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ColorTextSecondary,
+                                modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 } else {
+                    item {
+                        Text(
+                            text = "Clases Guiadas",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorTextPrimary,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp).fillMaxWidth()
+                        )
+                    }
                     items(classesState.classes, key = { it.id }) { gymClass ->
                         ClassItemCardGlass(gymClass = gymClass, onClick = { onClassClick(gymClass.id) })
                     }
@@ -275,36 +346,75 @@ fun ClassItemCardGlass(
 
                 // Info
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = gymClass.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = ColorTextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = ColorTextSecondary, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = gymClass.coachName.ifBlank { "Staff" },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ColorTextSecondary
+                            text = gymClass.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+                        if (gymClass.isOpenGym == true) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                color = Color.White.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "LIBRE",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
-
                     Spacer(modifier = Modifier.height(4.dp))
+
+                    if (gymClass.isOpenGym != true) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = ColorTextSecondary, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = gymClass.coachName.ifBlank { "Staff" },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ColorTextSecondary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Group, contentDescription = null, tint = ColorTextSecondary, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (gymClass.enrolledUserIds.size >= gymClass.maxCapacity) ColorStatusCancelled else ColorTextSecondary
-                        )
+                        
+                        val isFull = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
+                        val currentUserSession = UserSession.currentUser.value
+                        val myWaitlistPos = if (currentUserSession != null) gymClass.waitingList.indexOf(currentUserSession.id) else -1
+
+                        if (myWaitlistPos >= 0) {
+                            Text(
+                                text = "EN ESPERA (#${myWaitlistPos + 1})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFA000), // Naranja
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else if (isFull) {
+                            Text(
+                                text = "LLENA (${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ColorStatusCancelled,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Text(
+                                text = "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ColorTextSecondary
+                            )
+                        }
                     }
                 }
 
@@ -375,7 +485,7 @@ fun DateSelector(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale("es", "ES")).uppercase().take(3),
+                        text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")).uppercase().take(3),
                         color = textColor,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold

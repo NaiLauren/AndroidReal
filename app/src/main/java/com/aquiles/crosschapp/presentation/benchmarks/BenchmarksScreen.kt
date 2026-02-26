@@ -10,19 +10,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Search
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.aquiles.crosschapp.data.model.BenchmarkResult
+
 import com.aquiles.crosschapp.data.model.BenchmarkWod
 import com.aquiles.crosschapp.presentation.components.SmartScoreInput
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
@@ -32,7 +36,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import com.aquiles.crosschapp.presentation.viewmodel.BenchmarkSaveState
 import java.util.Date
 
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -60,17 +64,17 @@ fun BenchmarksScreen(
                 title = { Text("BENCHMARKS", fontWeight = FontWeight.Bold, letterSpacing = 1.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black,
+                    containerColor = Color.Black.copy(alpha = 0.70f),
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )
             )
         },
-        containerColor = Color.Black
+        containerColor = Color.Black.copy(alpha = 0.70f)
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             // Background
@@ -122,9 +126,9 @@ fun BenchmarksScreen(
             if (selectedWod != null) {
                 ModalBottomSheet(
                     onDismissRequest = { selectedWod = null },
-                    containerColor = Color(0xFF1C1C1E),
+                    containerColor = ColorGlassSurface,
                     contentColor = Color.White,
-                    dragHandle = { BottomSheetDefaults.DragHandle(color = Color.Gray) }
+                    dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha=0.3f)) }
                 ) {
                     BenchmarkRegisterContent(
                         wod = selectedWod!!, 
@@ -140,11 +144,8 @@ fun BenchmarksScreen(
 
 @Composable
 fun BenchmarkCard(wod: BenchmarkWod, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-        border = BorderStroke(1.dp, ColorBorder)
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),

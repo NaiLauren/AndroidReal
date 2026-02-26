@@ -33,13 +33,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.aquiles.crosschapp.data.model.GymClass
+import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 import com.aquiles.crosschapp.presentation.viewmodel.SchedulePlannerViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- COLORS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.9f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -147,7 +148,7 @@ fun AdminSchedulePlannerScreen(
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -261,8 +262,8 @@ fun AdminSchedulePlannerScreen(
                     showCreateSheet = false
                     if (!isSelectionMode) viewModel.clearSelection() // Limpiar si fue edición single
                 },
-                containerColor = Color(0xFF1C1C1E),
-                dragHandle = { BottomSheetDefaults.DragHandle() }
+                containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f),
+                dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }
             ) {
                 // Here we inject the FORM Logic
                 // We pass 'selectedDate' effectively.
@@ -294,7 +295,7 @@ fun CreateClassesFormContent(
     var startDate by remember { mutableStateOf(initialDate) }
     var repeatMonths by remember { mutableStateOf(0) }
     var selectedWeekdays by remember { mutableStateOf(setOf<Int>()) }
-    var selectedTimes by remember { mutableStateOf(setOf<String>()) }
+    var selectedTimes by remember { mutableStateOf(setOf<AdminViewModel.TemplateSlot>()) }
 
     var className by remember { mutableStateOf("WOD") }
     var coachName by remember { mutableStateOf("") }
@@ -362,19 +363,29 @@ fun CreateClassesFormContent(
                  if (templateTimes.isEmpty()) Text("Sin plantilla de horarios", color = ColorTextSecondary)
                  else {
                      FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                         templateTimes.forEach { time ->
-                             val isSelected = selectedTimes.contains(time)
+                         templateTimes.forEach { slot ->
+                             val isSelected = selectedTimes.contains(slot)
                              FilterChip(
                                  selected = isSelected,
-                                 onClick = { if (isSelected) selectedTimes -= time else selectedTimes += time },
-                                 label = { Text(time) },
-                                 colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ColorPrimaryAction, labelColor = ColorTextPrimary)
+                                 onClick = { if (isSelected) selectedTimes = selectedTimes - slot else selectedTimes = selectedTimes + slot },
+                                 label = { 
+                                     Row(verticalAlignment = Alignment.CenterVertically) {
+                                         if (slot.isOpenGym) {
+                                            Icon(Icons.Default.Schedule, null, tint = Color(0xFF42A5F5), modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                         }
+                                         Text(slot.time)
+                                     } 
+                                 },
+                                 colors = FilterChipDefaults.filterChipColors(selectedContainerColor = if (slot.isOpenGym) Color(0xFF42A5F5).copy(alpha=0.5f) else ColorPrimaryAction, labelColor = ColorTextPrimary)
                              )
                          }
                      }
                  }
             }
         }
+        
+
         
         PlannerSectionCard("Detalles") {
             OutlinedTextField(value = className, onValueChange = { className = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())

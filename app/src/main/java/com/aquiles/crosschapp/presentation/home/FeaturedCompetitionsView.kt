@@ -1,33 +1,43 @@
 package com.aquiles.crosschapp.presentation.home
 
-import android.os.Build
-import androidx.annotation.RequiresApi
-import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.aquiles.crosschapp.data.model.Competition
 import java.text.SimpleDateFormat
-import java.util.Locale
+import java.util.*
+import java.util.concurrent.TimeUnit
+
+// Colors Pro
+private val ColorGold = Color(0xFFFFD700)
+private val ColorSectionLabel = Color.White.copy(alpha = 0.7f)
 
 @Composable
 fun FeaturedCompetitionsRow(
@@ -39,23 +49,35 @@ fun FeaturedCompetitionsRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp)
+            .padding(vertical = 8.dp)
     ) {
-        PaddingValues(horizontal = 16.dp)
-        Text(
-            text = "EVENTOS ACTIVOS",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White.copy(alpha = 0.7f),
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        
+        // Título de Sección con Ícono
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+        ) {
+            Icon(
+                Icons.Default.Bolt,
+                contentDescription = null,
+                tint = ColorGold,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "EVENTOS ACTIVOS",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = ColorSectionLabel,
+                letterSpacing = 1.sp
+            )
+        }
+
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(horizontal = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             items(competitions) { comp ->
-                CompetitionCard(comp) {
+                ProCompetitionCard(comp) {
                     onCompetitionClick(comp.id)
                 }
             }
@@ -64,108 +86,195 @@ fun FeaturedCompetitionsRow(
 }
 
 @Composable
-fun CompetitionCard(
+fun ProCompetitionCard(
     competition: Competition,
     onClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .width(280.dp)
-            .height(160.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Background Image
-            if (!competition.imageUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = competition.imageUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-               // Gradient Fallback
-               Box(
-                   modifier = Modifier
-                       .fillMaxSize()
-                       .background(
-                           Brush.linearGradient(
-                               colors = listOf(Color(0xFFFC5200), Color(0xFF9C4200)) // Brand Orange Gradient
-                           )
-                       )
-               )
-            }
+    // Animación de escala al presionar
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "cardScale")
 
-            // Overlay Dark Gradient
+    // Calcular progreso del evento
+    val now = Date()
+    val daysRemaining = competition.endDate?.let {
+        val diff = it.time - now.time
+        TimeUnit.MILLISECONDS.toDays(diff).toInt().coerceAtLeast(0)
+    }
+    val totalDays = if (competition.startDate != null && competition.endDate != null) {
+        val diff = competition.endDate!!.time - competition.startDate!!.time
+        TimeUnit.MILLISECONDS.toDays(diff).toInt().coerceAtLeast(1)
+    } else null
+    val progress = if (totalDays != null && daysRemaining != null) {
+        1f - (daysRemaining.toFloat() / totalDays.toFloat())
+    } else null
+
+    Box(
+        modifier = Modifier
+            .width(300.dp)
+            .scale(scale)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
+    ) {
+        // Capa 1: Imagen de fondo o gradiente
+        if (!competition.imageUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = competition.imageUrl,
+                contentDescription = null,
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                contentScale = ContentScale.Crop
+            )
+        } else {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .height(200.dp)
                     .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))
+                        Brush.linearGradient(
+                            colors = listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E))
                         )
                     )
             )
+        }
 
-            // Content
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Bottom,
-                horizontalAlignment = Alignment.Start
-            ) {
-                // Type Badge
-                Surface(
-                    color = Color.Black.copy(alpha = 0.6f),
-                    shape = RoundedCornerShape(4.dp)
-                ) {
-                    Text(
-                        text = competition.type.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        fontWeight = FontWeight.Bold
+        // Capa 2: Overlay oscuro con gradiente
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.2f),
+                            Color.Black.copy(alpha = 0.85f)
+                        )
                     )
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
+                )
+        )
+
+        // Capa 3: Borde Glass
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        listOf(Color.White.copy(alpha = 0.2f), Color.White.copy(alpha = 0.05f))
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                )
+        )
+
+        // Capa 4: Watermark Trofeo
+        Icon(
+            imageVector = Icons.Default.EmojiEvents,
+            contentDescription = null,
+            tint = ColorGold.copy(alpha = 0.06f),
+            modifier = Modifier
+                .size(120.dp)
+                .align(Alignment.TopEnd)
+                .offset(x = 15.dp, y = (-10).dp)
+                .rotate(-20f)
+        )
+
+        // Capa 5: Contenido
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Top: Badge Tipo
+            Surface(
+                color = Color.White.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(20.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp, Color.White.copy(alpha = 0.2f)
+                )
+            ) {
+                Text(
+                    text = competition.type.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                )
+            }
+
+            // Bottom: Info + Progreso
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = competition.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
                     color = Color.White,
-                    maxLines = 1
+                    maxLines = 1,
+                    lineHeight = 24.sp
                 )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
+
+                // Criterio + Fecha
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Icon(
                         imageVector = Icons.Default.EmojiEvents,
                         contentDescription = null,
-                        tint = Color(0xFFFFD700), // Gold
+                        tint = ColorGold,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(
                         text = competition.criteria,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.8f)
                     )
-                    
-                    Spacer(modifier = Modifier.weight(1f))
-                    
-                    // Date
+
+                    Spacer(Modifier.weight(1f))
+
                     competition.endDate?.let { date ->
-                        val dateFormat = SimpleDateFormat("dd MMM", Locale("es", "ES"))
-                        Text(
-                            text = "Hasta ${dateFormat.format(date)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.6f)
+                        val dateFormat = SimpleDateFormat("dd MMM", Locale.forLanguageTag("es-ES"))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.CalendarMonth, null,
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                text = "Hasta ${dateFormat.format(date)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
+
+                // Barra de Progreso
+                if (progress != null && daysRemaining != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = if (daysRemaining > 0) "$daysRemaining días restantes" else "¡Último día!",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (daysRemaining <= 2) Color(0xFFFF5252) else Color.White.copy(alpha = 0.6f),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = if (daysRemaining <= 2) Color(0xFFFF5252) else ColorGold,
+                            trackColor = Color.White.copy(alpha = 0.1f)
                         )
                     }
                 }
@@ -173,3 +282,4 @@ fun CompetitionCard(
         }
     }
 }
+

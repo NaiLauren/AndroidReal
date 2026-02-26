@@ -13,7 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
@@ -31,6 +31,8 @@ import com.aquiles.crosschapp.data.model.Competition
 import com.aquiles.crosschapp.data.model.CompetitionStatus
 import com.aquiles.crosschapp.data.model.CompetitionType
 import com.aquiles.crosschapp.data.model.RankingCriteria
+import com.aquiles.crosschapp.data.model.ScoreStrategy
+import com.aquiles.crosschapp.data.model.ValidationRule
 import com.aquiles.crosschapp.presentation.viewmodel.CompetitionViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -41,8 +43,27 @@ import com.aquiles.crosschapp.presentation.components.GlassCard
 @Composable
 fun AdminCompetitionManagerScreen(
     navController: NavController,
-    viewModel: CompetitionViewModel = viewModel()
+    viewModel: CompetitionViewModel = viewModel(),
+    setupStepKey: String? = null
 ) {
+    var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
+    
+    if (showSetupPopup) {
+        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+            AlertDialog(
+                onDismissRequest = { showSetupPopup = false },
+                title = { Text(step.title, color = Color.White) },
+                text = { Text(step.description, color = Color.White.copy(alpha = 0.7f)) },
+                confirmButton = {
+                    Button(onClick = { showSetupPopup = false }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFC5200))) { 
+                        Text("Entendido", color = Color.White) 
+                    }
+                },
+                containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f)
+            )
+        }
+    }
+    
     val competitions by viewModel.competitions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -67,11 +88,11 @@ fun AdminCompetitionManagerScreen(
                 title = { Text("Competencias", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Black,
+                    containerColor = Color.Black.copy(alpha = 0.70f),
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )
@@ -140,8 +161,8 @@ fun AdminCompetitionManagerScreen(
     if (showCreateDialog) {
         CreateCompetitionDialog(
             onDismiss = { showCreateDialog = false },
-            onConfirm = { title, desc, type, crit, start, end, prize, xp, intergym ->
-                viewModel.createCompetition(title, desc, type, crit, start, end, prize, xp, intergym)
+            onConfirm = { title, desc, type, crit, start, end, prize, xp, intergym, score, validation ->
+                viewModel.createCompetition(title, desc, type, crit, start, end, prize, xp, intergym, score, validation)
                 showCreateDialog = false
             }
         )
@@ -246,7 +267,7 @@ fun CompetitionCard(competition: Competition, onClick: () -> Unit, onDelete: () 
 @Composable
 fun CreateCompetitionDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, CompetitionType, RankingCriteria, Date, Date, String?, Int?, Boolean) -> Unit
+    onConfirm: (String, String, CompetitionType, RankingCriteria, Date, Date, String?, Int?, Boolean, ScoreStrategy, ValidationRule) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -257,6 +278,8 @@ fun CreateCompetitionDialog(
     var prizeDescription by remember { mutableStateOf("") }
     var xpReward by remember { mutableStateOf("500") }
     var isIntergym by remember { mutableStateOf(false) }
+    var scoreStrategy by remember { mutableStateOf(ScoreStrategy.RELATIVE) }
+    var validationRule by remember { mutableStateOf(ValidationRule.MANUAL) }
 
     // Date Picker Logic
     var showStartDatePicker by remember { mutableStateOf(false) }
@@ -366,6 +389,48 @@ fun CreateCompetitionDialog(
                         }
                     }
 
+                    // Score Strategy Selector
+                    var expandedScore by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedTextField(
+                            value = scoreStrategy.name,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Estrategia de Puntaje") },
+                            trailingIcon = { IconButton(onClick = { expandedScore = true }) { Icon(Icons.Default.ArrowDropDown, "Select") } },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        DropdownMenu(expanded = expandedScore, onDismissRequest = { expandedScore = false }) {
+                            ScoreStrategy.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.name) },
+                                    onClick = { scoreStrategy = option; expandedScore = false }
+                                )
+                            }
+                        }
+                    }
+
+                    // Validation Rule Selector
+                    var expandedValidation by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedTextField(
+                            value = validationRule.name,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Regla de Validación") },
+                            trailingIcon = { IconButton(onClick = { expandedValidation = true }) { Icon(Icons.Default.ArrowDropDown, "Select") } },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        DropdownMenu(expanded = expandedValidation, onDismissRequest = { expandedValidation = false }) {
+                            ValidationRule.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option.name) },
+                                    onClick = { validationRule = option; expandedValidation = false }
+                                )
+                            }
+                        }
+                    }
+
                     HorizontalDivider()
                     Text("Fechas", style = MaterialTheme.typography.labelMedium)
                     
@@ -420,7 +485,9 @@ fun CreateCompetitionDialog(
                         endDate, 
                         prizeDescription, 
                         xpReward.toIntOrNull(), 
-                        isIntergym
+                        isIntergym,
+                        scoreStrategy,
+                        validationRule
                     )
                 },
                 enabled = title.isNotEmpty()

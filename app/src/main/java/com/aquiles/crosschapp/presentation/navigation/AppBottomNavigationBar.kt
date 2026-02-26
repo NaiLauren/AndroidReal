@@ -18,27 +18,34 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorNavBarSurface = Color(0xFF121212).copy(alpha = 0.95f) // Casi sólido para legibilidad
+private val ColorNavBarSurface = Color(0xFF1C1C1E).copy(alpha = 0.88f) // Opacidad aumentada por legibilidad
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextUnselected = Color.White.copy(alpha = 0.5f)
-private val ColorBorder = Color.White.copy(alpha = 0.1f)
+private val ColorBorder = Color.White.copy(alpha = 0.15f)
+private val GlassTopStart = Color.White.copy(alpha = 0.08f)
+private val GlassTopEnd = Color.White.copy(alpha = 0.01f)
 
 @Composable
 fun AppBottomNavigationBar(
     navController: NavController,
     items: List<BottomNavItem>
 ) {
-    // Eliminamos el "Box con Blur" porque es costoso en rendimiento y a veces no renderiza bien en Android.
-    // Usamos la aproximación de "Vidrio Ahumado Oscuro" que es el estándar moderno.
-
-    NavigationBar(
+    androidx.compose.foundation.layout.Box(
         modifier = Modifier
             .fillMaxWidth()
-            // Borde superior sutil para separar del contenido
-            .border(width = 1.dp, color = ColorBorder, shape = RectangleShape),
-        containerColor = ColorNavBarSurface,
-        tonalElevation = 0.dp
+            .background(
+                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                    colors = listOf(GlassTopStart, GlassTopEnd)
+                )
+            )
+            .background(ColorNavBarSurface)
+            .border(width = 1.dp, color = ColorBorder, shape = RectangleShape)
     ) {
+        NavigationBar(
+            modifier = Modifier.fillMaxWidth(),
+            containerColor = Color.Transparent, // El Box padre aporta el cristal
+            tonalElevation = 0.dp
+        ) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
 
@@ -82,5 +89,6 @@ fun AppBottomNavigationBar(
                 )
             )
         }
+    }
     }
 }

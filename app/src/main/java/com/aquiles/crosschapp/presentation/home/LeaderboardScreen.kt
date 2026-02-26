@@ -43,7 +43,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.LeaderboardTab
 import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 
 // --- DESIGN TOKENS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorGlassHighlight = Color(0xFF2C2C2E).copy(alpha = 0.5f)
 private val ColorPrimaryGold = Color(0xFFFFD700)
 private val ColorPrimarySilver = Color(0xFFC0C0C0)

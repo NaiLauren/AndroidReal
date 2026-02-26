@@ -34,7 +34,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorGlassSurfaceRead = Color(0xFF1C1C1E).copy(alpha = 0.4f) // Más transparente para leídas
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
@@ -66,7 +66,7 @@ fun NotificationsScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -120,7 +120,7 @@ fun NotificationCardGlass(
     notification: Notification,
     onMarkAsRead: () -> Unit
 ) {
-    val dateFormat = remember { SimpleDateFormat("dd 'de' MMMM, HH:mm", Locale("es", "ES")) }
+    val dateFormat = remember { SimpleDateFormat("dd 'de' MMMM, HH:mm", Locale.forLanguageTag("es-ES")) }
     val dateString = notification.timestamp?.let { dateFormat.format(it) } ?: ""
 
     // Diferenciación visual Leída vs No Leída

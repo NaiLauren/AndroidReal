@@ -19,10 +19,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Shape
 
 // Colors mimicking iOS "Ultra Thin Material" Dark Mode
-private val GlassSurfaceStart = Color(0xFF252525).copy(alpha = 0.70f)
-private val GlassSurfaceEnd = Color(0xFF151515).copy(alpha = 0.85f)
-private val GlassBorderStart = Color.White.copy(alpha = 0.15f)
-private val GlassBorderEnd = Color.White.copy(alpha = 0.05f)
+private val GlassSurfaceStart = Color(0xFFFFFFFF).copy(alpha = 0.12f)
+private val GlassSurfaceEnd = Color(0xFFFFFFFF).copy(alpha = 0.03f)
+private val GlassBorderStart = Color.White.copy(alpha = 0.30f)
+private val GlassBorderEnd = Color.White.copy(alpha = 0.01f)
 
 @Composable
 fun GlassCard(
@@ -35,10 +35,7 @@ fun GlassCard(
             .fillMaxWidth()
             .background(
                 brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF2C2C2E).copy(alpha = 0.50f), // Más translúcido
-                        Color(0xFF0C0C0C).copy(alpha = 0.70f)  // Gradiente sutil
-                    ),
+                    colors = listOf(GlassSurfaceStart, GlassSurfaceEnd),
                     start = androidx.compose.ui.geometry.Offset(0f, 0f),
                     end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                 ),
@@ -48,10 +45,7 @@ fun GlassCard(
                 border = BorderStroke(
                     width = 1.dp,
                     brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.15f), // Borde superior sutil
-                            Color.White.copy(alpha = 0.02f)  // Desaparece abajo
-                        ),
+                        colors = listOf(GlassBorderStart, GlassBorderEnd),
                         start = androidx.compose.ui.geometry.Offset(0f, 0f),
                         end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                     )
@@ -81,8 +75,8 @@ fun GlassCardSurface(
                 .background(
                     brush = Brush.linearGradient(
                         colors = listOf(
-                            Color(0xFF2C2C2E).copy(alpha = 0.75f),
-                            Color(0xFF0C0C0C).copy(alpha = 0.90f)
+                            Color.White.copy(alpha = 0.15f),
+                            Color.White.copy(alpha = 0.05f)
                         ),
                         start = androidx.compose.ui.geometry.Offset(0f, 0f),
                         end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
@@ -93,8 +87,8 @@ fun GlassCardSurface(
                         width = 1.dp,
                         brush = Brush.linearGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.25f),
-                                Color.White.copy(alpha = 0.05f)
+                                Color.White.copy(alpha = 0.35f),
+                                Color.White.copy(alpha = 0.02f)
                             ),
                             start = androidx.compose.ui.geometry.Offset(0f, 0f),
                             end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)

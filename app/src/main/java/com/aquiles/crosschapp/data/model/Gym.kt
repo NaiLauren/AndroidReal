@@ -25,5 +25,15 @@ data class Gym(
     // Sincronizados con iOS (Gym.swift)
     @PropertyName("admin_email")
     val adminEmail: String? = null,
-    val splashVideoUrl: String? = null
+    val splashVideoUrl: String? = null,
+    
+    @get:PropertyName("setupProgress")
+    @set:PropertyName("setupProgress")
+    @PropertyName("setupProgress")
+    var setupProgress: Map<String, Boolean>? = null,
+
+    @get:PropertyName("setupSkipped")
+    @set:PropertyName("setupSkipped")
+    @PropertyName("setupSkipped")
+    var setupSkipped: Map<String, Boolean>? = null
 )

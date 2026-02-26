@@ -73,7 +73,7 @@ fun AdminCompetitionDetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Black,
+                    containerColor = Color.Black.copy(alpha = 0.70f),
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
                 )

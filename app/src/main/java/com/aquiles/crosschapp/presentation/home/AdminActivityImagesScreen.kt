@@ -37,7 +37,7 @@ import coil.compose.AsyncImage
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
@@ -86,7 +86,7 @@ fun AdminActivityImagesScreen(
                              Icon(Icons.Default.Add, "Generar Placeholders", tint = ColorPrimaryAction)
                          }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -242,7 +242,7 @@ private fun GlassActivityImageDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1C1C1E), // ColorDialogSurface
+        containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f), // ColorDialogSurface
         titleContentColor = ColorTextPrimary,
         textContentColor = ColorTextSecondary,
         title = { Text(if (isEditMode) "Editar Imagen" else "Nueva Imagen", fontWeight = FontWeight.Bold) },

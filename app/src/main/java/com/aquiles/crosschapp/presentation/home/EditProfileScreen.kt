@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
@@ -43,12 +44,12 @@ import java.util.Calendar
 import java.util.Locale
 
 // --- CONSTANTES DE DISEÑO MEJORADAS ---
-private val ColorPrimaryAction = Color(0xFFFC5200)
+// ColorPrimaryAction ahora usa LocalPrimaryColor.current (dinámico por gym)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.15f) // Borde un poco más visible
 // Fondo Glass más oscuro para mejor lectura sobre la imagen de fondo
-private val ColorGlassSurface = Color(0xFF151517).copy(alpha = 0.90f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorDestructive = Color(0xFFFF3B30)
 
 // TEXTO LEGAL
@@ -115,7 +116,7 @@ fun EditProfileScreen(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f))) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
@@ -125,7 +126,7 @@ fun EditProfileScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -133,7 +134,7 @@ fun EditProfileScreen(
 
             when (val state = profileState) {
                 ProfileState.Idle, is ProfileState.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) }
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalPrimaryColor.current) }
                 }
                 is ProfileState.Error -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -199,7 +200,7 @@ fun EditProfileScreen(
                                 modifier = Modifier
                                     .size(100.dp)
                                     .clip(CircleShape)
-                                    .border(2.dp, ColorPrimaryAction, CircleShape),
+                                    .border(2.dp, LocalPrimaryColor.current, CircleShape),
                                 contentScale = ContentScale.Crop
                             )
                             Spacer(Modifier.height(8.dp))
@@ -223,7 +224,7 @@ fun EditProfileScreen(
                                 onValueChange = {},
                                 label = "Fecha de Nacimiento",
                                 readOnly = true,
-                                trailingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = ColorPrimaryAction) }
+                                trailingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = LocalPrimaryColor.current) }
                             )
                             Box(modifier = Modifier.matchParentSize().clickable { showDatePicker = true })
                         }
@@ -263,11 +264,11 @@ fun EditProfileScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(50.dp)
-                                .shadow(10.dp, RoundedCornerShape(12.dp), spotColor = ColorPrimaryAction),
+                                .shadow(10.dp, RoundedCornerShape(12.dp), spotColor = LocalPrimaryColor.current),
                             enabled = updateState !is ProfileUpdateState.Loading && hasChanges,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = ColorPrimaryAction,
-                                disabledContainerColor = ColorPrimaryAction.copy(alpha = 0.5f)
+                                containerColor = LocalPrimaryColor.current,
+                                disabledContainerColor = LocalPrimaryColor.current.copy(alpha = 0.5f)
                             ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -326,11 +327,11 @@ private fun ProfileInputTextField(
             unfocusedTextColor = ColorTextPrimary,
             disabledTextColor = ColorTextSecondary,
 
-            focusedLabelColor = ColorPrimaryAction,
+            focusedLabelColor = LocalPrimaryColor.current,
             unfocusedLabelColor = ColorTextSecondary,
             disabledLabelColor = ColorTextSecondary.copy(alpha = 0.5f),
 
-            cursorColor = ColorPrimaryAction,
+            cursorColor = LocalPrimaryColor.current,
             focusedIndicatorColor = Color.Transparent, // Sin línea inferior
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent
@@ -361,7 +362,7 @@ private fun ProfileMedicalSection(
         Column(modifier = Modifier.padding(20.dp)) {
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MedicalServices, contentDescription = null, tint = ColorPrimaryAction)
+                Icon(Icons.Default.MedicalServices, contentDescription = null, tint = LocalPrimaryColor.current)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text("Situación Médica y Legal", fontWeight = FontWeight.Bold, color = ColorTextPrimary, fontSize = 16.sp)
             }
@@ -433,7 +434,7 @@ private fun ProfileMedicalSection(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onWaiverChange(!waiverAccepted) }) {
-                    Checkbox(checked = waiverAccepted, onCheckedChange = onWaiverChange, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary))
+                    Checkbox(checked = waiverAccepted, onCheckedChange = onWaiverChange, colors = CheckboxDefaults.colors(checkedColor = LocalPrimaryColor.current, uncheckedColor = ColorTextSecondary))
                     Text("ACEPTO y Firmo digitalmente", fontWeight = FontWeight.Bold, color = ColorTextPrimary)
                 }
             }
@@ -459,10 +460,10 @@ private fun GenderSelectorProfile(selectedGender: String, onGenderSelected: (Str
                 OutlinedButton(
                     onClick = { onGenderSelected(value) },
                     modifier = Modifier.weight(1f),
-                    border = BorderStroke(1.dp, if (isSelected) ColorPrimaryAction else ColorBorder),
+                    border = BorderStroke(1.dp, if (isSelected) LocalPrimaryColor.current else ColorBorder),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (isSelected) ColorPrimaryAction.copy(alpha = 0.2f) else Color.Transparent,
-                        contentColor = if (isSelected) ColorPrimaryAction else ColorTextSecondary
+                        containerColor = if (isSelected) LocalPrimaryColor.current.copy(alpha = 0.2f) else Color.Transparent,
+                        contentColor = if (isSelected) LocalPrimaryColor.current else ColorTextSecondary
                     ),
                     shape = RoundedCornerShape(8.dp)
                 ) {

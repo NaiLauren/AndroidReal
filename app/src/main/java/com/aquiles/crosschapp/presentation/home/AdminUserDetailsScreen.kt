@@ -35,7 +35,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // CONSTANTES
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -62,7 +62,7 @@ fun AdminUserDetailsScreen(
                 CenterAlignedTopAppBar(
                     title = { Text("Perfil de Alumno", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary) } },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent

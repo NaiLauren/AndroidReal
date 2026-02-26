@@ -58,6 +58,12 @@ class ScheduleViewModel : ViewModel() {
     private val _classesState = MutableStateFlow<ClassesState>(ClassesState.Idle)
     val classesState: StateFlow<ClassesState> = _classesState.asStateFlow()
 
+    // [NEW] Open Gym Hours
+    data class TimeRange(val startTime: String, val endTime: String)
+    data class GymOperatingHours(val dayOfWeek: Int, val ranges: List<TimeRange>)
+    private val _gymOperatingHours = MutableStateFlow<Map<Int, GymOperatingHours>>(emptyMap())
+    val gymOperatingHours: StateFlow<Map<Int, GymOperatingHours>> = _gymOperatingHours.asStateFlow()
+
     private val _bookingState = MutableStateFlow<BookingState>(BookingState.Idle)
     val bookingState: StateFlow<BookingState> = _bookingState.asStateFlow()
 
@@ -76,6 +82,7 @@ class ScheduleViewModel : ViewModel() {
     private var nextBookingListener: ListenerRegistration? = null
     private var todayBookingListener: ListenerRegistration? = null // [NEW]
     private var classDetailsListener: ListenerRegistration? = null
+    private var settingsListener: ListenerRegistration? = null
 
     init {
         // Iniciar escucha de la próxima reserva apenas tengamos usuario
@@ -84,6 +91,7 @@ class ScheduleViewModel : ViewModel() {
                 if (u != null && u.gym_id.isNotEmpty()) {
                     listenForNextBooking(u.id, u.gym_id)
                     listenForTodayBooking(u.id, u.gym_id) // [NEW]
+                    fetchGymOperatingHours(u.gym_id)
                 }
             }
         }
@@ -208,7 +216,8 @@ class ScheduleViewModel : ViewModel() {
 
                 if (gymClass.dateTime == null) throw IllegalStateException("Fecha inválida")
                 if (gymClass.enrolledUserIds.contains(user.id)) throw IllegalStateException("Ya estás inscrito")
-                if (gymClass.enrolledUserIds.size >= gymClass.maxCapacity) throw IllegalStateException("Clase llena")
+                val isWaitingList = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
+                if (isWaitingList && gymClass.waitingList.contains(user.id)) throw IllegalStateException("Ya estás en lista de espera")
 
                 val isAdminOrCoach = user.role == "owner" || user.role == "coach"
                 if (!user.hasValidCredits && !isAdminOrCoach) throw IllegalStateException("Sin créditos")
@@ -217,30 +226,37 @@ class ScheduleViewModel : ViewModel() {
                 if (now.after(gymClass.dateTime)) throw IllegalStateException("Clase finalizada")
 
                 firestore.runTransaction { tx ->
-                    val userRef = firestore.collection("users").document(user.id)
                     val classRef = firestore.collection("gymClasses").document(classId)
-                    val txRef = firestore.collection("credit_transactions").document()
 
-                    tx.update(userRef, "credits", FieldValue.increment(-1))
-                    tx.update(userRef, "currentClassesReserved", FieldValue.increment(1))
-                    tx.update(classRef, "enrolledUserIds", FieldValue.arrayUnion(user.id))
+                    if (isWaitingList) {
+                        // Lista de espera: no cobramos crédito aún.
+                        tx.update(classRef, "waitingList", FieldValue.arrayUnion(user.id))
+                    } else {
+                        val userRef = firestore.collection("users").document(user.id)
+                        val txRef = firestore.collection("credit_transactions").document()
 
-                    val df = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
-                    val txData = hashMapOf(
-                        "id" to txRef.id,
-                        "userId" to user.id,
-                        "gym_id" to user.gym_id,
-                        "type" to "Reserva de Clase",
-                        "amount" to -1,
-                        "description" to "Reserva: ${gymClass.name} - ${df.format(gymClass.dateTime)}",
-                        "date" to FieldValue.serverTimestamp(),
-                        "relatedClassId" to classId
-                    )
-                    tx.set(txRef, txData)
+                        tx.update(userRef, "credits", FieldValue.increment(-1))
+                        tx.update(userRef, "currentClassesReserved", FieldValue.increment(1))
+                        tx.update(classRef, "enrolledUserIds", FieldValue.arrayUnion(user.id))
+
+                        val df = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
+                        val txData = hashMapOf(
+                            "id" to txRef.id,
+                            "userId" to user.id,
+                            "gym_id" to user.gym_id,
+                            "type" to "Reserva de Clase",
+                            "amount" to -1,
+                            "description" to "Reserva: ${gymClass.name} - ${df.format(gymClass.dateTime)}",
+                            "date" to FieldValue.serverTimestamp(),
+                            "relatedClassId" to classId
+                        )
+                        tx.set(txRef, txData)
+                    }
                     null
                 }.await()
 
-                _bookingState.value = BookingState.Success("Reserva exitosa")
+                val successMsg = if (isWaitingList) "Estás en Lista de Espera" else "Reserva exitosa"
+                _bookingState.value = BookingState.Success(successMsg)
                 // El listener de nextBooking se actualizará automáticamente
             } catch (e: Exception) {
                 _bookingState.value = BookingState.Error(e.message ?: "Error al reservar")
@@ -272,26 +288,63 @@ class ScheduleViewModel : ViewModel() {
                 }
                 // --- FIN DE VALIDACIÓN ---
 
+                val isWaitingListCancellation = gymClass.waitingList.contains(user.id)
+
                 firestore.runTransaction { tx ->
-                    val userRef = firestore.collection("users").document(user.id)
                     val classRef = firestore.collection("gymClasses").document(classId)
-                    val txRef = firestore.collection("credit_transactions").document()
+                    val freshClassDoc = tx.get(classRef)
+                    val currentEnrolled = freshClassDoc.get("enrolledUserIds") as? MutableList<String> ?: mutableListOf()
+                    val currentWaiting = freshClassDoc.get("waitingList") as? MutableList<String> ?: mutableListOf()
 
-                    tx.update(userRef, "credits", FieldValue.increment(1))
-                    tx.update(userRef, "currentClassesReserved", FieldValue.increment(-1))
-                    tx.update(classRef, "enrolledUserIds", FieldValue.arrayRemove(user.id))
+                    if (isWaitingListCancellation) {
+                        currentWaiting.remove(user.id)
+                    } else {
+                        currentEnrolled.remove(user.id)
+                        
+                        val userRef = firestore.collection("users").document(user.id)
+                        val txRef = firestore.collection("credit_transactions").document()
 
-                    val txData = hashMapOf(
-                        "id" to txRef.id,
-                        "userId" to user.id,
-                        "gym_id" to user.gym_id,
-                        "type" to "Cancelación",
-                        "amount" to 1,
-                        "description" to "Devolución: ${gymClass.name}",
-                        "date" to FieldValue.serverTimestamp(),
-                        "relatedClassId" to classId
-                    )
-                    tx.set(txRef, txData)
+                        tx.update(userRef, "credits", FieldValue.increment(1))
+                        tx.update(userRef, "currentClassesReserved", FieldValue.increment(-1))
+
+                        val txData = hashMapOf(
+                            "id" to txRef.id,
+                            "userId" to user.id,
+                            "gym_id" to user.gym_id,
+                            "type" to "Cancelación",
+                            "amount" to 1,
+                            "description" to "Devolución: ${gymClass.name}",
+                            "date" to FieldValue.serverTimestamp(),
+                            "relatedClassId" to classId
+                        )
+                        tx.set(txRef, txData)
+
+                        // Promoción desde la lista de espera
+                        if (currentWaiting.isNotEmpty()) {
+                            val promotedId = currentWaiting.removeAt(0)
+                            currentEnrolled.add(promotedId)
+                            
+                            val promotedRef = firestore.collection("users").document(promotedId)
+                            tx.update(promotedRef, "credits", FieldValue.increment(-1))
+                            tx.update(promotedRef, "currentClassesReserved", FieldValue.increment(1))
+
+                            val pTxRef = firestore.collection("credit_transactions").document()
+                            val pTxData = hashMapOf(
+                                "id" to pTxRef.id,
+                                "userId" to promotedId,
+                                "gym_id" to user.gym_id,
+                                "type" to "Reserva desde Espera",
+                                "amount" to -1,
+                                "description" to "Pase de Waitlist a Titular: ${gymClass.name}",
+                                "date" to FieldValue.serverTimestamp(),
+                                "relatedClassId" to classId
+                            )
+                            tx.set(pTxRef, pTxData)
+                        }
+                    }
+
+                    tx.update(classRef, "enrolledUserIds", currentEnrolled)
+                    tx.update(classRef, "waitingList", currentWaiting)
                     null
                 }.await()
 
@@ -324,6 +377,37 @@ class ScheduleViewModel : ViewModel() {
             }
     }
 
+    private fun fetchGymOperatingHours(gymId: String) {
+        settingsListener?.remove()
+        settingsListener = firestore.collection("gyms").document(gymId)
+            .collection("settings").document("weekly_schedule_template")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null && snapshot.exists()) {
+                    val result = mutableMapOf<Int, GymOperatingHours>()
+                    val data = snapshot.data ?: return@addSnapshotListener
+
+                    for (day in 1..7) {
+                        val key = "${day}_open_gym_ranges"
+                        val rangesList = data[key] as? List<String>
+                        if (rangesList != null) {
+                            val parsedRanges = rangesList.mapNotNull { rangeStr ->
+                                val parts = rangeStr.split("-")
+                                if (parts.size == 2) TimeRange(parts[0], parts[1]) else null
+                            }
+                            if (parsedRanges.isNotEmpty()) {
+                                result[day] = GymOperatingHours(day, parsedRanges)
+                            }
+                        }
+                    }
+                    _gymOperatingHours.value = result
+                }
+            }
+    }
+
     fun resetBookingState() { _bookingState.value = BookingState.Idle }
 
     override fun onCleared() {
@@ -331,6 +415,7 @@ class ScheduleViewModel : ViewModel() {
         nextBookingListener?.remove()
         todayBookingListener?.remove() // [NEW]
         classDetailsListener?.remove()
+        settingsListener?.remove()
         super.onCleared()
     }
 

@@ -48,10 +48,10 @@ import com.aquiles.crosschapp.presentation.viewmodel.NoticeViewModel
 import com.aquiles.crosschapp.data.model.GymNotice
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.common.AppBackground
+import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
-val LocalPrimaryColor = androidx.compose.runtime.compositionLocalOf { Color(0xFFFC5200) } // Dynamic Color Provider
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
@@ -117,7 +117,7 @@ fun HomeScreen(
                 CenterAlignedTopAppBar(
                     title = { Text("Inicio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent
+                        containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f)
                     ),
                     actions = {
                         // Archivo de Mensajes

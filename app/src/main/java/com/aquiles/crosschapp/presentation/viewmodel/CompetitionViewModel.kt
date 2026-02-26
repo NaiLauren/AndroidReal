@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.aquiles.crosschapp.data.model.Competition
 import com.aquiles.crosschapp.data.model.CompetitionType
 import com.aquiles.crosschapp.data.model.RankingCriteria
+import com.aquiles.crosschapp.data.model.ScoreStrategy
+import com.aquiles.crosschapp.data.model.ValidationRule
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,7 +62,9 @@ class CompetitionViewModel : ViewModel() {
         endDate: Date,
         prizeDescription: String?,
         xpReward: Int?,
-        isIntergym: Boolean
+        isIntergym: Boolean,
+        scoreStrategy: ScoreStrategy,
+        validationRule: ValidationRule
     ) {
         val gymId = UserSession.currentUser.value?.gym_id ?: return
         if (title.isBlank()) {
@@ -81,12 +85,15 @@ class CompetitionViewModel : ViewModel() {
             prizeDescription = if (prizeDescription.isNullOrBlank()) null else prizeDescription,
             xpReward = xpReward,
             isIntergym = isIntergym,
+            scoreStrategy = scoreStrategy.value,
+            validationRule = validationRule.value,
             linkedClassIds = emptyList() // Default empty
         )
 
         viewModelScope.launch {
             try {
                 db.collection("competitions").add(newComp).await()
+                markSetupStepComplete("torneo_listo")
                 loadCompetitions() // Reload list
             } catch (e: Exception) {
                 _errorMessage.value = "Error al crear competencia: ${e.message}"
@@ -114,5 +121,18 @@ class CompetitionViewModel : ViewModel() {
 
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    // MARK: - Setup Wizard Progress
+    private fun markSetupStepComplete(stepKey: String) {
+        val gymId = com.aquiles.crosschapp.presentation.viewmodel.UserSession.currentUser.value?.gym_id ?: return
+        viewModelScope.launch {
+            try {
+                db.collection("gyms").document(gymId)
+                    .set(mapOf("setupProgress" to mapOf(stepKey to true)), com.google.firebase.firestore.SetOptions.merge())
+            } catch (e: Exception) {
+                android.util.Log.e("CompetitionViewModel", "Error marking setup step $stepKey", e)
+            }
+        }
     }
 }

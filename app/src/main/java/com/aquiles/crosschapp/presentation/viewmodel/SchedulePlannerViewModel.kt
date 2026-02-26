@@ -29,7 +29,7 @@ class SchedulePlannerViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
-    private val _scheduleTemplate = MutableStateFlow<List<String>>(emptyList())
+    private val _scheduleTemplate = MutableStateFlow<List<AdminViewModel.TemplateSlot>>(emptyList())
     val scheduleTemplate = _scheduleTemplate.asStateFlow()
 
     // Assuming UserSession is available as a singleton or injected
@@ -58,7 +58,7 @@ class SchedulePlannerViewModel : ViewModel() {
                         val times = (data[dayOfWeek.toString()] as? List<*>)?.filterIsInstance<String>()
                         
                         if (times != null) {
-                            _scheduleTemplate.value = times.sorted()
+                            _scheduleTemplate.value = times.map { AdminViewModel.TemplateSlot.fromFirestoreString(it) }.sortedBy { it.time }
                             foundWeekly = true
                         }
                     }
@@ -72,7 +72,7 @@ class SchedulePlannerViewModel : ViewModel() {
                     
                     if (snapshot.exists()) {
                         val times = (snapshot.get("available_times") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
-                        _scheduleTemplate.value = times.sorted()
+                        _scheduleTemplate.value = times.map { AdminViewModel.TemplateSlot(time = it, isOpenGym = false) }.sortedBy { it.time }
                     } else {
                          _scheduleTemplate.value = emptyList()
                     }
@@ -200,7 +200,7 @@ class SchedulePlannerViewModel : ViewModel() {
     // Combined Create/Update
     fun createOrUpdateBatch(
         startDate: Date,
-        selectedTimes: Set<String>,
+        selectedTimes: Set<AdminViewModel.TemplateSlot>,
         selectedWeekdays: Set<Int>,
         repeatMonths: Int,
         className: String,
@@ -272,7 +272,8 @@ class SchedulePlannerViewModel : ViewModel() {
                         "coachName" to coachName,
                         "description" to description,
                         "maxCapacity" to capacity,
-                        "durationMinutes" to durationMinutes
+                        "durationMinutes" to durationMinutes,
+                        "isOpenGym" to false
                     )
                     if (newWodId != null) {
                         updates["wod_id"] = newWodId
@@ -305,7 +306,7 @@ class SchedulePlannerViewModel : ViewModel() {
     // Original Batch Creation Logic (Renamed/Kept)
     private fun createClassesBatch(
         startDate: Date,
-        selectedTimes: Set<String>,
+        selectedTimes: Set<AdminViewModel.TemplateSlot>,
         selectedWeekdays: Set<Int>, // Calendar.SUNDAY = 1, etc.
         repeatMonths: Int,
         className: String,
@@ -398,24 +399,25 @@ class SchedulePlannerViewModel : ViewModel() {
                 var operationCount = 0
 
                 for (date in datesToProcess) {
-                    for (timeString in selectedTimes) {
-                        val fullDate = combineDateAndTime(date, timeString) ?: continue
+                    for (slot in selectedTimes) {
+                        val fullDate = combineDateAndTime(date, slot.time) ?: continue
                         
                         val newClassRef = db.collection("gymClasses").document()
                         val newClass = hashMapOf(
                             // "id" REMOVED: Managed by @DocumentId annotation in GymClass
                             "gym_id" to gid,
-                            "name" to className,
-                            "description" to description,
-                            "coachName" to coachName,
+                            "name" to if (slot.isOpenGym) "Open Gym" else className,
+                            "description" to if (slot.isOpenGym) "Espacio libre reservable" else description,
+                            "coachName" to if (slot.isOpenGym) "Staff / Libre" else coachName,
                             "maxCapacity" to capacity,
                             "durationMinutes" to durationMinutes,
                             "dateTime" to Timestamp(fullDate),
-                            "classType" to "WOD",
+                            "classType" to if (slot.isOpenGym) "OPEN_GYM" else "WOD",
                             "attendees" to emptyList<String>(),
                             "waitlist" to emptyList<String>(),
                             "wod_id" to wodId, // Nullable
-                            "isCancelled" to false
+                            "isCancelled" to false,
+                            "isOpenGym" to slot.isOpenGym
                         )
 
                         batch.set(newClassRef, newClass)

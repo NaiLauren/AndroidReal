@@ -70,7 +70,7 @@ fun StudentCompetitionDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
             )
         },
         containerColor = Color.Transparent
@@ -376,7 +376,7 @@ fun RankingItemCard(entry: RankingEntry, isMe: Boolean = false) {
 
 @Composable
 fun InfoTab(competition: Competition) {
-    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale("es", "ES"))
+    val dateFormat = SimpleDateFormat("dd MMM yyyy", Locale.forLanguageTag("es-ES"))
     
     // We wrap Scroll logic inside a Box or use LazyColumn for the whole tab if needed, 
     // but here sticking to Column in Box is fine for limited content.

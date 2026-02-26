@@ -31,11 +31,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
+import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 
 import com.aquiles.crosschapp.presentation.components.GlassCard
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -50,6 +51,9 @@ fun AdminDashboardScreen(
 ) {
     // Collect pending requests count
     val pendingRequests by adminViewModel.pendingRequestsCount.collectAsState()
+    
+    // Collect current gym for setup progress
+    val currentGym by UserSession.currentGym.collectAsState()
 
     // Trigger loading of requests on enter
     LaunchedEffect(Unit) {
@@ -78,7 +82,7 @@ fun AdminDashboardScreen(
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent
+                        containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f)
                     )
                 )
             },
@@ -88,28 +92,47 @@ fun AdminDashboardScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = localScaffoldPadding.calculateTopPadding() + 16.dp,
-                    bottom = innerPadding.calculateBottomPadding() + 100.dp, // Extra padding para librar barra de navegación
+                    bottom = innerPadding.calculateBottomPadding() + 20.dp, 
                     start = 16.dp,
                     end = 16.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                // 1. HEADER (Ya no es necesario el título grande aquí si está en la TopBar, pero podemos dejarlo como subtítulo o quitarlo)
-                // Vamos a simplificarlo para que no sea redundante con la TopBar
+                // 1. HEADER (Texto estático, sin GlassCard para no parecer botón)
                 item {
-                    GlassCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                        ) {
-                             // Eliminamos el título duplicado "Centro de Mando"
-                            Text(
-                                text = "Gestiona tu gimnasio en tiempo real",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = ColorTextSecondary
-                            )
-                        }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp)
+                    ) {
+                        Text(
+                            text = "Bienvenido al Panel de Control",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorTextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Gestiona tu gimnasio en tiempo real",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ColorTextSecondary
+                        )
+                    }
+                }
+                
+                // 1.5 ASISTENTE DE CONFIGURACIÓN
+                currentGym?.let { gym ->
+                    item {
+                        SetupProgressCard(
+                            progress = gym.setupProgress ?: emptyMap(),
+                            skipped = gym.setupSkipped ?: emptyMap(),
+                            onStepTapped = { step ->
+                                navController.navigate("${step.destination}?setupStep=${step.key}")
+                            },
+                            onStepSkipped = { step ->
+                                adminViewModel.markSetupStepSkipped(step.key)
+                            }
+                        )
                     }
                 }
 

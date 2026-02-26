@@ -8,7 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,7 +29,7 @@ private val ColorBackground = Color(0xFF121212)
 private val ColorSurface = Color(0xFF1E1E1E)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.Gray
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,10 +79,10 @@ fun AdminPaymentConfigScreen(
                 title = { Text("Configurar Pagos", color = ColorTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver", tint = ColorTextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = ColorTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
             )
         },
         containerColor = Color.Transparent

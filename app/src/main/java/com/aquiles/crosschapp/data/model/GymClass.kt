@@ -23,6 +23,7 @@ data class GymClass(
     val wodScoreType: String? = null,
 
     val enrolledUserIds: List<String> = emptyList(),
+    val waitingList: List<String> = emptyList(),
 
     // CRÍTICO CORREGIDO: Antes era @PropertyName("cancelled") lo que causaba que
     // una clase cancelada desde iOS (que escribe "isCancelled") apareciera activa en Android.
@@ -38,7 +39,9 @@ data class GymClass(
     val classType: String = "WOD",
 
     @PropertyName("hexColor")
-    val hexColor: String = "#FC5200"
+    val hexColor: String = "#FC5200",
+    
+    val isOpenGym: Boolean? = null
 ) {
     // Backward compatibility for reads
     val id: String

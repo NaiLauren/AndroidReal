@@ -606,25 +606,15 @@ class PerformanceViewModel : ViewModel() {
         if (currentUser.id.isBlank()) return
 
         try {
-            // 1. Update User Document (increment XP)
-            val userRef = firestore.collection("users").document(currentUser.id)
-            firestore.runTransaction { transaction ->
-                val snapshot = transaction.get(userRef)
-                val currentXp = snapshot.getLong("xp") ?: 0
-                transaction.update(userRef, "xp", currentXp + amount)
-            }.await()
-
-            // 2. Create XP Log
-            val xpLog = XpLog(
+            // Updated to use centralized GamificationService
+            com.aquiles.crosschapp.data.service.GamificationService.addXp(
+                userId = currentUser.id,
                 amount = amount,
                 type = type,
                 title = title,
                 description = description,
-                timestamp = Timestamp.now(),
-                relatedId = currentUser.id
+                relatedId = currentUser.id 
             )
-            firestore.collection("users").document(currentUser.id)
-                .collection("xp_logs").add(xpLog).await()
 
             // Update local session immediately for UI responsiveness
              UserSession.updateUser(currentUser.copy(xp = (currentUser.xp + amount)))

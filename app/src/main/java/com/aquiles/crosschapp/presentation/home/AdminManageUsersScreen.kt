@@ -42,7 +42,7 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -61,8 +61,27 @@ private enum class SortOrder {
 fun AdminManageUsersScreen(
     innerPadding: PaddingValues,
     navController: NavController,
-    adminViewModel: AdminViewModel = viewModel()
+    adminViewModel: AdminViewModel = viewModel(),
+    setupStepKey: String? = null
 ) {
+    var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
+    
+    if (showSetupPopup) {
+        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+            AlertDialog(
+                onDismissRequest = { showSetupPopup = false },
+                title = { Text(step.title, color = ColorTextPrimary) },
+                text = { Text(step.description, color = ColorTextSecondary) },
+                confirmButton = {
+                    Button(onClick = { showSetupPopup = false }, colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction)) { 
+                        Text("Entendido", color = Color.White) 
+                    }
+                },
+                containerColor = ColorGlassSurface
+            )
+        }
+    }
+    
     var selectedUserIds by remember { mutableStateOf(setOf<String>()) }
     var searchQuery by remember { mutableStateOf("") }
     // Por defecto mostramos riesgo legal primero, o vencimiento (tu eliges)
@@ -87,7 +106,7 @@ fun AdminManageUsersScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             floatingActionButton = {
@@ -234,7 +253,7 @@ fun UserStatusItemGlass(
     onUserClick: (String) -> Unit,
     onSendMessageClick: (String, String) -> Unit
 ) {
-    val dateFormat = remember { SimpleDateFormat("dd MMM", Locale("es", "ES")) }
+    val dateFormat = remember { SimpleDateFormat("dd MMM", Locale.forLanguageTag("es-ES")) }
     val today = Calendar.getInstance()
     val expirationDate = user.creditValidUntil?.let { Calendar.getInstance().apply { time = it } }
 

@@ -20,7 +20,9 @@ data class CreditPack(
     @get:PropertyName("active") @set:PropertyName("active")
     var isActive: Boolean = true,
     val gym_id: String = "",
-    val order: Int = 0
+    val order: Int = 0,
+    val isUnlimited: Boolean = false,
+    val durationDays: Int = 30
 )
 
 data class BillingRules(

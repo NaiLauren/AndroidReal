@@ -169,7 +169,8 @@ fun MainApp(shouldOpenNotifications: Boolean = false) {
         BottomNavItem.Schedule.route.substringBefore("?"),
         BottomNavItem.Wods.route,
         BottomNavItem.Performance.route,
-        BottomNavItem.Profile.route
+        BottomNavItem.Profile.route,
+        "admin_dashboard_screen"
     )
     val shouldShowBottomBar = routesWithBottomBar.any { currentRoute?.startsWith(it) == true }
 
@@ -372,11 +373,15 @@ fun NavGraphBuilder.mainGraph(
                 adminViewModel = viewModel()
             )
         }
-        composable("admin_manage_users") {
+        composable(
+            route = "admin_manage_users?setupStep={setupStep}",
+            arguments = listOf(navArgument("setupStep") { type = NavType.StringType; nullable = true })
+        ) { backStackEntry ->
             AdminManageUsersScreen(
                 innerPadding = innerPadding,
                 navController = navController,
-                adminViewModel = viewModel()
+                adminViewModel = viewModel(),
+                setupStepKey = backStackEntry.arguments?.getString("setupStep")
             )
         }
         composable("admin_reports_screen") {
@@ -385,10 +390,14 @@ fun NavGraphBuilder.mainGraph(
                 navController = navController
             )
         }
-        composable("admin_manage_packs_screen") {
+        composable(
+            route = "admin_manage_packs_screen?setupStep={setupStep}",
+            arguments = listOf(navArgument("setupStep") { type = NavType.StringType; nullable = true })
+        ) { backStackEntry ->
             AdminManagePacksScreen(
                 innerPadding = innerPadding,
-                navController = navController
+                navController = navController,
+                setupStepKey = backStackEntry.arguments?.getString("setupStep")
             )
         }
 
@@ -449,11 +458,15 @@ fun NavGraphBuilder.mainGraph(
                 onNavigateToClassDetails = { classId: String -> navController.navigate("class_details/$classId") }
             )
         }
-        composable("admin_manage_schedules") {
+        composable(
+            route = "admin_manage_schedules?setupStep={setupStep}",
+            arguments = listOf(navArgument("setupStep") { type = NavType.StringType; nullable = true })
+        ) { backStackEntry ->
             AdminManageSchedulesScreen(
                 innerPadding = innerPadding,
                 navController = navController,
-                adminViewModel = viewModel()
+                adminViewModel = viewModel(),
+                setupStepKey = backStackEntry.arguments?.getString("setupStep")
             )
         }
         
@@ -465,11 +478,15 @@ fun NavGraphBuilder.mainGraph(
         }
         
         // --- NEW: THEMED & PLANNER ROUTES ---
-        composable("admin_gym_settings") {
+        composable(
+            route = "admin_gym_settings?setupStep={setupStep}",
+            arguments = listOf(navArgument("setupStep") { type = NavType.StringType; nullable = true })
+        ) { backStackEntry ->
             AdminGymSettingsScreen(
                 navController = navController,
                 adminViewModel = viewModel(),
-                innerPadding = innerPadding
+                innerPadding = innerPadding,
+                setupStepKey = backStackEntry.arguments?.getString("setupStep")
             )
         }
         composable("admin_schedule_planner") {
@@ -508,19 +525,27 @@ fun NavGraphBuilder.mainGraph(
             )
         }
         
-        composable("admin_news_screen") {
+        composable(
+            route = "admin_news_screen?setupStep={setupStep}",
+            arguments = listOf(navArgument("setupStep") { type = NavType.StringType; nullable = true })
+        ) { backStackEntry ->
             AdminNewsScreen(
                 innerPadding = innerPadding,
                 navController = navController,
-                noticeViewModel = viewModel()
+                noticeViewModel = viewModel(),
+                setupStepKey = backStackEntry.arguments?.getString("setupStep")
             )
         }
         // -------------------------------
 
         // --- TORNEOS Y COMPETENCIAS ---
-        composable("admin_competition_manager") {
+        composable(
+            route = "admin_competition_manager?setupStep={setupStep}",
+            arguments = listOf(navArgument("setupStep") { type = NavType.StringType; nullable = true })
+        ) { backStackEntry ->
             AdminCompetitionManagerScreen(
-                navController = navController
+                navController = navController,
+                setupStepKey = backStackEntry.arguments?.getString("setupStep")
             )
         }
         

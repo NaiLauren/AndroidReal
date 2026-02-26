@@ -14,9 +14,7 @@ import androidx.compose.material.icons.filled.Attachment
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,11 +29,12 @@ import androidx.navigation.NavController
 import com.aquiles.crosschapp.data.model.PersonalMessage
 import com.aquiles.crosschapp.presentation.viewmodel.MessageHistoryState
 import com.aquiles.crosschapp.presentation.viewmodel.MessageArchiveViewModel
+import com.aquiles.crosschapp.presentation.components.FullScreenMediaDialog
 import java.text.SimpleDateFormat
 import java.util.*
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.75f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -51,6 +50,7 @@ fun MessageArchiveScreen(
     viewModel: MessageArchiveViewModel = viewModel()
 ) {
     val messagesState by viewModel.messagesState.collectAsState()
+    var selectedMediaUrl by remember { mutableStateOf<String?>(null) }
 
     // --- UI STRUCTURE ---
     Box(
@@ -67,7 +67,7 @@ fun MessageArchiveScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             containerColor = Color.Transparent
@@ -95,7 +95,8 @@ fun MessageArchiveScreen(
                             items(state.messages, key = { it.id }) { message ->
                                 MessageBubble(
                                     message = message,
-                                    onDeleteClick = { viewModel.deleteMessage(message.id) }
+                                    onDeleteClick = { viewModel.deleteMessage(message.id) },
+                                    onAttachmentClick = { url -> selectedMediaUrl = url }
                                 )
                             }
                         }
@@ -103,13 +104,18 @@ fun MessageArchiveScreen(
                 }
             }
         }
+        
+        selectedMediaUrl?.let { url ->
+            FullScreenMediaDialog(mediaUrl = url, onDismiss = { selectedMediaUrl = null })
+        }
     }
 }
 
 @Composable
 fun MessageBubble(
     message: PersonalMessage,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onAttachmentClick: (String) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     val isFromCurrentUser = false // Read-only archive, mostly received.
@@ -157,7 +163,7 @@ fun MessageBubble(
                 if (!message.attachmentUrl.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
-                        onClick = { uriHandler.openUri(message.attachmentUrl) },
+                        onClick = { onAttachmentClick(message.attachmentUrl!!) },
                         modifier = Modifier.fillMaxWidth(),
                         border = BorderStroke(1.dp, ColorPrimaryAction.copy(alpha = 0.5f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorPrimaryAction),
@@ -198,6 +204,6 @@ fun MessageBubble(
 
 fun formatTimestamp(date: Date?): String {
     if (date == null) return ""
-    val sdf = SimpleDateFormat("dd MMM, HH:mm", Locale("es", "ES")) // Formato más corto
+    val sdf = SimpleDateFormat("dd MMM, HH:mm", Locale.forLanguageTag("es-ES")) // Formato más corto
     return sdf.format(date)
 }

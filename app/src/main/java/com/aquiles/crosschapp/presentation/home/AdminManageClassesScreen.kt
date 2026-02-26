@@ -29,7 +29,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // --- CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -84,7 +84,7 @@ fun AdminManageClassesScreen(
                             Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = ColorTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                 )
             },
             floatingActionButton = {
@@ -146,7 +146,7 @@ fun AdminManageClassesScreen(
     classToDelete?.let { gymClass ->
         AlertDialog(
             onDismissRequest = { classToDelete = null },
-            containerColor = Color(0xFF1C1C1E),
+            containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f),
             title = { Text("Eliminar Clase", color = ColorTextPrimary) },
             text = {
                 Text(
@@ -178,7 +178,7 @@ fun ClassManagementItemGlass(
     onEditClick: (GymClass) -> Unit,
     onDetailsClick: (GymClass) -> Unit
 ) {
-    val dateFormat = SimpleDateFormat("EEE dd, HH:mm", Locale("es", "ES"))
+    val dateFormat = SimpleDateFormat("EEE dd, HH:mm", Locale.forLanguageTag("es-ES"))
     val classDate = gymClass.dateTime?.let { dateFormat.format(it) }?.uppercase() ?: "N/A"
     val occupancy = "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}"
 
