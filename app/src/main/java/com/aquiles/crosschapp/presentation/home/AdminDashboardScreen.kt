@@ -34,6 +34,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -71,6 +72,7 @@ fun AdminDashboardScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Centro de Mando", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
@@ -127,10 +129,10 @@ fun AdminDashboardScreen(
                             progress = gym.setupProgress ?: emptyMap(),
                             skipped = gym.setupSkipped ?: emptyMap(),
                             onStepTapped = { step ->
-                                navController.navigate("${step.destination}?setupStep=${step.key}")
+                                navController.navigate("${step.destination}?setupStep=${step.toKey()}")
                             },
                             onStepSkipped = { step ->
-                                adminViewModel.markSetupStepSkipped(step.key)
+                                adminViewModel.markSetupStepSkipped(step.toKey())
                             }
                         )
                     }
@@ -227,13 +229,6 @@ fun AdminDashboardScreen(
                                     title = "Ajustes de Marca",
                                     icon = Icons.Default.Palette,
                                     onClick = { navController.navigate("admin_gym_settings") }
-                                )
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
-                                
-                                AdminListRow(
-                                    title = "Metodos de Pago",
-                                    icon = Icons.Default.Payments,
-                                    onClick = { navController.navigate("admin_payment_config") }
                                 )
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
 

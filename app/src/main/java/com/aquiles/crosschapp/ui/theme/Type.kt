@@ -38,6 +38,7 @@ val AppTypography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 36.sp,
         lineHeight = 44.sp,
+        letterSpacing = (-0.5).sp,
     ),
     headlineLarge = TextStyle(
         fontFamily = Inter,
@@ -62,6 +63,7 @@ val AppTypography = Typography(
         fontWeight = FontWeight.Bold, // Más fuerza
         fontSize = 22.sp,
         lineHeight = 28.sp,
+        letterSpacing = (-0.15).sp, // Ajuste Material 3
     ),
     titleMedium = TextStyle(
         fontFamily = Inter,
@@ -81,8 +83,8 @@ val AppTypography = Typography(
         fontFamily = Inter,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.5.sp,
+        lineHeight = 28.sp, // Mayor respiro
+        letterSpacing = 0.25.sp, // Material 3 body
     ),
     bodyMedium = TextStyle(
         fontFamily = Inter,

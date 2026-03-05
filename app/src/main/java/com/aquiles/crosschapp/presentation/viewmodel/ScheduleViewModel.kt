@@ -293,8 +293,8 @@ class ScheduleViewModel : ViewModel() {
                 firestore.runTransaction { tx ->
                     val classRef = firestore.collection("gymClasses").document(classId)
                     val freshClassDoc = tx.get(classRef)
-                    val currentEnrolled = freshClassDoc.get("enrolledUserIds") as? MutableList<String> ?: mutableListOf()
-                    val currentWaiting = freshClassDoc.get("waitingList") as? MutableList<String> ?: mutableListOf()
+                    val currentEnrolled = (freshClassDoc.get("enrolledUserIds") as? List<*>)?.filterIsInstance<String>()?.toMutableList() ?: mutableListOf()
+                    val currentWaiting = (freshClassDoc.get("waitingList") as? List<*>)?.filterIsInstance<String>()?.toMutableList() ?: mutableListOf()
 
                     if (isWaitingListCancellation) {
                         currentWaiting.remove(user.id)
@@ -392,7 +392,7 @@ class ScheduleViewModel : ViewModel() {
 
                     for (day in 1..7) {
                         val key = "${day}_open_gym_ranges"
-                        val rangesList = data[key] as? List<String>
+                        val rangesList = (data[key] as? List<*>)?.filterIsInstance<String>()
                         if (rangesList != null) {
                             val parsedRanges = rangesList.mapNotNull { rangeStr ->
                                 val parts = rangeStr.split("-")
@@ -471,7 +471,7 @@ class ScheduleViewModel : ViewModel() {
                 // Usamos await() en lugar de continueWith para simplificar y usar corrutinas
                 val task = functions.getHttpsCallable("registerAttendance").call(data).await()
                 
-                val result = task.data as? Map<String, Any>
+                val result = task.data as? Map<*, *>
                 val success = result?.get("success") as? Boolean ?: false
                 val message = result?.get("message") as? String ?: "Error desconocido"
                 

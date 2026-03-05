@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aquiles.crosschapp.data.model.BenchmarkResult
+import com.aquiles.crosschapp.data.model.Competition
 import com.aquiles.crosschapp.data.model.WodResult
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -19,7 +20,7 @@ sealed class FeedState {
     data class Error(val message: String) : FeedState()
 }
 
-enum class FeedTab { TODAY, RECORDS }
+enum class FeedTab { TODAY, RECORDS, EVENTS }
 
 // Wrapper for UI Items (Unifying WodResult and BenchmarkResult)
 data class FeedUiItem(
@@ -32,6 +33,7 @@ data class FeedUiItem(
     val score: String,
     val isRx: Boolean,
     val isVerified: Boolean,
+    val reactions: Map<String, String>, // [NEW] Mapa real de reacciones
     val type: FeedTab
 )
 
@@ -75,15 +77,22 @@ class BenchmarkFeedViewModel : ViewModel() {
     private val _feedItems = MutableStateFlow<List<FeedUiItem>>(emptyList())
     val feedItems = _feedItems.asStateFlow()
 
+    // Competencias activas (tab Eventos)
+    private val _activeCompetitions = MutableStateFlow<List<Competition>>(emptyList())
+    val activeCompetitions = _activeCompetitions.asStateFlow()
+
     fun setTab(tab: FeedTab) {
         _currentTab.value = tab
-        applyFilters() // Trigger re-emission
+        applyFilters()
         
         if (tab == FeedTab.TODAY && _dailyFeedItems.value.isEmpty()) {
             loadDailyFeed()
         }
         if (tab == FeedTab.RECORDS && _allFeedItems.value.isEmpty()) {
             loadFeed()
+        }
+        if (tab == FeedTab.EVENTS) {
+            loadActiveCompetitions()
         }
     }
 
@@ -104,6 +113,7 @@ class BenchmarkFeedViewModel : ViewModel() {
                     score = raw.score,
                     isRx = raw.isRx,
                     isVerified = raw.isVerified,
+                    reactions = raw.reactions,
                     type = FeedTab.RECORDS
                 )
              }
@@ -141,6 +151,7 @@ class BenchmarkFeedViewModel : ViewModel() {
                             score = raw.score,
                             isRx = raw.isRx,
                             isVerified = false,
+                            reactions = raw.reactions,
                             type = FeedTab.TODAY
                         )
                     }.sortedByDescending { it.date }
@@ -151,6 +162,22 @@ class BenchmarkFeedViewModel : ViewModel() {
     }
 
 
+
+    private fun loadActiveCompetitions() {
+        val currentUser = UserSession.currentUser.value ?: return
+        if (currentUser.gym_id.isBlank()) return
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("competitions")
+                    .whereEqualTo("gymId", currentUser.gym_id)
+                    // Sin filtro isActive — el owner borra cuando quiere (igual que iOS)
+                    .get().await()
+                _activeCompetitions.value = snap.toObjects(Competition::class.java)
+            } catch (e: Exception) {
+                Log.e("BenchmarkFeedVM", "Error loading competitions", e)
+            }
+        }
+    }
 
     fun loadFeed() {
         val currentUser = UserSession.currentUser.value ?: return
@@ -343,6 +370,35 @@ class BenchmarkFeedViewModel : ViewModel() {
         return numericString.toDoubleOrNull() ?: 0.0
     }
 
+    // MARK: - Reacciones Sociales
+    fun toggleReaction(itemId: String, itemType: FeedTab, emotion: String) {
+        val currentUser = UserSession.currentUser.value ?: return
+        val currentUserId = currentUser.id
+        val collectionName = if (itemType == FeedTab.TODAY) "wod_results" else "benchmark_results"
+        
+        viewModelScope.launch {
+            try {
+                val docRef = firestore.collection(collectionName).document(itemId)
+                firestore.runTransaction { transaction ->
+                    val snapshot = transaction.get(docRef)
+                    val currentReactions = snapshot.get("reactions") as? Map<String, String> ?: emptyMap()
+                    
+                    val newReactions = currentReactions.toMutableMap()
+                    if (newReactions[currentUserId] == emotion) {
+                        newReactions.remove(currentUserId)
+                    } else {
+                        newReactions[currentUserId] = emotion
+                    }
+                    
+                    transaction.update(docRef, "reactions", newReactions)
+                    null
+                }.await()
+                // Snapshot listener will Auto-Update the UI!
+            } catch (e: Exception) {
+                Log.e("BenchmarkFeedVM", "Error updating reaction", e)
+            }
+        }
+    }
 
     fun toggleVerification(itemId: String, currentStatus: Boolean) {
         val currentUser = UserSession.currentUser.value

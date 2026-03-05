@@ -48,6 +48,7 @@ import com.aquiles.crosschapp.R
 import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import com.aquiles.crosschapp.presentation.components.FeedbackDialog
+import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.components.FeedbackType
 import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor // [Fix] Import LocalPrimaryColor
 import java.io.File
@@ -440,26 +441,26 @@ fun VerticalPagerIndicator(
 fun WodPagerCard(
     gymClass: GymClass,
     imageUrl: String?,
-    existingResult: WodResult?, // New Param
+    existingResult: WodResult?,
     onSaveResult: (result: String, isRx: Boolean, notes: String, isPublic: Boolean) -> Unit,
     isSavingResult: Boolean
 ) {
-    // Inicializar estado con resultado existente
     var userResult by remember(existingResult) { mutableStateOf(existingResult?.score ?: "") }
     var userNotes by remember(existingResult) { mutableStateOf(existingResult?.notes ?: "") }
     var isRx by remember(existingResult) { mutableStateOf(existingResult?.isRx ?: true) }
     var isPublic by remember(existingResult) { mutableStateOf(existingResult?.isPublic ?: true) }
-    
+
     val fallbackImageUrl = "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=2070"
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val hasResult = existingResult != null
+    val validationStatus = existingResult?.validationStatus
 
-    Card(
+    com.aquiles.crosschapp.presentation.components.GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column {
+            // ── IMAGEN CABECERA ──────────────────────────────────
             Box(modifier = Modifier.height(200.dp)) {
                 SubcomposeAsyncImage(
                     model = if (!imageUrl.isNullOrBlank()) imageUrl else fallbackImageUrl,
@@ -468,114 +469,208 @@ fun WodPagerCard(
                     contentScale = ContentScale.Crop,
                     loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalPrimaryColor.current) } }
                 )
+                // Gradiente inferior
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color(0xFF1C1C1E)), startY = 200f))
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.9f))))
                 )
 
+                // ── Top: hora + coach ───────────────────────────
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Box(modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                        Text(text = "${timeFormatter.format(gymClass.dateTime ?: Date())} HS", color = LocalPrimaryColor.current, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                    // Badge HORA (iOS style)
+                    Row(
+                        modifier = Modifier
+                            .background(LocalPrimaryColor.current, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.AccessTime, null, tint = Color.White, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = timeFormatter.format(gymClass.dateTime ?: Date()),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
-                    if (gymClass.coachName.isNotBlank()) {
-                        Box(modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                            Text(text = "Coach: ${gymClass.coachName}", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                        }
+
+                    // Badge HOY (naranja, estilo iOS)
+                    Row(
+                        modifier = Modifier
+                            .background(LocalPrimaryColor.current, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text("HOY", color = Color.White, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium, letterSpacing = 1.sp)
                     }
                 }
 
-                Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
-                    Text(text = gymClass.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = ColorTextPrimary)
+                // ── Bottom: nombre clase + badge RX resultado ───
+                Column(
+                    modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = gymClass.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                    if (gymClass.coachName.isNotBlank()) {
+                        Text(
+                            text = "Coach: ${gymClass.coachName}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
                 }
             }
 
+            // ── CONTENIDO ────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .padding(20.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Box(modifier = Modifier.heightIn(min = 40.dp)) {
-                    Text(text = gymClass.description, color = ColorTextSecondary, style = MaterialTheme.typography.bodyMedium, lineHeight = 22.sp)
+                // Descripción en fuente monospaced (iOS parity)
+                if (gymClass.description.isNotBlank()) {
+                    Text(
+                        text = gymClass.description,
+                        color = ColorTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        ),
+                        lineHeight = 22.sp,
+                        modifier = Modifier.heightIn(max = 120.dp)
+                    )
                 }
 
                 HorizontalDivider(color = ColorBorder, thickness = 1.dp)
 
-                GlassTextField(value = userResult, onValueChange = { userResult = it }, label = "Resultado (Tiempo/Reps)")
+                // ── ZONA RESULTADO (si ya existe) ─────────────────
+                if (hasResult && existingResult != null) {
+                    // Mostrar resultado guardado + indicador validación
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(16.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                            .padding(16.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "RESULTADO REGISTRADO",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF30D158),
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Score grande
+                                Text(
+                                    text = existingResult.score,
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    // Badge RX
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                if (existingResult.isRx) LocalPrimaryColor.current.copy(0.15f) else Color.Gray.copy(0.1f),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (existingResult.isRx) "NIVEL A" else "NIVEL B",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (existingResult.isRx) LocalPrimaryColor.current else ColorTextSecondary,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                    // Badge validación
+                                    when (validationStatus) {
+                                        "pending" -> BadgeValidation(text = "Pendiente", icon = Icons.Default.AccessTime, bgColor = Color(0xFFFF9500).copy(0.15f), textColor = Color(0xFFFF9500))
+                                        "approved" -> BadgeValidation(text = "Validado ✓", icon = null, bgColor = Color(0xFF30D158).copy(0.15f), textColor = Color(0xFF30D158))
+                                        "rejected" -> BadgeValidation(text = "Rechazado ✗", icon = null, bgColor = Color(0xFFFF3B30).copy(0.15f), textColor = Color(0xFFFF3B30))
+                                        else -> {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── CAMPOS PARA INGRESAR/ACTUALIZAR RESULTADO ────
+                GlassTextField(value = userResult, onValueChange = { userResult = it }, label = if (hasResult) "Nuevo resultado" else "Resultado (Tiempo/Reps)")
                 GlassTextField(value = userNotes, onValueChange = { userNotes = it }, label = "Notas")
 
-                // Opciones de Guardado (RX & Public)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // RX Checkbox
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { isRx = !isRx }
-                            .padding(vertical = 8.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { isRx = !isRx }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(
-                            checked = isRx,
-                            onCheckedChange = { isRx = it },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = LocalPrimaryColor.current,
-                                uncheckedColor = ColorTextSecondary,
-                                checkmarkColor = Color.White
-                            )
+                            checked = isRx, onCheckedChange = { isRx = it },
+                            colors = CheckboxDefaults.colors(checkedColor = LocalPrimaryColor.current, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White)
                         )
                         Text("RX", fontWeight = FontWeight.Bold, color = if (isRx) ColorTextPrimary else ColorTextSecondary)
                     }
-
-                    // Public Toggle
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { isPublic = !isPublic }
-                            .padding(vertical = 8.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { isPublic = !isPublic }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Switch(
-                            checked = isPublic,
-                            onCheckedChange = { isPublic = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = LocalPrimaryColor.current,
-                                uncheckedThumbColor = ColorTextSecondary,
-                                uncheckedTrackColor = ColorGlassSurface
-                            ),
-                            modifier = Modifier.scale(0.8f) 
+                            checked = isPublic, onCheckedChange = { isPublic = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = LocalPrimaryColor.current, uncheckedThumbColor = ColorTextSecondary, uncheckedTrackColor = ColorGlassSurface),
+                            modifier = Modifier.scale(0.8f)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(if (isPublic) "Público" else "Privado", fontWeight = FontWeight.Bold, color = if (isPublic) ColorTextPrimary else ColorTextSecondary, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
-                    
-                // Botón Guardar
-                val isUpdating = existingResult != null // [Fix] Restore variable
+
                 Button(
                     onClick = { onSaveResult(userResult, isRx, userNotes, isPublic) },
-                    modifier = Modifier.fillMaxWidth(), // Full width button looks better below options
+                    modifier = Modifier.fillMaxWidth(),
                     enabled = userResult.isNotBlank() && !isSavingResult,
                     colors = ButtonDefaults.buttonColors(containerColor = LocalPrimaryColor.current, disabledContainerColor = LocalPrimaryColor.current.copy(alpha = 0.5f)),
                     shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp)
+                    contentPadding = PaddingValues(vertical = 14.dp)
                 ) {
-                    if (isSavingResult) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White) 
-                    } else {
-                        Text(if (isUpdating) "Actualizar Resultado" else "Guardar Resultado", fontWeight = FontWeight.Bold)
-                    }
+                    if (isSavingResult) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                    else Text(if (hasResult) "Actualizar Resultado" else "Guardar Resultado", fontWeight = FontWeight.Bold)
                 }
             }
         }
+    }
+}
+
+// Badge helper para validación
+@Composable
+private fun BadgeValidation(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector?, bgColor: Color, textColor: Color) {
+    Row(
+        modifier = Modifier.background(bgColor, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        if (icon != null) Icon(icon, null, tint = textColor, modifier = Modifier.size(10.dp))
+        Text(text, style = MaterialTheme.typography.labelSmall, color = textColor, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -586,12 +681,7 @@ fun FloatingCameraButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
     }
 }
 
-@Composable
-fun GlassCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier), shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, ColorBorder), colors = CardDefaults.cardColors(containerColor = ColorGlassSurface), elevation = CardDefaults.cardElevation(0.dp)) {
-        Column(modifier = Modifier.padding(16.dp), content = content)
-    }
-}
+// Composable GlassCard is now imported globally from components
 
 @Composable
 fun SectionTitle(title: String) {
@@ -601,7 +691,10 @@ fun SectionTitle(title: String) {
 @Composable
 fun RestDayWodCard(imageUrl: String?) {
     val fallbackImageUrl = "https://images.unsplash.com/photo-1549060279-7e168fcee0c2"
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), border = BorderStroke(1.dp, ColorBorder), colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)) {
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp)
+    ) {
         Box(modifier = Modifier.height(350.dp)) {
             SubcomposeAsyncImage(model = if (!imageUrl.isNullOrBlank()) imageUrl else fallbackImageUrl, contentDescription = "Rest Day", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
@@ -617,16 +710,58 @@ fun RestDayWodCard(imageUrl: String?) {
 fun NextBookingCardSmall(gymClass: GymClass, onClick: () -> Unit) {
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val dayFormatter = remember { SimpleDateFormat("EEE dd", Locale.forLanguageTag("es-ES")) }
-    GlassCard(modifier = Modifier.height(140.dp), onClick = onClick) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text(text = gymClass.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = ColorTextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(text = gymClass.dateTime?.let { dayFormatter.format(it) }?.uppercase() ?: "", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+    val dateStr = gymClass.dateTime?.let { dayFormatter.format(it) }?.uppercase() ?: ""
+    val timeStr = gymClass.dateTime?.let { timeFormatter.format(it) } ?: ""
+
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = Modifier.height(160.dp).clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Etiqueta sección
+                Text(
+                    text = "PRÓXIMA CLASE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LocalPrimaryColor.current,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
+                )
+                Text(
+                    text = gymClass.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (gymClass.coachName.isNotBlank()) {
+                    Text(
+                        text = gymClass.coachName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AccessTime, contentDescription = null, tint = LocalPrimaryColor.current, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(text = gymClass.dateTime?.let { timeFormatter.format(it) } ?: "", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+            // Footer: fecha + hora con badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = dateStr, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
+                Row(
+                    modifier = Modifier
+                        .background(LocalPrimaryColor.current, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.AccessTime, null, tint = Color.White, modifier = Modifier.size(11.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(timeStr, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
@@ -634,11 +769,59 @@ fun NextBookingCardSmall(gymClass: GymClass, onClick: () -> Unit) {
 
 @Composable
 fun TomorrowWodCardSmall(wod: Wod, onClick: () -> Unit) {
-    GlassCard(modifier = Modifier.height(140.dp), onClick = onClick) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-            Text(text = wod.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Ver", tint = LocalPrimaryColor.current, modifier = Modifier.size(20.dp))
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = Modifier.height(160.dp).clickable(onClick = onClick)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Etiqueta sección
+                Text(
+                    text = "MAÑANA",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF64D2FF),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
+                )
+                Text(
+                    text = wod.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!wod.scoreType.isNullOrBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(Icons.Default.EmojiEvents, null, tint = Color(0xFFFFD700), modifier = Modifier.size(10.dp))
+                        Text(wod.scoreType!!, style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            // Footer: botón ver
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Ver horarios", style = MaterialTheme.typography.labelSmall, color = Color(0xFF64D2FF), fontWeight = FontWeight.Bold)
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Color(0xFF64D2FF), modifier = Modifier.size(12.dp))
+                }
             }
         }
     }
@@ -683,7 +866,7 @@ fun AccessBlockedCard(title: String, message: String, onClick: () -> Unit) {
 
 @Composable
 fun InfoCard(icon: ImageVector, title: String, message: String) {
-    GlassCard {
+    com.aquiles.crosschapp.presentation.components.GlassCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Icon(imageVector = icon, contentDescription = title, tint = ColorTextSecondary)
             Column {
@@ -696,7 +879,7 @@ fun InfoCard(icon: ImageVector, title: String, message: String) {
 
 @Composable
 fun GlassLoadingCard(height: androidx.compose.ui.unit.Dp = 200.dp) {
-    GlassCard(modifier = Modifier.height(height)) {
+    com.aquiles.crosschapp.presentation.components.GlassCard(modifier = Modifier.height(height)) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = LocalPrimaryColor.current)
         }
@@ -705,9 +888,8 @@ fun GlassLoadingCard(height: androidx.compose.ui.unit.Dp = 200.dp) {
 
 @Composable
 fun BenchmarkAccessCard(onClick: () -> Unit) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier.padding(24.dp),

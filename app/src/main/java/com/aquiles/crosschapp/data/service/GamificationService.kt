@@ -20,7 +20,7 @@ object GamificationService {
 
     suspend fun processAttendanceGamification(userId: String, gymId: String, classId: String, classDate: Date) {
         val xpLogId = "attendance_${userId}_${classId}"
-        val xpLogRef = firestore.collection("users").document(userId).collection("xp_logs").document(xpLogId)
+        val xpLogRef = firestore.collection("xp_logs").document(xpLogId)
 
         try {
             // 1. Check Idempotency (if log exists, skip)
@@ -41,6 +41,8 @@ object GamificationService {
 
             // a) Create Attendance XP Log
             val attendanceLog = hashMapOf(
+                "userId" to userId,
+                "gym_id" to gymId,
                 "amount" to LevelSystem.XP_ATTENDANCE,
                 "type" to "ATTENDANCE",
                 "title" to "Asistencia a Clase",
@@ -77,8 +79,10 @@ object GamificationService {
                 batch.set(achRef, achievementData)
 
                 // Log XP for Achievement
-                val achLogRef = firestore.collection("users").document(userId).collection("xp_logs").document()
+                val achLogRef = firestore.collection("xp_logs").document()
                 val achLog = hashMapOf(
+                    "userId" to userId,
+                    "gym_id" to gymId,
                     "amount" to def.xpReward,
                     "type" to "ACHIEVEMENT",
                     "title" to "Logro Desbloqueado",
@@ -206,14 +210,16 @@ object GamificationService {
     }
     
     // Helper to be called from PerformanceViewModel too
-    suspend fun addXp(userId: String, amount: Int, type: String, title: String, description: String, relatedId: String? = null) {
+    suspend fun addXp(userId: String, gymId: String, amount: Int, type: String, title: String, description: String, relatedId: String? = null) {
         val batch = firestore.batch()
         val userRef = firestore.collection("users").document(userId)
         
         batch.update(userRef, "xp", FieldValue.increment(amount.toLong()))
         
-        val logRef = firestore.collection("users").document(userId).collection("xp_logs").document()
+        val logRef = firestore.collection("xp_logs").document()
         val logData = hashMapOf(
+            "userId" to userId,
+            "gym_id" to gymId,
             "amount" to amount,
             "type" to type,
             "title" to title,
@@ -231,7 +237,7 @@ object GamificationService {
     suspend fun awardSchedulingXP(userId: String, gymId: String, intentId: String): Int {
         val reward = 10
         val xpLogId = "schedule_intent_${userId}_${intentId}"
-        val xpLogRef = firestore.collection("users").document(userId).collection("xp_logs").document(xpLogId)
+        val xpLogRef = firestore.collection("xp_logs").document(xpLogId)
         
         return try {
             val logDoc = xpLogRef.get().await()
@@ -242,6 +248,8 @@ object GamificationService {
             val batch = firestore.batch()
             
             val logData = hashMapOf(
+                "userId" to userId,
+                "gym_id" to gymId,
                 "amount" to reward,
                 "type" to "SCHEDULE_INTENT",
                 "title" to "Planificador Pro",

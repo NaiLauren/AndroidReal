@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
 import java.util.Date
+import java.util.TimeZone
 import java.util.UUID
 
 // Matches iOS logic for Schedule Planner
@@ -210,12 +211,13 @@ class SchedulePlannerViewModel : ViewModel() {
         durationMinutes: Int,
         createWod: Boolean,
         wodScoreType: String,
+        hexColor: String? = null,
         isUpdateMode: Boolean = false
     ) {
         if (isUpdateMode) {
-            updateBatchClasses(className, coachName, description, capacity, durationMinutes, createWod, wodScoreType, startDate)
+            updateBatchClasses(className, coachName, description, capacity, durationMinutes, createWod, wodScoreType, startDate, hexColor)
         } else {
-            createClassesBatch(startDate, selectedTimes, selectedWeekdays, repeatMonths, className, coachName, description, capacity, durationMinutes, createWod, wodScoreType)
+            createClassesBatch(startDate, selectedTimes, selectedWeekdays, repeatMonths, className, coachName, description, capacity, durationMinutes, createWod, wodScoreType, hexColor)
         }
     }
 
@@ -227,7 +229,8 @@ class SchedulePlannerViewModel : ViewModel() {
         durationMinutes: Int,
         createWod: Boolean,
         wodScoreType: String,
-        dateForWod: Date // Used for WOD date if creating new
+        dateForWod: Date, // Used for WOD date if creating new
+        hexColor: String?
     ) {
         val idsToUpdate = _selectedClassIds.value
         if (idsToUpdate.isEmpty()) return
@@ -278,6 +281,9 @@ class SchedulePlannerViewModel : ViewModel() {
                     if (newWodId != null) {
                         updates["wod_id"] = newWodId
                     }
+                    if (hexColor != null) {
+                        updates["hexColor"] = hexColor
+                    }
                     // If we want to CLEAR wod? Assume if createWod=false we don't clear, just don't add new.
                     
                     batch.update(ref, updates)
@@ -315,7 +321,8 @@ class SchedulePlannerViewModel : ViewModel() {
         capacity: Int,
         durationMinutes: Int,
         createWod: Boolean,
-        wodScoreType: String
+        wodScoreType: String,
+        hexColor: String?
     ) {
         val gid = gymId ?: return
         if (selectedTimes.isEmpty()) {
@@ -330,7 +337,13 @@ class SchedulePlannerViewModel : ViewModel() {
             try {
                 // 1. Calculate Dates
                 val calendar = Calendar.getInstance()
-                calendar.time = startDate
+                
+                // FIXED TIMEZONE OFFSET FOR MATERIAL 3 DATEPICKER
+                // Material3 DatePicker devuelve instantes en medianoche UTC, si el usuario esta en UTC-3 o -4 (Ej: 20hs del dia previo)
+                // la fecha "startDate" queda como del "día anterior" al instanciarla en el log local.
+                val utcOffset = TimeZone.getDefault().getOffset(startDate.time)
+                calendar.time = Date(startDate.time + utcOffset) // Compensamos el UTC OffSet local
+
                 // Reset to start of day? Swift did startOfDay.
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
@@ -413,12 +426,15 @@ class SchedulePlannerViewModel : ViewModel() {
                             "durationMinutes" to durationMinutes,
                             "dateTime" to Timestamp(fullDate),
                             "classType" to if (slot.isOpenGym) "OPEN_GYM" else "WOD",
-                            "attendees" to emptyList<String>(),
-                            "waitlist" to emptyList<String>(),
+                            "enrolledUserIds" to emptyList<String>(),
+                            "waitingList" to emptyList<String>(),
                             "wod_id" to wodId, // Nullable
                             "isCancelled" to false,
                             "isOpenGym" to slot.isOpenGym
                         )
+                        if (hexColor != null && !slot.isOpenGym) {
+                            newClass["hexColor"] = hexColor
+                        }
 
                         batch.set(newClassRef, newClass)
                         operationCount++

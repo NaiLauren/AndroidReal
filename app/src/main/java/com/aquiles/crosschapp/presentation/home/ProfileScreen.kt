@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +45,7 @@ import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -80,19 +82,6 @@ fun ProfileScreen(
 
     val context = LocalContext.current
 
-    // --- Lógica de permisos e imagen (Sin cambios) ---
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        uri?.let { profileViewModel.uploadProfileImage(it) }
-    }
-
-    fun launchImagePicker() {
-        imagePickerLauncher.launch(
-            androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-        )
-    }
-
     LaunchedEffect(profileUpdateState) {
         if (profileUpdateState is ProfileUpdateState.Success) {
             Toast.makeText(context, "Foto actualizada correctamente", Toast.LENGTH_SHORT).show()
@@ -104,17 +93,8 @@ fun ProfileScreen(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        // --- SCAFFOLD CON TOP BAR DE CRISTAL VACÍO ---
+        // --- SCAFFOLD SIN TOP BAR DE CRISTAL ---
         Scaffold(
-            topBar = { 
-                @OptIn(ExperimentalMaterial3Api::class)
-                CenterAlignedTopAppBar(
-                    title = { }, // Título vacío a petición
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f)
-                    )
-                ) 
-            },
             containerColor = Color.Transparent
         ) { localPadding ->
 
@@ -135,8 +115,8 @@ fun ProfileScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 16.dp),
-                        contentPadding = PaddingValues(top = localPadding.calculateTopPadding() + 10.dp, bottom = innerPadding.calculateBottomPadding() + 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                        contentPadding = PaddingValues(top = localPadding.calculateTopPadding() + 8.dp, bottom = innerPadding.calculateBottomPadding() + 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // HEADER NUEVO (Estilo iOS)
                         item {
@@ -144,7 +124,6 @@ fun ProfileScreen(
                                 user = state.user,
                                 activeBookingsCount = state.activeBookings.size,
                                 attendanceCount = realAttendanceCount,
-                                onImageClick = { launchImagePicker() },
                                 onEditClick = onEditProfileClicked,
                                 isLoadingImage = profileUpdateState is ProfileUpdateState.Loading,
                                 onNavigateToRules = onNavigateToRules,
@@ -234,7 +213,6 @@ fun ProfileHeaderIOSStyle(
     user: User,
     activeBookingsCount: Int,
     attendanceCount: Int,
-    onImageClick: () -> Unit,
     onEditClick: () -> Unit,
     isLoadingImage: Boolean,
     onNavigateToRules: () -> Unit,
@@ -276,13 +254,21 @@ fun ProfileHeaderIOSStyle(
                     .padding(top = 10.dp)
             ) {
                 // Foto de Perfil
+                val avatarRingBrush = Brush.sweepGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primary,
+                        Color.White,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        MaterialTheme.colorScheme.primary
+                    )
+                )
+
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(120.dp)
+                        .size(150.dp)
                         .clip(CircleShape)
-                        .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                        .clickable { onImageClick() }
+                        .border(BorderStroke(4.dp, avatarRingBrush), CircleShape)
                 ) {
                     if (isLoadingImage) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -295,9 +281,6 @@ fun ProfileHeaderIOSStyle(
                             error = { Box(Modifier.fillMaxSize().background(Color.Gray)) { Icon(Icons.Default.Person, null, modifier = Modifier.align(Alignment.Center), tint = Color.White) } }
                         )
                     }
-                    Box(
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape).padding(4.dp)
-                    ) { Icon(Icons.Default.CameraAlt, null, tint = Color.White, modifier = Modifier.size(12.dp)) }
                     
                     val decorationName = LevelSystem.getAvatarDecoration(user.level)
                     if (decorationName != null) {
@@ -319,19 +302,17 @@ fun ProfileHeaderIOSStyle(
                     }
                 }
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(12.dp))
 
                 // TARJETA CRISTALINA PARA EL PERFIL
-                Card(
+                com.aquiles.crosschapp.presentation.components.GlassCard(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-                    border = BorderStroke(1.dp, ColorBorder)
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                        modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp).fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
                             text = user.fullName,
@@ -508,11 +489,8 @@ fun ActionButtonsSection(user: User, onNavigateToRequestCredits: () -> Unit, onN
 
 @Composable
 fun GlassCardSection(title: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-        border = BorderStroke(1.dp, ColorBorder)
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             if (title != null) {

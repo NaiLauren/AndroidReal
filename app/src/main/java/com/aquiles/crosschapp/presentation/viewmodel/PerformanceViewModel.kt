@@ -609,6 +609,7 @@ class PerformanceViewModel : ViewModel() {
             // Updated to use centralized GamificationService
             com.aquiles.crosschapp.data.service.GamificationService.addXp(
                 userId = currentUser.id,
+                gymId = currentUser.gym_id,
                 amount = amount,
                 type = type,
                 title = title,

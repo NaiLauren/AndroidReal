@@ -166,6 +166,44 @@ class AdminViewModel : ViewModel() {
         }
     }
 
+    // --- CARGAR MARCA (WOD / COMPETICIÓN) ---
+    fun saveWodResult(
+        wodId: String,
+        userId: String,
+        score: String,
+        scoreType: String,
+        isRx: Boolean,
+        notes: String,
+        gymId: String
+    ) {
+        executeAdminAction({ _classOperationState.value = ClassOperationState.Error(it) }) { _, _ ->
+            _classOperationState.value = ClassOperationState.Loading
+
+            try {
+                val data = mapOf(
+                    "wod_id" to wodId,
+                    "gym_id" to gymId,
+                    "user_id" to userId,
+                    "userId" to userId, // Agregado por compatibilidad legacy si existiese
+                    "score" to score,
+                    "scoreType" to scoreType,
+                    "isRx" to isRx,
+                    "notes" to notes,
+                    "date" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                )
+
+                // Carga directa asumiendo que el Admin lo inserta en wod_results
+                firestore.collection("wod_results")
+                    .add(data)
+                    .await()
+
+                _classOperationState.value = ClassOperationState.Success("Resultado guardado")
+            } catch (e: Exception) {
+                _classOperationState.value = ClassOperationState.Error(e.message ?: "Error guardando score")
+            }
+        }
+    }
+
     fun loadGymPaymentSettings() {
         viewModelScope.launch {
             _paymentSettingsState.value = PaymentSettingsState.Loading
@@ -1248,7 +1286,7 @@ class AdminViewModel : ViewModel() {
                 val dollarRate = dollarDeferred.await()
                 
                 val attendanceSnap = attendanceDeferred.await()
-                val activeUsersCount = attendanceSnap.documents.mapNotNull { it.getString("userId") }.distinct().count()
+                val attendanceUserIds = attendanceSnap.documents.mapNotNull { it.getString("userId") }
 
                 val paymentStatusSnap = paymentStatusDeferred.await()
                 var paymentStatus = "PENDING"
@@ -1259,6 +1297,9 @@ class AdminViewModel : ViewModel() {
 
                 val transactionsSnap = transactionsDeferred.await()
                 val requests = transactionsSnap.toObjects(CreditRequest::class.java)
+                
+                val transactionUserIds = requests.map { it.userId }
+                val activeUsersCount = (attendanceUserIds + transactionUserIds).distinct().count()
                 
                 val paymentInfoSnap = paymentInfoDeferred.await()
                 val paymentInfo = if (paymentInfoSnap.exists()) {

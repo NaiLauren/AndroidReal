@@ -88,6 +88,9 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.9.0")
 
+    // Componentes visuales iOS Glassmorphism
+    implementation("dev.chrisbanes.haze:haze:0.7.3")
+
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
 

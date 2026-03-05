@@ -44,6 +44,7 @@ import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import java.text.NumberFormat
 import java.util.*
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS (PRO) ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -129,6 +130,7 @@ fun RequestCreditsScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = {}, // Título custom en el body
                     navigationIcon = {
                         IconButton(

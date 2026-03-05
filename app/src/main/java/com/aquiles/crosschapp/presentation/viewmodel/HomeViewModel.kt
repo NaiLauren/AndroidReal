@@ -186,7 +186,9 @@ class HomeViewModel : ViewModel() {
             com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 .collection("competitions")
                 .whereEqualTo("gym_id", gymId)
-                .whereEqualTo("isActive", true)
+                // Sin filtro de isActive ni fecha — igual que iOS.
+                // El owner decide borrarlas desde el panel de admin.
+                .orderBy("endDate", com.google.firebase.firestore.Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, e ->
                     if (e != null) {
                         Log.e(TAG, "Error listening for competitions", e)
@@ -194,13 +196,7 @@ class HomeViewModel : ViewModel() {
                     }
                     if (snapshot != null) {
                         val comps = snapshot.toObjects(com.aquiles.crosschapp.data.model.Competition::class.java)
-                        val validComps = comps.filter { 
-                            val now = java.util.Date()
-                            val end = it.endDate ?: now
-                            end.after(now) || end == now
-                        }.sortedBy { it.endDate }
-                        
-                        _activeCompetitions.value = validComps
+                        _activeCompetitions.value = comps
                     }
                 }
         }

@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,8 +23,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Brush
 import com.aquiles.crosschapp.data.model.GymClass
 import com.aquiles.crosschapp.data.model.User
 import com.aquiles.crosschapp.presentation.viewmodel.*
@@ -33,6 +37,9 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.*
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.drawBehind
+import com.aquiles.crosschapp.presentation.components.GlassCardSurface
 
 // --- HELPER EXTENSION ---
 fun String.toColorSafe(): Color {
@@ -106,6 +113,7 @@ fun ScheduleScreen(
             Scaffold(
                 topBar = {
                     CenterAlignedTopAppBar(
+                        modifier = Modifier.height(72.dp),
                         title = { Text("Horarios", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                     )
@@ -171,92 +179,201 @@ fun ClassesListContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    Text(
-                        text = selectedDate.format(dateFormatter).replaceFirstChar { it.uppercase() },
-                        color = ColorTextSecondary,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = 4.dp)
+                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(percent = 50))
+                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(percent = 50))
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = selectedDate.format(dateFormatter).replaceFirstChar { it.uppercase() },
+                            color = ColorTextPrimary, // Color de texto primario brillando en fondo oscuro
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
 
                 // 1. Mostrar Horarios de "Centro Abierto" (Si existen para este día)
-                val dayOfWeek = selectedDate.dayOfWeek.value // Monday is 1, Sunday is 7 in Java Calendar but we want Sunday = 1 to match iOS/Firebase.
-                // Firebase/iOS uses Sunday = 1, Monday = 2... Saturday = 7. Let's adjust LocalDate logic.
-               val adjustedDayOfWeek = if (selectedDate.dayOfWeek.value == 7) 1 else selectedDate.dayOfWeek.value + 1
-               
-               val openHours = gymOperatingHoursState[adjustedDayOfWeek]
-               if (openHours != null && openHours.ranges.isNotEmpty()) {
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.DoorSliding, contentDescription = "Open Gym", tint = ColorPrimaryAction, modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Horario de Apertura", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            openHours.ranges.forEach { range ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(bottom = 8.dp)
-                                        .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-                                        .padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${range.startTime} - ${range.endTime}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ColorTextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Text(
-                                        text = "Acceso Libre",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = ColorTextSecondary
-                                    )
-                                }
-                            }
-                        }
-                    }
-               }
-
-                if (classesState.classes.isEmpty()) {
-                    if (openHours?.ranges.isNullOrEmpty()) {
-                         item { EmptyScheduleCard() }
-                    } else {
+                val adjustedDayOfWeek = if (selectedDate.dayOfWeek.value == 7) 1 else selectedDate.dayOfWeek.value + 1
+                val openHours = gymOperatingHoursState[adjustedDayOfWeek]?.ranges?.sortedBy { it.startTime } ?: emptyList()
+                
+                if (openHours.isNotEmpty()) {
+                    openHours.forEach { range ->
                         item {
-                            Text(
-                                text = "No hay clases guiadas este día.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = ColorTextSecondary,
-                                modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
-                                textAlign = TextAlign.Center
+                            TimelineSection(
+                                range = range,
+                                classes = classesState.classes,
+                                selectedDate = selectedDate,
+                                onClassClick = onClassClick
                             )
                         }
                     }
-                } else {
-                    item {
-                        Text(
-                            text = "Clases Guiadas",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorTextPrimary,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp).fillMaxWidth()
-                        )
+                    
+                    // Standalone classes (out of range)
+                    val inRangeIds = classesState.classes.filter { gymClass ->
+                        val classTimeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                        val classTime = gymClass.dateTime?.let { classTimeFormat.format(it) } ?: ""
+                        openHours.any { range -> classTime >= range.startTime && classTime <= range.endTime }
+                    }.map { it.id }
+                    
+                    val standaloneClasses = classesState.classes.filter { it.id !in inRangeIds }
+                    if (standaloneClasses.isNotEmpty()) {
+                        item {
+                            StandaloneClassesSection(classes = standaloneClasses, onClassClick = onClassClick)
+                        }
                     }
-                    items(classesState.classes, key = { it.id }) { gymClass ->
-                        ClassItemCardGlass(gymClass = gymClass, onClick = { onClassClick(gymClass.id) })
+                } else {
+                    if (classesState.classes.isEmpty()) {
+                        item { EmptyScheduleCard() }
+                    } else {
+                        item {
+                            StandaloneClassesSection(classes = classesState.classes, onClassClick = onClassClick)
+                        }
                     }
                 }
+                
                 item { Spacer(Modifier.height(40.dp)) }
             }
+        }
+    }
+}
+
+// MARK: - TIMELINE COMPONENTS (Android)
+@Composable
+fun TimelineSection(
+    range: ScheduleViewModel.TimeRange,
+    classes: List<GymClass>,
+    selectedDate: LocalDate,
+    onClassClick: (String) -> Unit
+) {
+    val classesInRange = classes.filter { gymClass ->
+        val classTimeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val classTime = gymClass.dateTime?.let { classTimeFormat.format(it) } ?: ""
+        classTime >= range.startTime && classTime <= range.endTime
+    }
+    
+    val progress = remember(range, selectedDate) {
+        if (selectedDate.isBefore(LocalDate.now())) return@remember 1f
+        if (selectedDate.isAfter(LocalDate.now())) return@remember 0f
+        
+        val nowFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val nowStr = nowFormat.format(Date())
+        
+        if (nowStr < range.startTime) return@remember 0f
+        if (nowStr > range.endTime) return@remember 1f
+        
+        fun toMinutes(time: String): Int {
+            val parts = time.split(":")
+            if (parts.size != 2) return 0
+            return (parts[0].toIntOrNull() ?: 0) * 60 + (parts[1].toIntOrNull() ?: 0)
+        }
+        
+        val startM = toMinutes(range.startTime)
+        val endM = toMinutes(range.endTime)
+        val curM = toMinutes(nowStr)
+        
+        if (endM <= startM) 1f else (curM - startM).toFloat() / (endM - startM).toFloat()
+    }
+    
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val dimColor = Color.Gray.copy(alpha = 0.3f)
+    val circleRadiusDp = 8.dp
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp)
+            .drawBehind {
+                val circleRadius = circleRadiusDp.toPx()
+                val xOffset = circleRadius
+                val yStart = 16.dp.toPx()
+                val yEnd = size.height - 16.dp.toPx()
+                
+                val distance = yEnd - yStart
+                val splitY = yStart + (distance * progress)
+                val strokeW = 4.dp.toPx()
+                
+                if (progress > 0f) {
+                    drawLine(color = dimColor, start = androidx.compose.ui.geometry.Offset(xOffset, yStart), end = androidx.compose.ui.geometry.Offset(xOffset, splitY), strokeWidth = strokeW)
+                }
+                if (progress < 1f) {
+                    drawLine(color = primaryColor, start = androidx.compose.ui.geometry.Offset(xOffset, splitY), end = androidx.compose.ui.geometry.Offset(xOffset, yEnd), strokeWidth = strokeW)
+                }
+                
+                val startColor = if (progress > 0f) Color.Gray.copy(alpha=0.5f) else primaryColor
+                drawCircle(color = Color.Black, radius = circleRadius, center = androidx.compose.ui.geometry.Offset(xOffset, yStart))
+                drawCircle(color = startColor, radius = circleRadius - 2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(xOffset, yStart))
+                
+                val endColor = if (progress >= 1f) Color.Gray.copy(alpha=0.5f) else primaryColor
+                drawCircle(color = Color.Black, radius = circleRadius, center = androidx.compose.ui.geometry.Offset(xOffset, yEnd))
+                drawCircle(color = endColor, radius = circleRadius - 2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(xOffset, yEnd))
+            }
+    ) {
+        Spacer(modifier = Modifier.width(32.dp))
+        
+        Column(modifier = Modifier.weight(1f)) {
+            // HEADER (Start)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(range.startTime, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (progress > 0f) Color.Gray else Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Apertura", style = MaterialTheme.typography.bodyMedium, color = primaryColor)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // CONTENT
+            if (classesInRange.isEmpty()) {
+                GlassCardSurface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Acceso Libre", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Espacio disponible para entrenar por tu cuenta.", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                    }
+                }
+            } else {
+                classesInRange.forEach { gymClass ->
+                    ClassItemCardGlass(gymClass = gymClass, onClick = { onClassClick(gymClass.id) })
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // FOOTER (End)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(range.endTime, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (progress >= 1f) Color.Gray else Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Cierre", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+            }
+        }
+    }
+}
+
+@Composable
+fun StandaloneClassesSection(classes: List<GymClass>, onClassClick: (String) -> Unit) {
+    Column {
+        Box(
+            modifier = Modifier
+                .padding(top = 8.dp, bottom = 12.dp)
+                .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(percent = 50))
+                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(percent = 50))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = "Otras Clases",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = ColorTextPrimary
+            )
+        }
+        classes.forEach { gymClass ->
+             ClassItemCardGlass(gymClass = gymClass, onClick = { onClassClick(gymClass.id) })
+             Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -279,10 +396,15 @@ fun ClassItemCardGlass(
     // Logic for Color
     val classSpecificColor = gymClass.hexColor.toColorSafe()
 
+    val isCompetition = gymClass.classType == "COMPETITION"
+    val compColor = Color(0xFFFFD700)
+    val compBrush = Brush.linearGradient(listOf(compColor.copy(alpha=0.15f), Color.Transparent))
+    
     val statusColor = when {
         isCancelled -> ColorStatusCancelled
         isPast -> ColorStatusPast
         isOngoing -> ColorStatusOngoing
+        isCompetition -> compColor
         else -> classSpecificColor // Use custom color from DB
     }
 
@@ -293,15 +415,14 @@ fun ClassItemCardGlass(
         }
     }
 
-    Card(
+    GlassCardSurface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .alpha(if (isPast && !isOngoing) 0.6f else 1f),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-        elevation = CardDefaults.cardElevation(0.dp)
+            .alpha(if (isPast && !isOngoing) 0.6f else 1f)
+            .let { if (isCompetition) it.border(1.dp, compColor.copy(alpha=0.5f), RoundedCornerShape(16.dp)) else it }
+            .background(if (isCompetition) compBrush else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             // Sidebar Color
@@ -355,7 +476,24 @@ fun ClassItemCardGlass(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (gymClass.isOpenGym == true) {
+                        if (isCompetition) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                color = compColor.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)) {
+                                    Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = compColor, modifier = Modifier.size(10.dp))
+                                    Spacer(Modifier.width(2.dp))
+                                    Text(
+                                        text = "EVENTO",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = compColor,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                        } else if (gymClass.isOpenGym == true) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
                                 color = Color.White.copy(alpha = 0.2f),
@@ -363,7 +501,7 @@ fun ClassItemCardGlass(
                             ) {
                                 Text(
                                     text = "LIBRE",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp)),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -391,8 +529,8 @@ fun ClassItemCardGlass(
                         Spacer(modifier = Modifier.width(4.dp))
                         
                         val isFull = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
-                        val currentUserSession = UserSession.currentUser.value
-                        val myWaitlistPos = if (currentUserSession != null) gymClass.waitingList.indexOf(currentUserSession.id) else -1
+                        val currentUserSession by UserSession.currentUser.collectAsState()
+                        val myWaitlistPos = if (currentUserSession != null) gymClass.waitingList.indexOf(currentUserSession!!.id) else -1
 
                         if (myWaitlistPos >= 0) {
                             Text(

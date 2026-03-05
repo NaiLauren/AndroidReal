@@ -41,6 +41,7 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -93,6 +94,7 @@ fun AdminCreditRequestsScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Solicitudes", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {

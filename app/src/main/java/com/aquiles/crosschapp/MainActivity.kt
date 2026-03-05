@@ -23,6 +23,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
+import androidx.compose.ui.Modifier
 import androidx.navigation.navArgument
 import androidx.navigation.navigation
 import com.aquiles.crosschapp.presentation.VideoSplashScreen
@@ -33,6 +34,7 @@ import com.aquiles.crosschapp.presentation.auth.LoginScreen
 import com.aquiles.crosschapp.presentation.auth.RegisterScreen
 import com.aquiles.crosschapp.presentation.common.AppBackground
 import com.aquiles.crosschapp.presentation.home.*
+import com.aquiles.crosschapp.presentation.social.SocialFeedScreen // NUEVA PANTALLA
 import com.aquiles.crosschapp.presentation.messages.MessageArchiveScreen
 import com.aquiles.crosschapp.presentation.navigation.AppBottomNavigationBar
 import com.aquiles.crosschapp.presentation.navigation.BottomNavItem
@@ -43,6 +45,11 @@ import com.aquiles.crosschapp.presentation.home.AdminCompetitionManagerScreen
 import com.aquiles.crosschapp.presentation.home.AdminCompetitionDetailScreen
 import com.aquiles.crosschapp.presentation.competition.StudentCompetitionDetailScreen
 import java.time.LocalDate
+
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
+
+val LocalHazeState = compositionLocalOf<HazeState?> { null }
 
 class MainActivity : ComponentActivity() {
 
@@ -127,6 +134,7 @@ fun MainApp(shouldOpenNotifications: Boolean = false) {
     // --- NUEVO: Estado para control de chequeo de sesión ---
     var isCheckingSession by remember { mutableStateOf(true) }
     val authViewModel: AuthViewModel = viewModel()
+    val hazeState = remember { HazeState() }
     // --------------------------------------------------------
 
     LaunchedEffect(shouldOpenNotifications) {
@@ -174,25 +182,27 @@ fun MainApp(shouldOpenNotifications: Boolean = false) {
     )
     val shouldShowBottomBar = routesWithBottomBar.any { currentRoute?.startsWith(it) == true }
 
-    Scaffold(
-        bottomBar = {
-            if (shouldShowBottomBar) {
-                val bottomNavItems = listOf(
-                    BottomNavItem.Home, BottomNavItem.Schedule, BottomNavItem.Wods,
-                    BottomNavItem.Performance, BottomNavItem.Profile
+    CompositionLocalProvider(LocalHazeState provides hazeState) {
+        Scaffold(
+            bottomBar = {
+                if (shouldShowBottomBar) {
+                    val bottomNavItems = listOf(
+                        BottomNavItem.Home, BottomNavItem.Schedule, BottomNavItem.Wods,
+                        BottomNavItem.Performance, BottomNavItem.Profile
+                    )
+                    AppBottomNavigationBar(navController = navController, items = bottomNavItems)
+                }
+            },
+            containerColor = Color.Transparent
+        ) { innerPadding ->
+            AppBackground(modifier = Modifier.haze(state = hazeState)) {
+                AppNavigationHost(
+                    navController = navController,
+                    startDestination = startDestination,
+                    innerPadding = innerPadding,
+                    performanceViewModel = viewModel()
                 )
-                AppBottomNavigationBar(navController = navController, items = bottomNavItems)
             }
-        },
-        containerColor = Color.Transparent
-    ) { innerPadding ->
-        AppBackground {
-            AppNavigationHost(
-                navController = navController,
-                startDestination = startDestination,
-                innerPadding = innerPadding,
-                performanceViewModel = viewModel()
-            )
         }
     }
 }
@@ -288,6 +298,14 @@ fun NavGraphBuilder.mainGraph(
             MessageArchiveScreen(navController = navController)
         }
 
+        composable(BottomNavItem.Social.route) {
+            SocialFeedScreen(
+                navController = navController,
+                benchmarkFeedViewModel = viewModel(),
+                innerPadding = innerPadding
+            )
+        }
+
         composable(BottomNavItem.Profile.route) {
             ProfileScreen(
                 innerPadding = innerPadding,
@@ -305,13 +323,16 @@ fun NavGraphBuilder.mainGraph(
             arguments = listOf(navArgument("classId") { type = NavType.StringType })
         ) { backStackEntry ->
             val classId = backStackEntry.arguments?.getString("classId")!!
-            ClassDetailsScreen(
-                innerPadding = innerPadding,
-                navController = navController,
-                classId = classId,
-                scheduleViewModel = viewModel(),
-                adminViewModel = viewModel()
-            )
+            val user by UserSession.currentUser.collectAsState()
+            if (user != null) {
+                ClassDetailsScreen(
+                    navController = navController,
+                    classId = classId,
+                    scheduleViewModel = viewModel(),
+                    adminViewModel = viewModel(),
+                    currentUser = user!!
+                )
+            }
         }
         composable(
             route = "${BottomNavItem.Schedule.route}?date={date}",

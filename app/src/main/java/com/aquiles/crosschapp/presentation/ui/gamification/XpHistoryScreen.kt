@@ -28,6 +28,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.XpHistoryState
 import com.aquiles.crosschapp.presentation.viewmodel.XpHistoryViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.compose.foundation.layout.height
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +42,7 @@ fun XpHistoryScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { 
                         Text(
                             "Historial de XP", 

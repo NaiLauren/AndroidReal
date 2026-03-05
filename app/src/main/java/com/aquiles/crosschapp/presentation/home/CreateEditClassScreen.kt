@@ -32,6 +32,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.ClassForEditState
 import com.aquiles.crosschapp.presentation.viewmodel.ClassOperationState
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.layout.height
 
 // --- CONSTANTS ---
 private val ColorPrimaryAction = Color(0xFFFC5200)
@@ -141,6 +142,7 @@ fun CreateEditClassScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text(if (isEditMode) "Editar Clase" else "Planificar", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary) } },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))

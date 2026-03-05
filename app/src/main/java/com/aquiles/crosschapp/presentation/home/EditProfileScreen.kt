@@ -19,6 +19,12 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
@@ -34,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Brush
 import coil.compose.SubcomposeAsyncImage
 import com.aquiles.crosschapp.R
 import com.aquiles.crosschapp.presentation.viewmodel.ProfileState
@@ -42,14 +50,17 @@ import com.aquiles.crosschapp.presentation.viewmodel.ProfileViewModel
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.filled.CameraAlt
+import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 
 // --- CONSTANTES DE DISEÑO MEJORADAS ---
 // ColorPrimaryAction ahora usa LocalPrimaryColor.current (dinámico por gym)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.15f) // Borde un poco más visible
-// Fondo Glass más oscuro para mejor lectura sobre la imagen de fondo
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+// Fondo Glass claro para mejor lectura sobre la imagen de fondo (Igualado a GlassCard estandar)
+private val ColorGlassSurface = Color.White.copy(alpha = 0.08f)
+private val ColorBorder = Color.White.copy(alpha = 0.2f)
 private val ColorDestructive = Color(0xFFFF3B30)
 
 // TEXTO LEGAL
@@ -120,6 +131,7 @@ fun EditProfileScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Editar Perfil", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
@@ -183,6 +195,19 @@ fun EditProfileScreen(
                         }
                     }
 
+                    // --- NUEVO: IMAGE PICKER ---
+                    val imagePickerLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.PickVisualMedia()
+                    ) { uri ->
+                        uri?.let { profileViewModel.uploadProfileImage(it) }
+                    }
+
+                    fun launchImagePicker() {
+                        imagePickerLauncher.launch(
+                            androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -192,45 +217,109 @@ fun EditProfileScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        // Avatar
+                        // Avatar Editable
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            SubcomposeAsyncImage(
-                                model = user.profileImageUrl?.ifBlank { R.drawable.ic_launcher_foreground } ?: R.drawable.ic_launcher_foreground,
-                                contentDescription = "Foto",
-                                modifier = Modifier
-                                    .size(100.dp)
-                                    .clip(CircleShape)
-                                    .border(2.dp, LocalPrimaryColor.current, CircleShape),
-                                contentScale = ContentScale.Crop
+                            val avatarRingBrush = Brush.sweepGradient(
+                                listOf(
+                                    LocalPrimaryColor.current,
+                                    Color.White,
+                                    LocalPrimaryColor.current.copy(alpha = 0.1f),
+                                    LocalPrimaryColor.current
+                                )
                             )
+
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(120.dp)
+                                    .clip(CircleShape)
+                                    .border(BorderStroke(3.dp, avatarRingBrush), CircleShape)
+                                    .clickable { launchImagePicker() }
+                            ) {
+                                if (updateState is ProfileUpdateState.Loading) {
+                                    CircularProgressIndicator(color = LocalPrimaryColor.current)
+                                } else {
+                                    SubcomposeAsyncImage(
+                                        model = user.profileImageUrl?.ifBlank { R.drawable.ic_launcher_foreground } ?: R.drawable.ic_launcher_foreground,
+                                        contentDescription = "Foto",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .offset(x = (-4).dp, y = (-4).dp)
+                                        .background(Color.Black.copy(alpha = 0.7f), CircleShape)
+                                        .padding(6.dp)
+                                ) {
+                                    Icon(Icons.Default.CameraAlt, contentDescription = "Cambiar foto", tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                            }
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "La foto se cambia desde el Perfil principal",
+                                "Toca la imagen para cambiarla",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = ColorTextSecondary.copy(alpha = 0.5f)
+                                color = ColorTextSecondary.copy(alpha = 0.8f)
                             )
                         }
 
-                        // --- INPUTS MEJORADOS (Fondo Oscuro) ---
-                        ProfileInputTextField(value = name, onValueChange = { name = it }, label = "Nombre")
-                        ProfileInputTextField(value = lastName, onValueChange = { lastName = it }, label = "Apellido")
-                        ProfileInputTextField(value = phoneNumber ?: "", onValueChange = { phoneNumber = it }, label = "Teléfono", keyboardType = KeyboardType.Phone)
-                        ProfileInputTextField(value = emergencyContact, onValueChange = { emergencyContact = it }, label = "Contacto Emergencia", keyboardType = KeyboardType.Phone)
+                        // --- DATOS PERSONALES ---
+                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Información Personal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary, modifier = Modifier.padding(start = 4.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+                                border = BorderStroke(1.dp, ColorBorder),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    ProfileInputTextField(
+                                        value = name, onValueChange = { name = it }, label = "Nombre",
+                                        leadingIcon = { Icon(Icons.Default.Person, null, tint = LocalPrimaryColor.current) }
+                                    )
+                                    ProfileInputTextField(
+                                        value = lastName, onValueChange = { lastName = it }, label = "Apellido",
+                                        leadingIcon = { Icon(Icons.Default.Person, null, tint = LocalPrimaryColor.current) }
+                                    )
+                                    // [Fix] Gender Selector
+                                    GenderSelectorProfile(selectedGender = gender, onGenderSelected = { gender = it })
 
-                        // DatePicker
-                        Box(modifier = Modifier.clickable { showDatePicker = true }) {
-                            ProfileInputTextField(
-                                value = birthDateString,
-                                onValueChange = {},
-                                label = "Fecha de Nacimiento",
-                                readOnly = true,
-                                trailingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = LocalPrimaryColor.current) }
-                            )
-                            Box(modifier = Modifier.matchParentSize().clickable { showDatePicker = true })
+                                    Box(modifier = Modifier.clickable { showDatePicker = true }) {
+                                        ProfileInputTextField(
+                                            value = birthDateString,
+                                            onValueChange = {},
+                                            label = "Fecha de Nacimiento",
+                                            readOnly = true,
+                                            leadingIcon = { Icon(Icons.Default.CalendarMonth, null, tint = LocalPrimaryColor.current) }
+                                        )
+                                        Box(modifier = Modifier.matchParentSize().clickable { showDatePicker = true })
+                                    }
+                                }
+                            }
                         }
 
-                        // [Fix] Gender Selector
-                        GenderSelectorProfile(selectedGender = gender, onGenderSelected = { gender = it })
+                        // --- CONTACTO ---
+                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Contacto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary, modifier = Modifier.padding(start = 4.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
+                                border = BorderStroke(1.dp, ColorBorder),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    ProfileInputTextField(
+                                        value = phoneNumber ?: "", onValueChange = { phoneNumber = it }, label = "Teléfono", keyboardType = KeyboardType.Phone,
+                                        leadingIcon = { Icon(Icons.Default.Phone, null, tint = LocalPrimaryColor.current) }
+                                    )
+                                    ProfileInputTextField(
+                                        value = emergencyContact, onValueChange = { emergencyContact = it }, label = "Contacto Emergencia", keyboardType = KeyboardType.Phone,
+                                        leadingIcon = { Icon(Icons.Default.Warning, null, tint = ColorDestructive) }
+                                    )
+                                }
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(10.dp))
 
@@ -302,6 +391,7 @@ private fun ProfileInputTextField(
     label: String,
     keyboardType: KeyboardType = KeyboardType.Text,
     readOnly: Boolean = false,
+    leadingIcon: @Composable (() -> Unit)? = null,
     trailingIcon: @Composable (() -> Unit)? = null
 ) {
     // CAMBIO IMPORTANTE: Usamos un TextField con colores sólidos semitransparentes
@@ -316,6 +406,7 @@ private fun ProfileInputTextField(
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         singleLine = true,
         readOnly = readOnly,
+        leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,
         colors = TextFieldDefaults.colors(
             // Fondo oscuro semitransparente (Glass)
@@ -444,31 +535,41 @@ private fun ProfileMedicalSection(
 
 @Composable
 private fun GenderSelectorProfile(selectedGender: String, onGenderSelected: (String) -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "Género",
-            style = MaterialTheme.typography.labelMedium,
-            color = ColorTextSecondary,
-            modifier = Modifier.padding(bottom = 8.dp)
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf("male" to "Masculino", "female" to "Femenino", "other" to "Otro")
+    val selectedLabel = options.find { it.first == selectedGender || (selectedGender == "Not Specified" && it.first == "male") }?.second ?: "Masculino"
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        ProfileInputTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            label = "Género",
+            readOnly = true,
+            leadingIcon = { Icon(Icons.Default.Contacts, null, tint = LocalPrimaryColor.current) },
+            trailingIcon = {
+                Icon(
+                    if (expanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                    contentDescription = "Desplegar géneros",
+                    tint = LocalPrimaryColor.current
+                )
+            }
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // Hidden clickable surface to trigger dropdown easily
+        Box(modifier = Modifier.matchParentSize().clickable { expanded = true })
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(ColorGlassSurface)
         ) {
-            listOf("male" to "Masculino", "female" to "Femenino", "other" to "Otro").forEach { (value, label) ->
-                val isSelected = selectedGender == value || (selectedGender == "Not Specified" && value == "male")
-                OutlinedButton(
-                    onClick = { onGenderSelected(value) },
-                    modifier = Modifier.weight(1f),
-                    border = BorderStroke(1.dp, if (isSelected) LocalPrimaryColor.current else ColorBorder),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (isSelected) LocalPrimaryColor.current.copy(alpha = 0.2f) else Color.Transparent,
-                        contentColor = if (isSelected) LocalPrimaryColor.current else ColorTextSecondary
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(label, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                }
+            options.forEach { (value, label) ->
+                DropdownMenuItem(
+                    text = { Text(label, color = ColorTextPrimary) },
+                    onClick = {
+                        onGenderSelected(value)
+                        expanded = false
+                    }
+                )
             }
         }
     }

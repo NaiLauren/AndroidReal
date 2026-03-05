@@ -27,6 +27,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.ClassListState
 import com.aquiles.crosschapp.presentation.viewmodel.ClassOperationState
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.layout.height
 
 // --- CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -78,6 +79,7 @@ fun AdminManageClassesScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Gestionar Clases", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {

@@ -42,6 +42,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.foundation.layout.height
+import com.aquiles.crosschapp.presentation.common.AppBackground
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -54,29 +56,23 @@ private val ColorBorder = Color.White.copy(alpha = 0.15f)
 
 @Composable
 fun ClassDetailsScreen(
-    innerPadding: PaddingValues,
     navController: NavController,
     classId: String,
     scheduleViewModel: ScheduleViewModel = viewModel(),
-    adminViewModel: AdminViewModel = viewModel()
+    adminViewModel: AdminViewModel = viewModel(),
+    currentUser: User
 ) {
-    val currentUser by UserSession.currentUser.collectAsState()
-    
     LaunchedEffect(classId) {
         scheduleViewModel.loadClassDetails(classId)
     }
 
-    if (currentUser != null) {
+    AppBackground {
         ClassDetailsContent(
             navController = navController,
             scheduleViewModel = scheduleViewModel,
             adminViewModel = adminViewModel,
-            currentUser = currentUser!!
+            currentUser = currentUser
         )
-    } else {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = ColorPrimaryAction)
-        }
     }
 }
 
@@ -121,6 +117,11 @@ private fun ClassDetailsContent(
     var feedbackType by remember { mutableStateOf(FeedbackType.INFO) }
     var feedbackTitle by remember { mutableStateOf("") }
     var feedbackMessage by remember { mutableStateOf("") }
+
+    // --- SCORE UPLOAD DIALOG STATES ---
+    var showScoreDialog by remember { mutableStateOf(false) }
+    var selectedUserForScore by remember { mutableStateOf<User?>(null) }
+    var scoreInput by remember { mutableStateOf("") }
 
     // --- HANDLERS ---
     LaunchedEffect(bookingState) {
@@ -188,6 +189,7 @@ private fun ClassDetailsContent(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
+                modifier = Modifier.height(72.dp),
                 title = { Text("Detalles", fontWeight = FontWeight.Bold, color =
                     ColorTextPrimary) },
                 navigationIcon = {
@@ -365,7 +367,13 @@ private fun ClassDetailsContent(
                                                                 attendedUserIds = if (shouldCheck) attendedUserIds + user.id else attendedUserIds - user.id
                                                             },
                                                             showCheckIcon = isPresent,
-                                                            showQrLabel = inClassList || inHistoryList
+                                                            showQrLabel = inClassList || inHistoryList,
+                                                            isCompetitionMode = gymClass.classType == "COMPETITION",
+                                                            onUploadScore = {
+                                                                selectedUserForScore = user
+                                                                scoreInput = ""
+                                                                showScoreDialog = true
+                                                            }
                                                         )
                                                         if (index < enrolledUsers.size - 1) {
                                                             HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 12.dp))
@@ -392,7 +400,9 @@ private fun ClassDetailsContent(
                                                             isChecked = false,
                                                             onCheckChanged = {},
                                                             showCheckIcon = false,
-                                                            showQrLabel = false
+                                                            showQrLabel = false,
+                                                            isCompetitionMode = false,
+                                                            onUploadScore = {}
                                                         )
                                                         if (index < waitingUsers.size - 1) {
                                                             HorizontalDivider(color = Color.White.copy(alpha = 0.05f), modifier = Modifier.padding(vertical = 12.dp))
@@ -408,6 +418,52 @@ private fun ClassDetailsContent(
                     } else {
                         item { AccessDeniedCard { navController.navigate("request_credits_screen") } }
                     }
+                }
+
+                // DIALOGO DE CARGA DE SCORE
+                if (showScoreDialog && selectedUserForScore != null) {
+                    AlertDialog(
+                        onDismissRequest = { showScoreDialog = false },
+                        title = { Text("Cargar Resultado", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
+                        text = {
+                            Column {
+                                Text("Atleta: ${selectedUserForScore?.fullName}", color = ColorTextSecondary)
+                                Spacer(Modifier.height(16.dp))
+                                OutlinedTextField(
+                                    value = scoreInput,
+                                    onValueChange = { scoreInput = it },
+                                    label = { Text("Resultado / Marca") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (scoreInput.isNotBlank()) {
+                                    adminViewModel.saveWodResult(
+                                        wodId = gymClass.wodId ?: gymClass.competitionId ?: gymClass.id,
+                                        userId = selectedUserForScore!!.id,
+                                        score = scoreInput,
+                                        scoreType = gymClass.wodScoreType ?: "Para Tiempo",
+                                        isRx = true,
+                                        notes = "Cargado por Admin",
+                                        gymId = gymClass.gym_id ?: currentUser.gym_id
+                                    )
+                                    showScoreDialog = false
+                                    Toast.makeText(context, "Resultado guardado", Toast.LENGTH_SHORT).show()
+                                }
+                            }) {
+                                Text("Guardar", color = ColorPrimaryAction)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showScoreDialog = false }) {
+                                Text("Cancelar", color = ColorTextSecondary)
+                            }
+                        },
+                        containerColor = ColorGlassSurface
+                    )
                 }
             }
         }
@@ -546,7 +602,9 @@ fun AttendeeItemRow(
     isChecked: Boolean,
     onCheckChanged: (Boolean) -> Unit,
     showCheckIcon: Boolean = false,
-    showQrLabel: Boolean = false
+    showQrLabel: Boolean = false,
+    isCompetitionMode: Boolean = false,
+    onUploadScore: () -> Unit = {}
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         SubcomposeAsyncImage(
@@ -595,16 +653,28 @@ fun AttendeeItemRow(
             }
         }
 
-        if (showCheckIcon) {
+        if (showCheckIcon && !isCompetitionMode) {
             Icon(Icons.Default.CheckCircle, null, tint = ColorSuccess, modifier = Modifier.size(20.dp))
         }
 
         if (isAttendanceMode) {
-            Checkbox(
-                checked = isChecked,
-                onCheckedChange = onCheckChanged,
-                colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White)
-            )
+            if (isCompetitionMode) {
+                Button(
+                    onClick = onUploadScore,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("Cargar", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Checkbox(
+                    checked = isChecked,
+                    onCheckedChange = onCheckChanged,
+                    colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White)
+                )
+            }
         }
     }
 }

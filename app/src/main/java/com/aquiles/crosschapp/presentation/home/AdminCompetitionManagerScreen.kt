@@ -38,6 +38,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import androidx.compose.foundation.layout.height
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,7 +50,7 @@ fun AdminCompetitionManagerScreen(
     var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
     
     if (showSetupPopup) {
-        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+        SetupStep.entries.find { it.toKey() == setupStepKey }?.let { step ->
             AlertDialog(
                 onDismissRequest = { showSetupPopup = false },
                 title = { Text(step.title, color = Color.White) },
@@ -85,6 +86,7 @@ fun AdminCompetitionManagerScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
+                modifier = Modifier.height(72.dp),
                 title = { Text("Competencias", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -161,8 +163,10 @@ fun AdminCompetitionManagerScreen(
     if (showCreateDialog) {
         CreateCompetitionDialog(
             onDismiss = { showCreateDialog = false },
-            onConfirm = { title, desc, type, crit, start, end, prize, xp, intergym, score, validation ->
-                viewModel.createCompetition(title, desc, type, crit, start, end, prize, xp, intergym, score, validation)
+            onConfirm = { title, desc, type, crit, start, end, prize, xp, score, validation, eventTime, capacity ->
+                viewModel.createCompetitionWithEvent(
+                    title, desc, type, crit, start, end, prize, xp, score, validation, eventTime, capacity
+                )
                 showCreateDialog = false
             }
         )
@@ -188,7 +192,7 @@ fun CompetitionCard(competition: Competition, onClick: () -> Unit, onDelete: () 
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = competition.getTypeEnum().value.uppercase(),
+                    text = competition.resolveTypeEnum().value.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
@@ -228,7 +232,7 @@ fun CompetitionCard(competition: Competition, onClick: () -> Unit, onDelete: () 
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // Status Dot
-                val status = competition.getStatus()
+                val status = competition.resolveStatus()
                 val statusColor = when (status) {
                     CompetitionStatus.ONGOING -> Color.Green
                     CompetitionStatus.UPCOMING -> Color.Blue
@@ -267,7 +271,7 @@ fun CompetitionCard(competition: Competition, onClick: () -> Unit, onDelete: () 
 @Composable
 fun CreateCompetitionDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, CompetitionType, RankingCriteria, Date, Date, String?, Int?, Boolean, ScoreStrategy, ValidationRule) -> Unit
+    onConfirm: (String, String, CompetitionType, RankingCriteria, Date, Date, String?, Int?, ScoreStrategy, ValidationRule, String, Int) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -277,7 +281,12 @@ fun CreateCompetitionDialog(
     var endDate by remember { mutableStateOf(Date()) } 
     var prizeDescription by remember { mutableStateOf("") }
     var xpReward by remember { mutableStateOf("500") }
-    var isIntergym by remember { mutableStateOf(false) }
+    // Event specific
+    var eventTime by remember { mutableStateOf("10:00") }
+    var maxCapacity by remember { mutableStateOf("50") }
+    var showTimePicker by remember { mutableStateOf(false) }
+    val timePickerState = rememberTimePickerState(initialHour = 10, initialMinute = 0)
+
     var scoreStrategy by remember { mutableStateOf(ScoreStrategy.RELATIVE) }
     var validationRule by remember { mutableStateOf(ValidationRule.MANUAL) }
 
@@ -302,18 +311,17 @@ fun CreateCompetitionDialog(
         }
     }
 
-    if (showEndDatePicker) {
-        DatePickerDialog(
-            onDismissRequest = { showEndDatePicker = false },
+    if (showTimePicker) {
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    datePickerStateEnd.selectedDateMillis?.let { endDate = Date(it) }
-                    showEndDatePicker = false
+                    eventTime = String.format(Locale.getDefault(), "%02d:%02d", timePickerState.hour, timePickerState.minute)
+                    showTimePicker = false
                 }) { Text("OK") }
-            }
-        ) {
-            DatePicker(state = datePickerStateEnd)
-        }
+            },
+            text = { TimePicker(state = timePickerState) }
+        )
     }
 
     AlertDialog(
@@ -347,7 +355,7 @@ fun CreateCompetitionDialog(
                     )
                     
                     HorizontalDivider()
-                    Text("Configuración", style = MaterialTheme.typography.labelMedium)
+                    Text("Configuración General", style = MaterialTheme.typography.labelMedium)
 
                     // Type Selector
                     var expandedType by remember { mutableStateOf(false) }
@@ -450,6 +458,27 @@ fun CreateCompetitionDialog(
                     }
 
                     HorizontalDivider()
+                    Text("Primer Prueba base (Heat)", style = MaterialTheme.typography.labelMedium)
+                    Text("Toda competencia inicia con una prueba que puede ser en un horario físico (presencial) o una franja límite (Open).", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedButton(
+                            onClick = { showTimePicker = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(eventTime)
+                        }
+                        
+                        OutlinedTextField(
+                            value = maxCapacity,
+                            onValueChange = { if (it.all { c -> c.isDigit() }) maxCapacity = it },
+                            label = { Text("Atletas (Max)") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                    }
+
+                    HorizontalDivider()
                     Text("Premios", style = MaterialTheme.typography.labelMedium)
                     
                     OutlinedTextField(
@@ -462,13 +491,10 @@ fun CreateCompetitionDialog(
                         OutlinedTextField(
                             value = xpReward,
                             onValueChange = { if (it.all { c -> c.isDigit() }) xpReward = it },
-                            label = { Text("XP") },
+                            label = { Text("XP (Opcional)") },
                             modifier = Modifier.weight(1f),
                             singleLine = true
                         )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Text("Inter-Gym")
-                        Switch(checked = isIntergym, onCheckedChange = { isIntergym = it })
                     }
                 }
             }
@@ -485,12 +511,13 @@ fun CreateCompetitionDialog(
                         endDate, 
                         prizeDescription, 
                         xpReward.toIntOrNull(), 
-                        isIntergym,
                         scoreStrategy,
-                        validationRule
+                        validationRule,
+                        eventTime,
+                        maxCapacity.toIntOrNull() ?: 50
                     )
                 },
-                enabled = title.isNotEmpty()
+                enabled = title.isNotEmpty() && maxCapacity.isNotEmpty()
             ) {
                 Text("Crear")
             }

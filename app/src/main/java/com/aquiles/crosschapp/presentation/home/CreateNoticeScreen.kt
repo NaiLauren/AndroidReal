@@ -34,6 +34,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -73,6 +74,7 @@ fun CreateNoticeScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Publicar Novedad", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {

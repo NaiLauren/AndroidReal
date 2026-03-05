@@ -36,7 +36,10 @@ data class GymClass(
     val checkedInUserIds: List<String> = emptyList(),
     // ------------------------------------------
 
-    val classType: String = "WOD",
+    val classType: String = "WOD", // "WOD", "OPEN_GYM", "COMPETITION"
+
+    @PropertyName("competitionId")
+    val competitionId: String? = null,
 
     @PropertyName("hexColor")
     val hexColor: String = "#FC5200",

@@ -10,6 +10,7 @@ data class XpLog(
     val title: String = "",
     val description: String = "",
     val icon: String = "",
+    val gym_id: String = "",
     val timestamp: Timestamp? = null,
     val relatedId: String? = null
 )

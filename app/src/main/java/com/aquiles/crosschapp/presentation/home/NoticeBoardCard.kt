@@ -81,8 +81,8 @@ fun NoticeBoardCard(
                             .background(
                                 Brush.verticalGradient(
                                     colors = listOf(
-                                        Color(0xFF2C2C2E),
-                                        Color.Black
+                                        Color.White.copy(alpha = 0.05f),
+                                        Color.Transparent
                                     )
                                 )
                             ),
@@ -121,8 +121,8 @@ fun NoticeBoardCard(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFF2C2C2E),
-                                Color.Black
+                                Color.White.copy(alpha = 0.05f),
+                                Color.Transparent
                             )
                         )
                     )

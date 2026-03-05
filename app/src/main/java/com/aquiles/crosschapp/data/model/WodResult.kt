@@ -27,5 +27,9 @@ data class WodResult(
     // Competencias (sincronizado con iOS)
     val isPublic: Boolean = true,
     val validationStatus: String? = null, // "pending", "approved", "rejected"
-    val competitionId: String? = null
+    val competitionId: String? = null,
+    
+    // Social / Reacciones
+    val likeCount: Int = 0,
+    val reactions: Map<String, String> = emptyMap() // MAP de Reacciones (ej: "us123": "fire")
 )

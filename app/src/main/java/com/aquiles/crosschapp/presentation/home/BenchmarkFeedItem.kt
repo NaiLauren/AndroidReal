@@ -1,5 +1,6 @@
-package com.aquiles.crosschapp.presentation.home
+package com.aquiles.crosschapp.presentation.home.BenchmarkFeedItem
 
+import androidx.compose.foundation.clickable
 import android.text.format.DateUtils
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -22,11 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
-import com.aquiles.crosschapp.data.model.BenchmarkResult
-import java.util.Date
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.FeedUiItem
-import com.aquiles.crosschapp.presentation.viewmodel.FeedTab // Imports required for refactor
 
 // --- CONSTANTS MATCHING HOMESCREEN ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -43,6 +41,8 @@ private val ColorScaled = Color(0xFF2196F3)
 fun BenchmarkFeedItem(
     item: FeedUiItem,
     rankingPosition: Int? = null,
+    currentUserId: String? = null,
+    onReactionClick: ((String) -> Unit)? = null,
     onLongClick: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
@@ -187,6 +187,17 @@ fun BenchmarkFeedItem(
                         }
                     }
                 }
+                
+                // --- NUEVO: REACTION BAR ---
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = ColorBorder.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                ReactionBar(
+                    reactions = item.reactions,
+                    currentUserId = currentUserId,
+                    onReactionClick = onReactionClick
+                )
             }
         }
 
@@ -249,5 +260,67 @@ private fun getFeedLevelColor(level: String): Color {
         "RX" -> ColorPrimaryAction // Orange
         "ELITE" -> Color(0xFF9C27B0) // Purple
         else -> Color.Gray
+    }
+}
+
+// ==========================================
+// REACTION BAR (Neumorphic Style)
+// ==========================================
+@Composable
+private fun ReactionBar(
+    reactions: Map<String, String>,
+    currentUserId: String?,
+    onReactionClick: ((String) -> Unit)?
+) {
+    // Contamos reacciones por tipo
+    val fireCount = reactions.values.count { it == "fire" }
+    val flexCount = reactions.values.count { it == "flex" }
+    val clapCount = reactions.values.count { it == "clap" }
+    
+    // Identificamos tu reacción actual
+    val myReaction = currentUserId?.let { reactions[it] }
+    
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ReactionButton(emoji = "🔥", count = fireCount, isSelected = myReaction == "fire", onClick = { onReactionClick?.invoke("fire") })
+        ReactionButton(emoji = "💪", count = flexCount, isSelected = myReaction == "flex", onClick = { onReactionClick?.invoke("flex") })
+        ReactionButton(emoji = "👏", count = clapCount, isSelected = myReaction == "clap", onClick = { onReactionClick?.invoke("clap") })
+    }
+}
+
+@Composable
+private fun ReactionButton(
+    emoji: String,
+    count: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val bgColor = if (isSelected) ColorPrimaryAction.copy(alpha = 0.2f) else Color.Transparent
+    val borderColor = if (isSelected) ColorPrimaryAction.copy(alpha = 0.5f) else Color.Transparent
+    
+    Surface(
+        color = bgColor,
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(text = emoji, fontSize = 16.sp)
+            if (count > 0) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = count.toString(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isSelected) ColorPrimaryAction else ColorTextSecondary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }

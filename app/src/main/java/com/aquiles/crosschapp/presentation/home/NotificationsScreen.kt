@@ -32,6 +32,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.AllNotificationsState
 import com.aquiles.crosschapp.presentation.viewmodel.NotificationsViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -60,6 +61,7 @@ fun NotificationsScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Notificaciones", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {

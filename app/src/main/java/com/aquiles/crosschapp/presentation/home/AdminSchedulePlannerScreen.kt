@@ -38,6 +38,8 @@ import com.aquiles.crosschapp.presentation.viewmodel.SchedulePlannerViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.height
 
 // --- COLORS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -112,6 +114,7 @@ fun AdminSchedulePlannerScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Planificador", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
@@ -262,7 +265,7 @@ fun AdminSchedulePlannerScreen(
                     showCreateSheet = false
                     if (!isSelectionMode) viewModel.clearSelection() // Limpiar si fue edición single
                 },
-                containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f),
+                containerColor = Color(0xFF0D0D0D), // Fondo solido oscuro, evitando cruce visual c/ calendario
                 dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.3f)) }
             ) {
                 // Here we inject the FORM Logic
@@ -305,6 +308,18 @@ fun CreateClassesFormContent(
     var createWod by remember { mutableStateOf(true) }
     var wodDescription by remember { mutableStateOf("") }
     
+    // Color predeterminado
+    var selectedColor by remember { mutableStateOf("#FC5200") } // Naranja por defecto
+
+    val colorOptions = listOf(
+        "#FC5200", // Naranja (Primario)
+        "#42A5F5", // Azul
+        "#66BB6A", // Verde
+        "#AB47BC", // Morado
+        "#EF5350", // Rojo
+        "#FFA726"  // Ámbar
+    )
+    
     // Auto-fill if editing
     LaunchedEffect(Unit) {
         if (isEditMode) {
@@ -317,6 +332,7 @@ fun CreateClassesFormContent(
                 duration = sample.durationMinutes.toString()
                 wodDescription = sample.description ?: ""
                 createWod = (sample.wodId != null)
+                selectedColor = sample.hexColor ?: "#FC5200"
                 // Note: Times/Days usually cleared or set to match sample? 
                 // In iOS batch edit, we edit ATTRIBUTES, not dates/times usually.
                 // Re-creating dates logic for editing existing ones implies MOVING them, which is complex.
@@ -395,6 +411,35 @@ fun CreateClassesFormContent(
                 Spacer(Modifier.width(8.dp))
                 OutlinedTextField(value = duration, onValueChange = { duration = it }, label = { Text("Min") }, modifier = Modifier.weight(1f))
             }
+            
+            Spacer(Modifier.height(8.dp))
+            Text("Color de la Clase", style = MaterialTheme.typography.labelMedium, color = ColorTextSecondary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                colorOptions.forEach { hex ->
+                    val isSelected = selectedColor == hex
+                    val color = try { Color(android.graphics.Color.parseColor(hex)) } catch(e: Exception) { Color.Gray }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .border(
+                                2.dp,
+                                if (isSelected) Color.White else Color.Transparent,
+                                CircleShape
+                            )
+                            .clickable { selectedColor = hex },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isSelected) {
+                            Icon(Icons.Default.CheckCircle, "Seleccionado", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
         }
         
         PlannerSectionCard("Contenido (Rutina)") {
@@ -427,6 +472,7 @@ fun CreateClassesFormContent(
                     durationMinutes = duration.toIntOrNull() ?: 60,
                     createWod = createWod,
                     wodScoreType = "Time",
+                    hexColor = selectedColor, // Pasando el color recuperado
                     isUpdateMode = isEditMode
                 )
             },

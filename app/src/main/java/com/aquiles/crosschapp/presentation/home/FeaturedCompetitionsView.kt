@@ -14,10 +14,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.aquiles.crosschapp.presentation.competition.CompetitionHeader
+import com.aquiles.crosschapp.presentation.competition.CompetitionSegmentedControl
+import com.aquiles.crosschapp.presentation.competition.InfoTab
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,6 +92,7 @@ fun FeaturedCompetitionsRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProCompetitionCard(
     competition: Competition,
@@ -94,6 +102,9 @@ fun ProCompetitionCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (isPressed) 0.96f else 1f, label = "cardScale")
+
+    // Estado del Bottom Sheet
+    var showSheet by remember { mutableStateOf(false) }
 
     // Calcular progreso del evento
     val now = Date()
@@ -114,21 +125,21 @@ fun ProCompetitionCard(
             .width(300.dp)
             .scale(scale)
             .clip(RoundedCornerShape(20.dp))
-            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
+            .clickable(interactionSource = interactionSource, indication = null) { showSheet = true }
     ) {
         // Capa 1: Imagen de fondo o gradiente
         if (!competition.imageUrl.isNullOrBlank()) {
             AsyncImage(
                 model = competition.imageUrl,
                 contentDescription = null,
-                modifier = Modifier.fillMaxWidth().height(200.dp),
+                modifier = Modifier.fillMaxWidth().height(220.dp),
                 contentScale = ContentScale.Crop
             )
         } else {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .height(220.dp)
                     .background(
                         Brush.linearGradient(
                             colors = listOf(Color(0xFF1C1C1E), Color(0xFF2C2C2E))
@@ -141,7 +152,7 @@ fun ProCompetitionCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(220.dp)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
@@ -156,7 +167,7 @@ fun ProCompetitionCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(220.dp)
                 .border(
                     width = 1.dp,
                     brush = Brush.linearGradient(
@@ -182,7 +193,7 @@ fun ProCompetitionCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(220.dp)
                 .padding(20.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -278,8 +289,84 @@ fun ProCompetitionCard(
                         )
                     }
                 }
+
+                // Botón Expandir
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.horizontalGradient(listOf(Color(0xFFFC5200).copy(0.9f), Color(0xFFFF8C42).copy(0.9f)))
+                        )
+                        .clickable { showSheet = true }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Leaderboard, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Ver Ranking y Detalle", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    }
+
+    // Bottom Sheet con el detalle completo
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            containerColor = Color(0xFF1C1C1E),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        ) {
+            // Reutilizamos directamente los componentes del detalle
+            var selectedTab by remember { mutableIntStateOf(0) }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.92f)
+            ) {
+                // Header
+                CompetitionHeader(competition)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Segmented Tabs
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    CompetitionSegmentedControl(
+                        selectedIndex = selectedTab,
+                        items = listOf("Ranking", "Reglas & Info"),
+                        onIndexChanged = { selectedTab = it }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Contenido del tab
+                Box(modifier = Modifier.weight(1f)) {
+                    when (selectedTab) {
+                        0 -> {
+                            // Ranking vacío placeholder – el ViewModel real se conecta desde la pantalla de detalle
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Leaderboard, null, tint = Color.Gray.copy(0.5f), modifier = Modifier.size(48.dp))
+                                    Spacer(Modifier.height(8.dp))
+                                    Text("Toca para ver ranking completo", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                                    Spacer(Modifier.height(16.dp))
+                                    Button(
+                                        onClick = { showSheet = false; onClick() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFC5200)),
+                                        shape = RoundedCornerShape(14.dp)
+                                    ) {
+                                        Text("Abrir Pantalla Completa", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                        1 -> InfoTab(competition = competition)
+                    }
+                }
             }
         }
     }
 }
-

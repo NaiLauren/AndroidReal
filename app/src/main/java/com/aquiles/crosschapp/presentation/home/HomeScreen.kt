@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.runtime.*
+import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import com.aquiles.crosschapp.data.model.PersonalMessage
 import com.aquiles.crosschapp.data.model.*
@@ -62,9 +63,9 @@ fun HomeScreen(
     innerPadding: PaddingValues,
     homeViewModel: HomeViewModel = viewModel(),
     adminViewModel: AdminViewModel = viewModel(),
-    benchmarkFeedViewModel: BenchmarkFeedViewModel = viewModel(),
     noticeViewModel: NoticeViewModel = viewModel(),
     performanceViewModel: PerformanceViewModel = viewModel(),
+    benchmarkFeedViewModel: BenchmarkFeedViewModel = viewModel(),
     onNavigateToNotifications: () -> Unit,
     onNavigateToMessageArchive: () -> Unit,
     onNavigateToCreateNotice: () -> Unit,
@@ -76,6 +77,9 @@ fun HomeScreen(
     val personalMessageState by homeViewModel.personalMessageState.collectAsState()
     val notices by noticeViewModel.notices.collectAsState()
     val activeCompetitions by homeViewModel.activeCompetitions.collectAsState()
+    val feedItems by benchmarkFeedViewModel.feedItems.collectAsState()
+    val currentFeedTab by benchmarkFeedViewModel.currentTab.collectAsState()
+    val activeCompetitionsForFeed by benchmarkFeedViewModel.activeCompetitions.collectAsState()
     
     val userClasses by homeViewModel.userClasses.collectAsState()
 
@@ -95,16 +99,9 @@ fun HomeScreen(
             adminViewModel.loadAppConfig()
             adminViewModel.loadActivityImages()
             performanceViewModel.loadInitialData()
+            benchmarkFeedViewModel.setTab(FeedTab.TODAY)
         }
     }
-
-    // Social Feed State
-    val feedItems by benchmarkFeedViewModel.feedItems.collectAsState()
-    val currentTab by benchmarkFeedViewModel.currentTab.collectAsState()
-    val availableBenchmarks by benchmarkFeedViewModel.availableBenchmarks.collectAsState()
-    val selectedWodFilter by benchmarkFeedViewModel.selectedWodFilter.collectAsState()
-    val sortCriteria by benchmarkFeedViewModel.sortCriteria.collectAsState()
-    val filteredItems by benchmarkFeedViewModel.filteredItems.collectAsState()
 
     // --- UI STRUCTURE ---
     val hasUnreadNotifications = notificationsState is NotificationsState.Success &&
@@ -115,6 +112,7 @@ fun HomeScreen(
             Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp), // Custom height to reduce the default + insets expansion slightly
                     title = { Text("Inicio", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f)
@@ -185,20 +183,18 @@ fun HomeScreen(
                             homeViewModel.markPersonalMessageAsRead(messageId)
                         },
                         localScaffoldPadding = localScaffoldPadding,
-                        benchmarkFeedViewModel = benchmarkFeedViewModel,
                         notices = notices,
                         onDeleteNotice = { id -> noticeViewModel.deleteNotice(id) },
                         onNavigateToCreateNotice = onNavigateToCreateNotice,
-                        feedItems = feedItems,
-                        currentTab = currentTab,
-                        onTabSelected = { benchmarkFeedViewModel.setTab(it) },
-                        availableBenchmarks = availableBenchmarks,
-                        selectedWodFilter = selectedWodFilter,
-                        onWodFilterSelected = { benchmarkFeedViewModel.setWodFilter(it) },
-                        onToggleSort = { benchmarkFeedViewModel.toggleSortOrder() },
-                        sortCriteria = sortCriteria,
                         activeCompetitions = activeCompetitions,
-                        onNavigateToCompetition = onNavigateToCompetition
+                        onNavigateToCompetition = onNavigateToCompetition,
+                        feedItems = feedItems,
+                        currentFeedTab = currentFeedTab,
+                        activeCompetitionsForFeed = activeCompetitionsForFeed,
+                        onTabSelected = { tab -> benchmarkFeedViewModel.setTab(tab) },
+                        onToggleReaction = { itemId, itemType, emotion ->
+                            benchmarkFeedViewModel.toggleReaction(itemId, itemType, emotion)
+                        }
                     )
                 }
             }
@@ -214,25 +210,18 @@ private fun HomeScreenContent(
     personalMessageState: PersonalMessageState,
     onMarkMessageAsRead: (String) -> Unit,
     localScaffoldPadding: PaddingValues,
-    benchmarkFeedViewModel: BenchmarkFeedViewModel,
     notices: List<GymNotice> = emptyList(),
     onDeleteNotice: (String) -> Unit = {},
     onNavigateToCreateNotice: () -> Unit = {},
-    feedItems: List<FeedUiItem> = emptyList(),
-    currentTab: FeedTab = FeedTab.TODAY,
-    onTabSelected: (FeedTab) -> Unit = {},
-    availableBenchmarks: List<String> = emptyList(),
-    selectedWodFilter: String? = null,
-    onWodFilterSelected: (String?) -> Unit = {},
-    onToggleSort: () -> Unit = {},
-    sortCriteria: String? = null,
     activeCompetitions: List<com.aquiles.crosschapp.data.model.Competition> = emptyList(),
-    onNavigateToCompetition: (String) -> Unit = {}
+    onNavigateToCompetition: (String) -> Unit = {},
+    feedItems: List<FeedUiItem> = emptyList(),
+    currentFeedTab: FeedTab = FeedTab.TODAY,
+    activeCompetitionsForFeed: List<com.aquiles.crosschapp.data.model.Competition> = emptyList(),
+    onTabSelected: (FeedTab) -> Unit = {},
+    onToggleReaction: (String, FeedTab, String) -> Unit = { _, _, _ -> }
 ) {
     var showRulesDialog by remember { mutableStateOf(false) }
-    
-    val feedState by benchmarkFeedViewModel.feedState.collectAsState()
-    val selectedGenderFilter by benchmarkFeedViewModel.selectedGenderFilter.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -246,7 +235,10 @@ private fun HomeScreenContent(
     ) {
         // 1. GREETING (iOS Style)
         item {
-            HomeGreetingCard(userName = user.name.split(" ").first())
+            HomeGreetingCard(
+                userName = user.name.split(" ").first(),
+                profileImageUrl = user.profileImageUrl
+            )
         }
     
         // 1.5 PERSONAL MESSAGE CARD
@@ -288,205 +280,171 @@ private fun HomeScreenContent(
             }
         }
 
-        // 3. UNIFIED FEED CARD (Tabs + Content)
+        // 3. SOCIAL FEED (Hoy / Récords / Eventos)
         item {
-            GlassCard(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // --- TABS (Integrated) ---
-                    // --- TABS (Integrated Segmented Control) ---
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.1f)) // More visible track
-                            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape) // Subtle border
-                            .padding(4.dp)
-                    ) {
-                        Row(modifier = Modifier.fillMaxSize()) {
-                            listOf(FeedTab.TODAY to "Hoy \uD83D\uDCC5", FeedTab.RECORDS to "Récords \uD83C\uDFC6").forEach { (tab, label) ->
-                                val isSelected = currentTab == tab
-                                val animatedColor by animateColorAsState(
-                                    targetValue = if (isSelected) LocalPrimaryColor.current else Color.Transparent,
-                                    label = "tabColor"
-                                )
-                                val textColor by animateColorAsState(
-                                    targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
-                                    label = "tabText"
-                                )
-
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clip(CircleShape)
-                                        .background(animatedColor)
-                                        .clickable { 
-                                            // Feedback haptic or sound could go here
-                                            benchmarkFeedViewModel.setTab(tab) 
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = label,
-                                        color = textColor,
-                                        style = MaterialTheme.typography.bodyLarge, // Slightly larger
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // --- CONTENT AREA ---
-                    
-                    // A) IF RECORDS TAB -> Show Filters & Sort
-                    if (currentTab == FeedTab.RECORDS) {
-                         // Header & Chips
-                        Column {
-                            Text(
-                                text = selectedWodFilter ?: "Filtrar por Entrenamiento",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(vertical = 4.dp)
-                            ) {
-                                item {
-                                    FilterChip(
-                                        selected = selectedWodFilter == null,
-                                        onClick = { onWodFilterSelected(null) },
-                                        label = { Text("Todos") },
-                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = LocalPrimaryColor.current, labelColor = Color.White)
-                                    )
-                                }
-                                items(availableBenchmarks) { bench ->
-                                    FilterChip(
-                                        selected = selectedWodFilter == bench,
-                                        onClick = { onWodFilterSelected(bench) },
-                                        label = { Text(bench) },
-                                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = LocalPrimaryColor.current, labelColor = Color.White)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Sorting UI (Only valid if bench selected or items exist)
-                        AnimatedVisibility(visible = selectedWodFilter != null) {
-                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                sortCriteria?.let { criteria ->
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { benchmarkFeedViewModel.toggleSortOrder() }
-                                            .background(Brush.horizontalGradient(listOf(Color(0xFFFF6B35), Color(0xFFFFB340))), RoundedCornerShape(12.dp))
-                                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                                    ) {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                            Text("ORDENADO POR: ${criteria.replace("🏆 ", "").replace("⏱️ ", "")}", style = MaterialTheme.typography.labelMedium, color = Color.White, fontWeight = FontWeight.Bold)
-                                            Icon(Icons.Default.SwapVert, null, tint = Color.White.copy(0.7f), modifier = Modifier.size(24.dp))
-                                        }
-                                    }
-                                }
-                                // Gender Chips
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Filtrar:", color = ColorTextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.align(Alignment.CenterVertically))
-                                    SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter(null) }, label = { Text("Todos") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == null) LocalPrimaryColor.current else Color.Transparent))
-                                    SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("male") }, label = { Text("Masculino") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "male") LocalPrimaryColor.current else Color.Transparent))
-                                    SuggestionChip(onClick = { benchmarkFeedViewModel.setGenderFilter("female") }, label = { Text("Femenino") }, colors = SuggestionChipDefaults.suggestionChipColors(containerColor = if(selectedGenderFilter == "female") LocalPrimaryColor.current else Color.Transparent))
-                                }
-                            }
-                        }
-                    } 
-                    // B) IF TODAY TAB -> Just simple Title
-                    else {
-                         Text(
-                            text = "Actividad Reciente (Hoy)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-
-                    // --- FEED LIST ---
-                    when(feedState) {
-                        is FeedState.Loading -> {
-                            Box(modifier = Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = LocalPrimaryColor.current)
-                            } 
-                        }
-                        is FeedState.Success -> {
-                            // Unified List from ViewModel (already filtered/sorted for current Tab)
-                            val displayItems = feedItems
-                            
-                            if (displayItems.isEmpty()) {
-                                Text("No hay resultados aún.", style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
-                            } else {
-                                // PODIUM ONLY FOR RECORDS TAB AND SPECIFIC WOD
-                                if (currentTab == FeedTab.RECORDS && selectedWodFilter != null && displayItems.size >= 3) {
-                                     // PODIUM LOGIC ...
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                        horizontalArrangement = Arrangement.SpaceEvenly,
-                                        verticalAlignment = Alignment.Bottom
-                                    ) {
-                                        if (displayItems.size > 1) PodiumCard(displayItems[1], 2, MedalColor.Silver, false)
-                                        if (displayItems.isNotEmpty()) PodiumCard(displayItems[0], 1, MedalColor.Gold, true)
-                                        if (displayItems.size > 2) PodiumCard(displayItems[2], 3, MedalColor.Bronze, false)
-                                    }
-                                    if (displayItems.size > 3) {
-                                        displayItems.drop(3).forEach { feedItem ->
-                                            BenchmarkFeedItem(
-                                                item = feedItem, 
-                                                rankingPosition = displayItems.indexOf(feedItem) + 1,
-                                                onLongClick = { if (user.isAdmin || user.role == "owner") benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified) }
-                                            )
-                                            Spacer(modifier = Modifier.height(12.dp))
-                                        }
-                                    }
-                                } else {
-                                    // STANDARD LIST (TODAY or RECORDS generic)
-                                    displayItems.forEach { feedItem ->
-                                         BenchmarkFeedItem(
-                                            item = feedItem, 
-                                            rankingPosition = if(currentTab == FeedTab.RECORDS && selectedWodFilter != null) displayItems.indexOf(feedItem) + 1 else null,
-                                            onLongClick = { if (user.isAdmin || user.role == "owner") benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified) }
-                                        )
-                                        Spacer(modifier = Modifier.height(12.dp))
-                                    }
-                                }
-                            }
-
-                        }
-                        is FeedState.Error -> {
-                            Text((feedState as FeedState.Error).message, color = MaterialTheme.colorScheme.error)
-                        }
-                        else -> {}
-                    }
-                }
-            }
+            HomeSocialFeedSection(
+                feedItems = feedItems,
+                currentFeedTab = currentFeedTab,
+                activeCompetitions = activeCompetitionsForFeed,
+                isAdmin = user.isAdmin,
+                onTabSelected = onTabSelected,
+                onToggleReaction = onToggleReaction
+            )
         }
 
         // Espacio final padding
         item { Spacer(modifier = Modifier.height(50.dp)) }
     }
 
-    // Trigger Load
-    LaunchedEffect(Unit) {
-        benchmarkFeedViewModel.loadFeed()
-    }
-
     if (showRulesDialog) {
         GamificationRulesScreen(onDismiss = { showRulesDialog = false })
+    }
+}
+
+// =========================================================
+// HOME SOCIAL FEED SECTION
+// =========================================================
+@Composable
+fun HomeSocialFeedSection(
+    feedItems: List<FeedUiItem>,
+    currentFeedTab: FeedTab,
+    activeCompetitions: List<com.aquiles.crosschapp.data.model.Competition>,
+    isAdmin: Boolean,
+    onTabSelected: (FeedTab) -> Unit,
+    onToggleReaction: (String, FeedTab, String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Segmented Tab Control
+        val tabs = listOf(FeedTab.TODAY to "Hoy 📅", FeedTab.RECORDS to "Récords 🏆", FeedTab.EVENTS to "Eventos 🏅")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(Color.White.copy(alpha = 0.08f))
+                .padding(4.dp)
+        ) {
+            tabs.forEach { (tab, label) ->
+                val isSelected = currentFeedTab == tab
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(if (isSelected) LocalPrimaryColor.current else Color.Transparent)
+                        .clickable { onTabSelected(tab) }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        // Content
+        when (currentFeedTab) {
+            FeedTab.EVENTS -> {
+                if (activeCompetitions.isEmpty()) {
+                    GlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🏁", fontSize = 36.sp)
+                                Spacer(Modifier.height(8.dp))
+                                Text("Sin eventos activos", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                } else {
+                    activeCompetitions.forEach { comp ->
+                        GlassCard(modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(comp.title, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                if (comp.description.isNotBlank()) Text(comp.description, color = ColorTextSecondary, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                                comp.prizeDescription?.let {
+                                    Text("🏆 $it", color = LocalPrimaryColor.current, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else -> {
+                if (feedItems.isEmpty()) {
+                    GlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (currentFeedTab == FeedTab.TODAY) "Nadie ha subido resultados hoy aún." else "No hay resultados publicados.",
+                                color = ColorTextSecondary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                } else {
+                    feedItems.take(5).forEach { item ->
+                        HomeFeedItemCard(item = item, onToggleReaction = { emotion ->
+                            onToggleReaction(item.id, item.type, emotion)
+                        })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HomeFeedItemCard(item: FeedUiItem, onToggleReaction: (String) -> Unit) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Avatar
+                Box(
+                    modifier = Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(LocalPrimaryColor.current.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!item.userProfileImageUrl.isNullOrBlank()) {
+                        coil.compose.AsyncImage(
+                            model = item.userProfileImageUrl, contentDescription = null,
+                            modifier = Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        androidx.compose.material3.Icon(
+                            Icons.Default.Person, null, tint = LocalPrimaryColor.current, modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(item.userName, color = ColorTextPrimary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                    Text(item.title, color = ColorTextSecondary, style = MaterialTheme.typography.bodySmall)
+                }
+                // Score
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(item.score, color = LocalPrimaryColor.current, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
+                    if (item.isRx) Text("RX", color = Color(0xFFFF9500), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black)
+                }
+            }
+            // Reactions
+            val emojis = listOf("🔥", "💪", "👏", "⚡")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                emojis.forEach { emoji ->
+                    val count = item.reactions.values.count { it == emoji }
+                    Box(
+                        modifier = Modifier
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                            .background(if (count > 0) LocalPrimaryColor.current.copy(0.15f) else Color.White.copy(0.05f))
+                            .clickable { onToggleReaction(emoji) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text("$emoji${if (count > 0) " $count" else ""}", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -499,8 +457,9 @@ fun UserClassItem(gymClass: GymClass) {
     val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
     val timeStr = gymClass.dateTime?.let { timeFormat.format(it) } ?: "--:--"
     
-    // Style matching iOS "Neon" card
+    val isCompetition = gymClass.classType == "COMPETITION"
     val stripColor = try { Color(android.graphics.Color.parseColor(gymClass.hexColor)) } catch(e:Exception) { LocalPrimaryColor.current }
+    val compBrush = Brush.verticalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))
 
     GlassCard(
         modifier = Modifier.fillMaxWidth()
@@ -524,7 +483,7 @@ fun UserClassItem(gymClass: GymClass) {
                     .width(4.dp)
                     .height(40.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(stripColor)
+                    .then(if (isCompetition) Modifier.background(compBrush) else Modifier.background(stripColor))
             )
             
             Spacer(modifier = Modifier.width(12.dp))
@@ -538,9 +497,14 @@ fun UserClassItem(gymClass: GymClass) {
                     fontWeight = FontWeight.Bold
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Person, null, modifier = Modifier.size(12.dp), tint = ColorTextSecondary)
+                    Icon(
+                        if (isCompetition) Icons.Default.EmojiEvents else Icons.Default.Person, 
+                        null, 
+                        modifier = Modifier.size(12.dp), 
+                        tint = if (isCompetition) Color(0xFFFFD700) else ColorTextSecondary
+                    )
                     Spacer(Modifier.width(4.dp))
-                    Text(gymClass.coachName, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                    Text(if (isCompetition) "Evento" else gymClass.coachName, style = MaterialTheme.typography.bodySmall, color = if (isCompetition) Color(0xFFFFD700) else ColorTextSecondary, fontWeight = if (isCompetition) FontWeight.Bold else FontWeight.Normal)
                 }
             }
             
@@ -554,47 +518,70 @@ fun UserClassItem(gymClass: GymClass) {
 fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit) {
     val context = LocalContext.current
 
+    val avatarRingBrush = Brush.sweepGradient(
+        listOf(
+            LocalPrimaryColor.current,
+            Color.White,
+            LocalPrimaryColor.current.copy(alpha = 0.1f),
+            LocalPrimaryColor.current
+        )
+    )
+
     GlassCard(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Header Premium
+            Row(
+                verticalAlignment = Alignment.CenterVertically, 
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Avatar Holográfico del Coach
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .background(LocalPrimaryColor.current.copy(alpha = 0.2f), CircleShape),
+                        .size(50.dp)
+                        .clip(CircleShape)
+                        .border(BorderStroke(2.dp, avatarRingBrush), CircleShape)
+                        .background(LocalPrimaryColor.current.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.EditNote, contentDescription = null, tint = LocalPrimaryColor.current)
+                    Icon(Icons.Default.EditNote, contentDescription = null, tint = LocalPrimaryColor.current, modifier = Modifier.size(24.dp))
                 }
-                Column {
+                
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Mensaje del Coach",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = ColorTextSecondary
+                        text = "Mensaje Especial",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = LocalPrimaryColor.current,
+                        fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = message.sender_name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
                         color = ColorTextPrimary
                     )
                 }
             }
 
-            HorizontalDivider(color = ColorBorder)
+            HorizontalDivider(color = ColorBorder, modifier = Modifier.padding(vertical = 4.dp))
 
+            // Message Body
             if (message.content.isNotBlank()) {
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = ColorTextPrimary
+                    color = ColorTextSecondary,
+                    lineHeight = 24.sp
                 )
             }
 
+            // Media / Attachments
             when (message.attachmentType) {
                 "image" -> {
                     Image(
@@ -602,8 +589,8 @@ fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit
                         contentDescription = "Imagen adjunta",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(200.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(16.dp))
                             .background(Color.Black),
                         contentScale = ContentScale.Crop
                     )
@@ -614,22 +601,28 @@ fun PersonalMessageCardGlass(message: PersonalMessage, onAcknowledge: () -> Unit
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(message.attachmentUrl))
                             context.startActivity(intent)
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.05f)),
                         border = BorderStroke(1.dp, ColorBorder),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = LocalPrimaryColor.current)
-                        Spacer(Modifier.size(8.dp))
-                        Text("Ver Rutina Adjunta (PDF)", color = ColorTextPrimary)
+                        Spacer(Modifier.size(12.dp))
+                        Text("Ver Documento Adjunto", color = ColorTextPrimary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
+            
+            Spacer(modifier = Modifier.height(4.dp))
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onAcknowledge) {
-                    Text("Marcar como Leído", color = LocalPrimaryColor.current, fontWeight = FontWeight.Bold)
-                }
+            // Action Button
+            Button(
+                onClick = onAcknowledge,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = LocalPrimaryColor.current),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("Entendido", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             }
         }
     }

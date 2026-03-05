@@ -54,7 +54,7 @@ class StudentCompetitionViewModel : ViewModel() {
     }
 
     private suspend fun loadRanking(competition: Competition) {
-        val criteria = competition.getCriteriaEnum()
+        val criteria = competition.resolveCriteriaEnum()
         
         try {
             // 1. Obtener todos los resultados (WOD Results) vinculados a esta competencia

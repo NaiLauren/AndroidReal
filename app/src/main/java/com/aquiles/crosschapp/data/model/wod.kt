@@ -24,9 +24,7 @@ data class Wod(
     val date: Date? = null,
     val notes: String? = null,
     val imageUrl: String? = null,
+    val isCompetitionEnabled: Boolean = false,
     @ServerTimestamp
     val createdAt: Date? = null
-
-    // NOTA: He eliminado el @get:Exclude del 'id' porque ya no es necesario.
-    // @DocumentId se encarga de todo correctamente.
 )

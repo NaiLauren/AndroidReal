@@ -34,6 +34,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -91,7 +92,7 @@ fun AdminManageSchedulesScreen(
     var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
     
     if (showSetupPopup) {
-        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+        SetupStep.entries.find { it.toKey() == setupStepKey }?.let { step ->
             AlertDialog(
                 onDismissRequest = { showSetupPopup = false },
                 title = { Text(step.title, color = ColorTextPrimary) },
@@ -182,6 +183,7 @@ fun AdminManageSchedulesScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Plantilla Semanal", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {

@@ -31,6 +31,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorPrimaryAction = Color(0xFFFC5200)
@@ -182,6 +183,7 @@ private fun CreateEditWodContent(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
+                modifier = Modifier.height(72.dp),
                 title = {
                     Text(
                         if (wodId == null) "Crear Nuevo WOD" else "Editar WOD",

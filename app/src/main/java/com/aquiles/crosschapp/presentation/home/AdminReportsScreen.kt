@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.aquiles.crosschapp.data.model.CreditRequest
@@ -38,6 +39,8 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -77,6 +80,7 @@ fun AdminReportsScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Reportes", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
@@ -160,8 +164,6 @@ private fun ReportsContent(
             )
         }
 
-        }
-
         Spacer(modifier = Modifier.height(24.dp))
         
         // --- APP COSTS SECTION ---
@@ -205,6 +207,7 @@ private fun ReportsContent(
             }
         }
     }
+}
 
 @Composable
 private fun GlassMonthSelector(
@@ -354,6 +357,9 @@ private fun GlassAppCostCard(
         "REJECTED" -> "RECHAZADO"
         else -> "PENDIENTE"
     }
+    
+    val monthFormat = remember { SimpleDateFormat("MM/yyyy", Locale.US) }
+    val invoiceNumber = "RF-${monthFormat.format(selectedDate.time).replace("/", "")}"
 
     // Image Picker
     val launcher = rememberLauncherForActivityResult(
@@ -364,99 +370,182 @@ private fun GlassAppCostCard(
                 uri, 
                 selectedDate.get(Calendar.MONTH) + 1,
                 selectedDate.get(Calendar.YEAR),
-                totalCostUSD, // Guardamos el valor en USD calculado al momento
+                totalCostUSD, 
                 context
             )
         }
     }
 
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            // Header: Total & Status
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+    Box(Modifier.fillMaxWidth()) {
+        GlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF161618).copy(alpha = 0.8f)) // Fondo "papel negro" de la factura
             ) {
-                Column {
-                    Text("TOTAL A PAGAR (APP)", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary, fontWeight = FontWeight.Bold)
+                // INVOICE HEADER
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        formatCurrency(totalCostUSD, "USD"),
-                        style = MaterialTheme.typography.headlineMedium,
+                        "LIQUIDACIÓN MENSUAL",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
                         color = ColorTextPrimary,
-                        fontWeight = FontWeight.ExtraBold
+                        letterSpacing = 2.sp
                     )
-                }
-                
-                Surface(
-                    color = statusColor.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(50),
-                    border = BorderStroke(1.dp, statusColor.copy(alpha = 0.5f))
-                ) {
                     Text(
-                        text = statusText,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = statusColor,
-                        fontWeight = FontWeight.Bold
+                        "Factura N° $invoiceNumber",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ColorTextSecondary,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
-            }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = ColorBorder)
+                DashedDivider()
 
-            // Details
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("Cotización Dólar", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
-                    Text(formatCurrency(dollarRate), style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("Estimado en Pesos", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
-                    Text(formatCurrency(estimatedCostARS), style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // Payment Logic (Only if not paid)
-            if (state.paymentStatus != "PAID") {
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                if (state.paymentInfo != null) {
-                    PaymentInfoSection(state.paymentInfo)
+                // INVOICE BODY (Desglose)
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("DESGLOSE DE SERVICIO", style = MaterialTheme.typography.labelSmall, color = ColorPrimaryAction, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(16.dp))
+                    
+                    InvoiceRow("Alumnos Activos Mensuales", "${state.monthlyActiveUsers} x $1.13")
+                    InvoiceRow("Licencia Base App", "Incluida")
+                    InvoiceRow("Soporte Técnico", "Incluido")
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // TOTAL USD
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("TOTAL USD", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = ColorTextPrimary)
+                        Text(
+                            formatCurrency(totalCostUSD, "USD"),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = ColorTextPrimary,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                    
+                    // CONVERSIÓN ARS
+                    if (dollarRate > 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Abono en Pesos (ARS)", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+                                Text("Cotización Dólar Oficial: ${formatCurrency(dollarRate)}", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary.copy(alpha = 0.7f))
+                            }
+                            Text(formatCurrency(estimatedCostARS), style = MaterialTheme.typography.titleMedium, color = ColorSuccess, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
 
-                Button(
-                    onClick = { 
-                        launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ColorPrimaryAction.copy(alpha = 0.8f),
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.AttachMoney, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (state.paymentStatus == "REJECTED") "REENVIAR COMPROBANTE" else "ADJUNTAR COMPROBANTE")
-                }
-                
-                if (state.paymentStatus == "PENDING_REVIEW") {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Tu comprobante está siendo revisado.", 
-                        style = MaterialTheme.typography.labelSmall, 
-                        color = ColorInfo, 
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
+                DashedDivider()
+
+                // INVOICE FOOTER (Payment section)
+                Column(modifier = Modifier.padding(20.dp)) {
+                    if (state.paymentStatus != "PAID") {
+                        if (state.paymentInfo != null) {
+                            PaymentInfoSection(state.paymentInfo)
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        Button(
+                            onClick = { launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (state.paymentStatus == "REJECTED") ColorError else ColorPrimaryAction,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.AttachMoney, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (state.paymentStatus == "REJECTED") "REENVIAR COMPROBANTE" else "ADJUNTAR COMPROBANTE")
+                        }
+                        
+                        if (state.paymentStatus == "PENDING_REVIEW") {
+                            Text(
+                                "Comprobante en revisión.", 
+                                style = MaterialTheme.typography.labelSmall, 
+                                color = ColorWarning, 
+                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp)
+                            )
+                        }
+                    } else {
+                        // Pagado, mostrar gracias
+                        Box(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Liquidación abonada exitosamente.\nGracias por confiar en RealFitness.",
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ColorTextSecondary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
                 }
             }
         }
+        
+        // WATERMARK STAMP
+        InvoiceStamp(text = statusText, color = statusColor)
     }
+}
+
+@Composable
+private fun InvoiceRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun DashedDivider() {
+    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 20.dp)) {
+        drawLine(
+            color = ColorTextSecondary.copy(alpha = 0.3f),
+            start = androidx.compose.ui.geometry.Offset(0f, 0f),
+            end = androidx.compose.ui.geometry.Offset(size.width, 0f),
+            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.InvoiceStamp(text: String, color: Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.displaySmall,
+        fontWeight = FontWeight.Black,
+        color = color.copy(alpha = 0.25f),
+        modifier = Modifier
+            .align(Alignment.Center)
+            .rotate(-25f)
+            .padding(16.dp)
+    )
 }
 
 @Composable

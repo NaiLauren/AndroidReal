@@ -30,17 +30,15 @@ import com.aquiles.crosschapp.data.model.PersonalMessage
 import com.aquiles.crosschapp.presentation.viewmodel.MessageHistoryState
 import com.aquiles.crosschapp.presentation.viewmodel.MessageArchiveViewModel
 import com.aquiles.crosschapp.presentation.components.FullScreenMediaDialog
+import com.aquiles.crosschapp.presentation.components.GlassCard
 import java.text.SimpleDateFormat
 import java.util.*
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.1f)
-private val ColorBackgroundGradientStart = Color(0xFF000000)
-private val ColorBackgroundGradientEnd = Color(0xFF121212)
+private val ColorBorder = Color.White.copy(alpha = 0.15f)
 private val ColorError = Color(0xFFEF5350)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,6 +59,7 @@ fun MessageArchiveScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Mensajes", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
@@ -117,85 +116,90 @@ fun MessageBubble(
     onDeleteClick: () -> Unit,
     onAttachmentClick: (String) -> Unit
 ) {
-    val uriHandler = LocalUriHandler.current
-    val isFromCurrentUser = false // Read-only archive, mostly received.
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalAlignment = if (isFromCurrentUser) Alignment.End else Alignment.Start
+    // Usamos GlassCard para cada mensaje en la bandeja en lugar de una burbuja de chat genérica
+    GlassCard(
+        modifier = Modifier.fillMaxWidth().clickable {
+            // Si no hay botón adjunto, podríamos expandir o hacer algo al click. Por ahora no hace nada.
+        },
+        shape = RoundedCornerShape(16.dp)
     ) {
-        // Sender Name (only if not from me)
-        if (!isFromCurrentUser) {
-            Text(
-                text = message.sender_name,
-                style = MaterialTheme.typography.labelSmall,
-                color = ColorTextSecondary,
-                modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
-            )
-        }
-
-        Box(
+        Column(
             modifier = Modifier
-                .widthIn(max = 300.dp)
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 16.dp,
-                        topEnd = 16.dp,
-                        bottomEnd = 16.dp,
-                        bottomStart = 4.dp
-                    )
-                )
-                .background(ColorGlassSurface)
-                .border(1.dp, ColorBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp))
-                .padding(12.dp)
+                .fillMaxWidth()
+                .padding(16.dp)
         ) {
-            Column {
-                if (message.content.isNotBlank()) {
+            // Header: Icono + Remitente + Fecha
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Avatar / Icono Sender
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(ColorPrimaryAction.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.MarkEmailUnread,
+                        contentDescription = null,
+                        tint = ColorPrimaryAction,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = message.sender_name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
                         color = ColorTextPrimary
                     )
-                }
-
-                if (!message.attachmentUrl.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { onAttachmentClick(message.attachmentUrl!!) },
-                        modifier = Modifier.fillMaxWidth(),
-                        border = BorderStroke(1.dp, ColorPrimaryAction.copy(alpha = 0.5f)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorPrimaryAction),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(Icons.Default.Attachment, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Ver Adjunto", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.align(Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
                     Text(
                         text = formatTimestamp(message.timestamp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = ColorTextSecondary.copy(alpha = 0.6f),
-                        fontSize = 10.sp
+                        color = ColorTextSecondary
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
+                // Delete Button
+                IconButton(onClick = onDeleteClick, modifier = Modifier.size(24.dp)) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Borrar",
-                        tint = ColorError.copy(alpha = 0.5f),
-                        modifier = Modifier
-                            .size(14.dp)
-                            .clickable { onDeleteClick() }
+                        tint = ColorTextSecondary.copy(alpha = 0.5f)
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Body
+            if (message.content.isNotBlank()) {
+                Text(
+                    text = message.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ColorTextSecondary,
+                    lineHeight = 22.sp
+                )
+            }
+
+            // Attachment
+            if (!message.attachmentUrl.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = { onAttachmentClick(message.attachmentUrl!!) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, ColorBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorTextPrimary)
+                ) {
+                    Icon(Icons.Default.Attachment, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Ver Adjunto", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

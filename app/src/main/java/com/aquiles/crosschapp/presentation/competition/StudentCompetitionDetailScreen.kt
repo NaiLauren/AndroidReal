@@ -37,6 +37,7 @@ import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.StudentCompetitionViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.compose.foundation.layout.height
 
 // --- UI Constants ---
 private val ColorGold = Color(0xFFFFD700)
@@ -64,6 +65,7 @@ fun StudentCompetitionDetailScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
+                modifier = Modifier.height(72.dp),
                 title = { Text("Competencia", fontWeight = FontWeight.Bold, color = Color.White) }, // Generic title, detail is in Header
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,9 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,10 +45,12 @@ import com.aquiles.crosschapp.data.model.Competition
 import com.aquiles.crosschapp.data.model.CompetitionStatus
 import com.aquiles.crosschapp.data.model.GymClass
 import com.aquiles.crosschapp.presentation.viewmodel.CompetitionDetailViewModel
+import com.aquiles.crosschapp.presentation.viewmodel.CompetitionResultEntry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import androidx.compose.foundation.layout.height
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,16 +62,31 @@ fun AdminCompetitionDetailScreen(
     val competition by viewModel.competition.collectAsState()
     val linkedClasses by viewModel.linkedClasses.collectAsState()
     val isLoadingClasses by viewModel.isLoadingClasses.collectAsState()
+    val competitionResults by viewModel.competitionResults.collectAsState()
+    val enrolledUsers by viewModel.enrolledUsers.collectAsState()
+    val isLoadingRanking by viewModel.isLoadingRanking.collectAsState()
+    val isSubmittingScore by viewModel.isSubmittingScore.collectAsState()
     
     var showClassSelector by remember { mutableStateOf(false) }
+    var showCreateEventDialog by remember { mutableStateOf(false) }
+    var showAddMenu by remember { mutableStateOf(false) }
+    var showEditSheet by remember { mutableStateOf(false) }
+    var showScoreSheet by remember { mutableStateOf(false) }
+    var scoreTargetUserId by remember { mutableStateOf("") }
+    var scoreTargetUserName by remember { mutableStateOf("") }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0=Eventos, 1=Ranking
 
     LaunchedEffect(competitionId) {
         viewModel.loadCompetition(competitionId)
+    }
+    LaunchedEffect(competition) {
+        if (competition != null) viewModel.loadCompetitionRanking()
     }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
+                modifier = Modifier.height(72.dp),
                 title = { Text("Detalle de Competencia", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
@@ -96,8 +117,23 @@ fun AdminCompetitionDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
                 // Header Section
-                CompetitionHeader(comp)
+                CompetitionHeader(comp, onEditClick = { showEditSheet = true })
 
+                // Tabs
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.Black.copy(alpha = 0.4f),
+                    contentColor = Color(0xFFFC5200)
+                ) {
+                    Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }) {
+                        Text("Eventos", modifier = Modifier.padding(12.dp), color = if (selectedTab == 0) Color(0xFFFC5200) else Color.White.copy(alpha = 0.6f), fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
+                    }
+                    Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }) {
+                        Text("Ranking", modifier = Modifier.padding(12.dp), color = if (selectedTab == 1) Color(0xFFFC5200) else Color.White.copy(alpha = 0.6f), fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+
+                if (selectedTab == 0) {
                 // Linked Classes Section
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(
@@ -105,16 +141,16 @@ fun AdminCompetitionDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Clases / Eventos", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text("Eventos y Heats", style = MaterialTheme.typography.titleMedium, color = Color.White)
                         
                         Button(
-                            onClick = { showClassSelector = true },
+                            onClick = { showCreateEventDialog = true },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFC5200)),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Agregar", style = MaterialTheme.typography.labelLarge)
+                            Text("Nuevo Evento", style = MaterialTheme.typography.labelLarge)
                         }
                     }
 
@@ -138,6 +174,27 @@ fun AdminCompetitionDetailScreen(
                         }
                     }
                 }
+                } else {
+                    // --- RANKING TAB ---
+                    CompetitionRankingSection(
+                        results = competitionResults,
+                        enrolledUsers = enrolledUsers,
+                        isLoading = isLoadingRanking,
+                        onRefresh = { viewModel.loadCompetitionRanking() },
+                        onAddScore = { userId, userName ->
+                            scoreTargetUserId = userId
+                            scoreTargetUserName = userName
+                            showScoreSheet = true
+                        },
+                        onApprove = { resultId ->
+                            // TODO: approve result
+                        },
+                        onReject = { resultId ->
+                            // TODO: reject result
+                        }
+                    )
+                }
+
 
                 // Prize & Actions Section
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -190,24 +247,419 @@ fun AdminCompetitionDetailScreen(
         }
     }
 
-    if (showClassSelector && competition != null) {
-        ClassSelectorDialog(
-            gymId = competition!!.gymId,
-            startDate = competition!!.startDate ?: Date(),
-            endDate = competition!!.endDate ?: Date(),
-            existingIds = linkedClasses.map { it.documentId }.toSet(),
-            onDismiss = { showClassSelector = false },
-            onConfirm = { selectedClasses ->
-                viewModel.linkClasses(selectedClasses)
-                showClassSelector = false
-            },
-            viewModel = viewModel
+    if (showCreateEventDialog && competition != null) {
+        CreateCompetitionEventDialog(
+            competition = competition!!,
+            onDismiss = { showCreateEventDialog = false },
+            onConfirm = { date, maxCapacity ->
+                viewModel.createAndLinkCompetitionClass(
+                    gymId = competition!!.gymId,
+                    dateTime = date,
+                    durationMinutes = 60,
+                    maxCapacity = maxCapacity
+                )
+                showCreateEventDialog = false
+            }
+        )
+    }
+    
+    if (showEditSheet && competition != null) {
+        EditCompetitionSheet(
+            competition = competition!!,
+            onDismiss = { showEditSheet = false },
+            onSave = { title, desc, prize ->
+                viewModel.editCompetition(title, desc, prize)
+                showEditSheet = false
+            }
+        )
+    }
+
+    if (showScoreSheet && scoreTargetUserId.isNotBlank()) {
+        AdminScoreInjectionSheet(
+            userName = scoreTargetUserName,
+            isSubmitting = isSubmittingScore,
+            onDismiss = { showScoreSheet = false },
+            onSubmit = { score, notes, isRx ->
+                viewModel.submitScoreForUser(
+                    userId = scoreTargetUserId,
+                    userName = scoreTargetUserName,
+                    score = score,
+                    notes = notes,
+                    isRx = isRx
+                )
+                showScoreSheet = false
+            }
         )
     }
 }
 
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CompetitionHeader(comp: Competition) {
+fun CreateCompetitionEventDialog(
+    competition: Competition,
+    onDismiss: () -> Unit,
+    onConfirm: (Date, Int) -> Unit
+) {
+    var selectedDate by remember { mutableStateOf<Long?>(competition.startDate?.time) }
+    var capacityStr by remember { mutableStateOf("20") }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var selectedHour by remember { mutableStateOf(10) }
+    var selectedMinute by remember { mutableStateOf(0) }
+
+    val dateTimeFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+
+    val dateToShow = remember(selectedDate, selectedHour, selectedMinute) {
+        val cal = java.util.Calendar.getInstance()
+        if (selectedDate != null) cal.timeInMillis = selectedDate!!
+        cal.set(java.util.Calendar.HOUR_OF_DAY, selectedHour)
+        cal.set(java.util.Calendar.MINUTE, selectedMinute)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.time
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedDate = datePickerState.selectedDateMillis
+                    showDatePicker = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(initialHour = selectedHour, initialMinute = selectedMinute)
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedHour = timePickerState.hour
+                    selectedMinute = timePickerState.minute
+                    showTimePicker = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+            },
+            text = { TimePicker(state = timePickerState) }
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Crear Nuevo Evento") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Este evento se creará automáticamente como parte de '${competition.title}'.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                
+                OutlinedTextField(
+                    value = dateTimeFormat.format(dateToShow),
+                    onValueChange = {},
+                    label = { Text("Fecha y Hora") },
+                    readOnly = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth().clickable { showDatePicker = true }
+                )
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { showDatePicker = true }, modifier = Modifier.weight(1f)) { Text("Cambiar Día") }
+                    Button(onClick = { showTimePicker = true }, modifier = Modifier.weight(1f)) { Text("Cambiar Hora") }
+                }
+
+                OutlinedTextField(
+                    value = capacityStr,
+                    onValueChange = { capacityStr = it },
+                    label = { Text("Cupo Máximo (Atletas)") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val cap = capacityStr.toIntOrNull() ?: 20
+                    onConfirm(dateToShow, cap)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFC5200))
+            ) {
+                Text("Cargar Evento")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+        containerColor = Color(0xFF1E1E1E),
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
+}
+
+
+// =========================================================
+// COMPETITION RANKING SECTION (Admin)
+// =========================================================
+
+@Composable
+fun CompetitionRankingSection(
+    results: List<CompetitionResultEntry>,
+    enrolledUsers: List<com.aquiles.crosschapp.data.model.User>,
+    isLoading: Boolean,
+    onRefresh: () -> Unit,
+    onAddScore: (userId: String, userName: String) -> Unit,
+    onApprove: (resultId: String) -> Unit,
+    onReject: (resultId: String) -> Unit
+) {
+    val resultsByUser = results.associateBy { it.userId }
+    val usersWithoutResult = enrolledUsers.filter { user -> user.id != null && !resultsByUser.containsKey(user.id) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Ranking", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onRefresh) {
+                Text("Actualizar", color = Color(0xFFFC5200))
+            }
+        }
+
+        if (isLoading) {
+            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFFFC5200))
+            }
+        } else if (results.isEmpty() && usersWithoutResult.isEmpty()) {
+            GlassCard {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    Text("Aún no hay participantes ni resultados.", color = Color.Gray)
+                }
+            }
+        } else {
+            // Resultados existentes
+            results.forEachIndexed { index, entry ->
+                CompetitionParticipantRow(
+                    rank = index + 1,
+                    entry = entry,
+                    onApprove = { onApprove(entry.resultId) },
+                    onReject = { onReject(entry.resultId) }
+                )
+            }
+
+            // Participantes sin resultado
+            if (usersWithoutResult.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text("Sin resultado enviado:", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                usersWithoutResult.forEach { user ->
+                    GlassCard(shape = RoundedCornerShape(12.dp)) {
+                        Row(
+                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    Modifier.size(36.dp).background(Color.White.copy(alpha = 0.1f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Person, null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Text("${user.name} ${user.lastName}", color = Color.White, fontWeight = FontWeight.Medium)
+                            }
+                            OutlinedButton(
+                                onClick = { onAddScore(user.id ?: "", "${user.name} ${user.lastName}") },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFC5200)),
+                                border = BorderStroke(1.dp, Color(0xFFFC5200)),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Score", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CompetitionParticipantRow(
+    rank: Int,
+    entry: CompetitionResultEntry,
+    onApprove: () -> Unit,
+    onReject: () -> Unit
+) {
+    val rankColor = when (rank) {
+        1 -> Color(0xFFFFD700)
+        2 -> Color(0xFFC0C0C0)
+        3 -> Color(0xFFCD7F32)
+        else -> Color.White.copy(alpha = 0.3f)
+    }
+
+    GlassCard(shape = RoundedCornerShape(12.dp)) {
+        Row(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Rank
+            Box(
+                Modifier.size(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (rank <= 3) {
+                    Icon(Icons.Default.EmojiEvents, null, tint = rankColor, modifier = Modifier.size(28.dp))
+                }
+                Text(
+                    "$rank",
+                    color = if (rank <= 3) Color.Black else Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (rank <= 3) 10.sp else 14.sp
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(Modifier.weight(1f)) {
+                Text(entry.userName, color = Color.White, fontWeight = FontWeight.Bold)
+                if (entry.isPending) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(6.dp).background(Color(0xFFFF9500), CircleShape))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Pendiente de validación", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF9500))
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(6.dp).background(Color(0xFF34C759), CircleShape))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Aprobado", style = MaterialTheme.typography.labelSmall, color = Color(0xFF34C759))
+                    }
+                }
+            }
+
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    entry.score,
+                    color = if (entry.isPending) Color(0xFFFF9500) else Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                if (entry.isRx) {
+                    Text("RX", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF9500), fontWeight = FontWeight.Black)
+                }
+            }
+
+            if (entry.isPending) {
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    IconButton(onClick = onApprove, modifier = Modifier.size(30.dp)) {
+                        Icon(Icons.Default.Check, "Aprobar", tint = Color(0xFF34C759), modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(onClick = onReject, modifier = Modifier.size(30.dp)) {
+                        Icon(Icons.Default.Close, "Rechazar", tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminScoreInjectionSheet(
+    userName: String,
+    isSubmitting: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (score: String, notes: String, isRx: Boolean) -> Unit
+) {
+    var score by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    var isRx by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1E1E1E)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp).fillMaxWidth().padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("Cargar Score para $userName", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+
+            OutlinedTextField(
+                value = score,
+                onValueChange = { score = it },
+                label = { Text("Score (ej: 10:45, 85 reps)") },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                label = { Text("Notas (opcional)") },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { isRx = !isRx }.padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    if (isRx) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                    null,
+                    tint = if (isRx) Color(0xFFFC5200) else Color.Gray
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("RX (peso reglamentario)", color = Color.White)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                    modifier = Modifier.weight(1f)
+                ) { Text("Cancelar", color = Color.White) }
+
+                Button(
+                    onClick = { if (score.isNotBlank()) onSubmit(score, notes, isRx) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFC5200)),
+                    modifier = Modifier.weight(1f),
+                    enabled = score.isNotBlank() && !isSubmitting
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                    } else {
+                        Text("Guardar Score", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CompetitionHeader(comp: Competition, onEditClick: () -> Unit) {
+
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp)
@@ -222,7 +674,7 @@ fun CompetitionHeader(comp: Competition) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = comp.getTypeEnum().value.uppercase(),
+                text = comp.resolveTypeEnum().value.uppercase(),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
@@ -231,7 +683,7 @@ fun CompetitionHeader(comp: Competition) {
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
             
-            val status = comp.getStatus()
+            val status = comp.resolveStatus()
             val statusColor = when (status) {
                 CompetitionStatus.ONGOING -> Color.Green
                 CompetitionStatus.UPCOMING -> Color.Blue
@@ -255,12 +707,26 @@ fun CompetitionHeader(comp: Competition) {
             }
         }
         
-        Text(
-            text = comp.title,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = comp.title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            
+            IconButton(onClick = onEditClick) {
+                Icon(
+                    androidx.compose.material.icons.Icons.Default.Edit,
+                    contentDescription = "Editar",
+                    tint = Color(0xFFFC5200)
+                )
+            }
+        }
         
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
@@ -477,4 +943,85 @@ fun ClassSelectorDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditCompetitionSheet(
+    competition: Competition,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String?) -> Unit
+) {
+    var editTitle by remember { mutableStateOf(competition.title) }
+    var editDescription by remember { mutableStateOf(competition.description) }
+    var editPrizeDescription by remember { mutableStateOf(competition.prizeDescription ?: "") }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1E1E1E), // Dark theme
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth()
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("Editar Evento", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+            
+            OutlinedTextField(
+                value = editTitle,
+                onValueChange = { editTitle = it },
+                label = { Text("Título del Evento") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = editDescription,
+                onValueChange = { editDescription = it },
+                label = { Text("Descripción / Detalles WOD") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth().height(120.dp)
+            )
+
+            OutlinedTextField(
+                value = editPrizeDescription,
+                onValueChange = { editPrizeDescription = it },
+                label = { Text("Premio (Opcional)") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Cancelar", color = Color.White)
+                }
+                
+                Button(
+                    onClick = {
+                        onSave(editTitle, editDescription, editPrizeDescription.ifBlank { null })
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFC5200)),
+                    modifier = Modifier.weight(1f),
+                    enabled = editTitle.isNotBlank()
+                ) {
+                    Text("Guardar Cambios", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
 }

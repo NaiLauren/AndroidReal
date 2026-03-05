@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.CalendarToday // Para Horarios
 import androidx.compose.material.icons.filled.FitnessCenter // Para WODs
 import androidx.compose.material.icons.filled.Home // Para Inicio
 import androidx.compose.material.icons.filled.Leaderboard // Para Rendimiento
+import androidx.compose.material.icons.filled.LocalFireDepartment // Para Muro Social
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -50,8 +51,15 @@ sealed class BottomNavItem(
     )
 
     object Profile : BottomNavItem(
-        route = "profile", // <-- CORREGIDO
+        route = "profile",
         label = "Perfil",
         icon = Icons.Filled.AccountCircle
+    )
+    
+    // [NEW] Muro Social 
+    object Social : BottomNavItem(
+        route = "social_feed",
+        label = "Muro",
+        icon = Icons.Filled.LocalFireDepartment
     )
 }

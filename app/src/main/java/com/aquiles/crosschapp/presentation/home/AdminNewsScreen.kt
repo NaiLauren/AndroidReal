@@ -34,6 +34,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import java.text.SimpleDateFormat // Consider java.time for new code, but SimpleDateFormat is common in legacy
 import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS (Reused for consistency) ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -54,7 +55,7 @@ fun AdminNewsScreen(
     var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
     
     if (showSetupPopup) {
-        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+        SetupStep.entries.find { it.toKey() == setupStepKey }?.let { step ->
             AlertDialog(
                 onDismissRequest = { showSetupPopup = false },
                 title = { Text(step.title, color = ColorTextPrimary) },
@@ -89,6 +90,7 @@ fun AdminNewsScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Novedades del Box", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {

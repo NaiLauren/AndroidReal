@@ -35,8 +35,9 @@ class XpHistoryViewModel : ViewModel() {
             _state.value = XpHistoryState.Loading
             try {
                 // Consultar colección xp_logs
-                // Requiere índice compuesto: userId + timestamp DESC
+                // Requiere índice compuesto: gym_id + userId + timestamp DESC
                 val snapshot = firestore.collection("xp_logs")
+                    .whereEqualTo("gym_id", currentUser.gym_id)
                     .whereEqualTo("userId", currentUser.id)
                     .orderBy("timestamp", Query.Direction.DESCENDING)
                     .limit(50) // Paginación simple por ahora

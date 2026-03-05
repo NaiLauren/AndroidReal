@@ -59,37 +59,48 @@ enum class ValidationRule(val value: String) {
 
 data class Competition(
     @DocumentId val id: String = "",
-    @get:PropertyName("gym_id") val gymId: String = "",
+    @get:PropertyName("gym_id") @set:PropertyName("gym_id") var gymId: String = "",
     val title: String = "",
     val description: String = "",
     val imageUrl: String? = null,
-    val type: String = "Mensual", // Stored as String to match iOS rawValue
-    val criteria: String = "Puntos (Acumulativo)", // Stored as String
+    val type: String = "Mensual",
+    val criteria: String = "Puntos (Acumulativo)",
     val startDate: Date? = null,
     val endDate: Date? = null,
-    @get:PropertyName("isActive") val isActive: Boolean = true,
+    @get:PropertyName("isActive") @set:PropertyName("isActive") var isActive: Boolean = true,
 
     // Linked WODs/Classes
-    @get:PropertyName("linked_class_ids") val linkedClassIds: List<String> = emptyList(),
+    @get:PropertyName("linked_class_ids") @set:PropertyName("linked_class_ids") var linkedClassIds: List<String> = emptyList(),
 
     // Rewards
     val prizeDescription: String? = null,
     val xpReward: Int? = null,
-    val isIntergym: Boolean? = null,
 
-    // N-NUEVO: Estrategia de puntaje y validación (paridad con iOS)
-    val scoreStrategy: String? = null, // "relative", "absolute", "rounds"
-    val validationRule: String? = null, // "automatic", "manual"
+    // Intergym — un solo campo que maneja tanto "intergym" (iOS) como "isIntergym" (Android legacy).
+    // @PropertyName("intergym") hace que Firestore lea/escriba la clave "intergym",
+    // y Kotlin usa el nombre isIntergym internamente sin chocar en el nivel JVM.
+    @get:PropertyName("intergym") @set:PropertyName("intergym") var isIntergym: Boolean? = null,
+
+    // Estrategia de puntaje y validación (iOS escribe "scoreStrategy", "validationRule", "scoreStrategyEnum")
+    val scoreStrategy: String? = null,
+    val validationRule: String? = null,
+    val scoreStrategyEnum: String? = null,  // iOS puede escribir el raw value del enum aquí
+
+    // Status (iOS escribe "status" como string del enum)
+    val status: String? = null,
 
     @ServerTimestamp val createdAt: Timestamp? = null
 ) {
-    fun getTypeEnum(): CompetitionType = CompetitionType.fromValue(type)
-    fun getCriteriaEnum(): RankingCriteria = RankingCriteria.fromValue(criteria)
-    fun getScoreStrategyEnum(): ScoreStrategy = ScoreStrategy.fromValue(scoreStrategy ?: "absolute")
-    fun getValidationRuleEnum(): ValidationRule = ValidationRule.fromValue(validationRule ?: "automatic")
+    fun resolveTypeEnum(): CompetitionType = CompetitionType.fromValue(type)
+    fun resolveCriteriaEnum(): RankingCriteria = RankingCriteria.fromValue(criteria)
+    // Renombrado de getScoreStrategyEnum() para evitar clash con el campo scoreStrategyEnum
+    fun resolveScoreStrategy(): ScoreStrategy = ScoreStrategy.fromValue(scoreStrategy ?: scoreStrategyEnum ?: "absolute")
+    fun resolveValidationRule(): ValidationRule = ValidationRule.fromValue(validationRule ?: "automatic")
 
-    // Helper property for status checks
-    fun getStatus(): CompetitionStatus {
+    fun isIntergymEvent(): Boolean = isIntergym ?: false
+
+    // Renombrado para no chocar con ningún getter Firestore
+    fun resolveStatus(): CompetitionStatus {
         if (!isActive) return CompetitionStatus.INACTIVE
         val now = Date()
         val start = startDate ?: now

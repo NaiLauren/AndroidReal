@@ -41,6 +41,9 @@ import com.aquiles.crosschapp.presentation.viewmodel.*
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.ceil
+import androidx.compose.foundation.layout.height
+import com.aquiles.crosschapp.presentation.components.GlassCard
+import com.aquiles.crosschapp.presentation.components.GlassAlertDialog
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -87,6 +90,7 @@ fun PerformanceScreen(
             Scaffold(
                 topBar = {
                     CenterAlignedTopAppBar(
+                        modifier = Modifier.height(72.dp),
                         title = { Text("Mi Rendimiento", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
                     )
@@ -217,11 +221,9 @@ fun AttendanceChartSectionGlass(
     state: AttendanceChartUiState,
     onTimeRangeSelected: (TimeRange) -> Unit
 ) {
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(Modifier.padding(20.dp)) {
             Row(
@@ -410,48 +412,53 @@ fun RecordCardGlass(
         )
     }
 
-    Card(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .height(140.dp) // Slightly reduced height as it's just a summary now
+            .height(160.dp)
             .clickable { 
                 if (state is PerformanceState.Success && state.records.isNotEmpty()) {
                     showHistory = true 
                 }
             },
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(16.dp).fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header
+            // Header con ícono historial
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = label.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = ColorTextSecondary,
-                    letterSpacing = 1.sp
-                )
-                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    )
+                    Text(
+                        text = label.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 1.sp
+                    )
+                }
                 if (state is PerformanceState.Success && state.records.isNotEmpty()) {
                     Icon(
                         imageVector = Icons.Default.History, 
                         contentDescription = "Ver Historial",
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                        modifier = Modifier.size(20.dp)
+                        tint = ColorTextSecondary.copy(alpha = 0.5f),
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
-            
-            Spacer(modifier = Modifier.weight(1f))
 
             // Content
             when (state) {
@@ -470,51 +477,62 @@ fun RecordCardGlass(
                 }
                 is PerformanceState.Success -> {
                     if (state.records.isEmpty()) {
-                        Text(
-                            text = "Sin marcas registradas",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = ColorTextSecondary.copy(alpha = 0.5f),
-                            fontStyle = FontStyle.Italic,
-                            modifier = Modifier.align(Alignment.CenterHorizontally)
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.FitnessCenter, null, tint = ColorTextSecondary.copy(0.25f), modifier = Modifier.size(24.dp))
+                            Text(
+                                text = "Sin marcas aún",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ColorTextSecondary.copy(alpha = 0.5f),
+                                fontStyle = FontStyle.Italic,
+                            )
+                        }
                     } else {
-                        // Show Latest Record
                         val latestRecord = state.records.first()
                         val data = extractRecordData(latestRecord)
-                        
-                        Column {
+
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            // Nombre del WOD (label pequeño)
                             Text(
                                 text = data.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = ColorTextPrimary,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ColorTextSecondary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.Bottom) {
+                            // Score grande y prominente (iOS parity)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
                                     text = data.score,
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                                 if (data.isRx) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "RX",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ColorTextSecondary,
-                                        modifier = Modifier.padding(bottom = 6.dp)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .background(MaterialTheme.colorScheme.primary.copy(0.12f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "RX",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Black,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
@@ -540,11 +558,9 @@ private fun extractRecordData(record: PerformanceRecord): DisplayRecord {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AchievementsSectionGlass(state: AchievementState) {
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         when (state) {
             is AchievementState.Loading, AchievementState.Idle -> Box(Modifier.padding(24.dp).fillMaxWidth(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
@@ -636,10 +652,8 @@ fun AchievementItem(achievement: AchievementUiModel) {
     }
 
     if (showDialog) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showDialog = false },
-            containerColor = ColorDialogSurface,
-            icon = { Icon(icon, null, tint = iconTint) },
             title = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(achievement.title, color = ColorTextPrimary)
@@ -685,9 +699,8 @@ fun RecordHistoryDialog(
     onDismiss: () -> Unit,
     onDelete: (PerformanceRecord) -> Unit
 ) {
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = ColorDialogSurface,
         title = {
             Text(
                 text = "Historial de $label",
@@ -729,12 +742,10 @@ fun RecordHistoryItem(
     val data = extractRecordData(record)
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.forLanguageTag("es")) }
 
-    Card(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = !expanded },
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface),
-        border = BorderStroke(1.dp, ColorBorder),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -836,11 +847,9 @@ fun TrainingScheduleSummarySectionGlass(viewModel: UserTrainingViewModel, onConf
     val intentions by viewModel.userIntentions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(Modifier.padding(20.dp)) {
             Row(
@@ -1070,10 +1079,9 @@ fun TrainingScheduleSectionGlass(viewModel: UserTrainingViewModel) {
         }
         
         // My Week Summary
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f))
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Mi Semana", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color.White)
@@ -1106,10 +1114,9 @@ fun TrainingScheduleSectionGlass(viewModel: UserTrainingViewModel) {
         }
 
         // Preferences Toggle
-        Card(
+        GlassCard(
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.03f))
+            shape = RoundedCornerShape(16.dp)
         ) {
             Column(Modifier.padding(16.dp)) {
                 Row(

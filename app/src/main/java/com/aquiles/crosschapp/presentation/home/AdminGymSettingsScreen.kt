@@ -29,6 +29,7 @@ import androidx.navigation.NavController
 import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import com.aquiles.crosschapp.data.model.Gym
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
+import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -50,7 +51,7 @@ fun AdminGymSettingsScreen(
     var showSetupPopup by remember { mutableStateOf(setupStepKey != null) }
     
     if (showSetupPopup) {
-        SetupStep.values().find { it.key == setupStepKey }?.let { step ->
+        SetupStep.entries.find { it.toKey() == setupStepKey }?.let { step ->
             AlertDialog(
                 onDismissRequest = { showSetupPopup = false },
                 title = { Text(step.title, color = ColorTextPrimary) },
@@ -102,6 +103,7 @@ fun AdminGymSettingsScreen(
         Scaffold(
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.height(72.dp),
                     title = { Text("Ajustes de Marca", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
@@ -169,7 +171,7 @@ fun AdminGymSettingsScreen(
                     "Colores Sugeridos",
                     style = MaterialTheme.typography.titleMedium,
                     color = ColorTextPrimary,
-                    modifier = Modifier.align(Alignment.Start)
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -207,6 +209,32 @@ fun AdminGymSettingsScreen(
                         }
                     }
                 }
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    "Color Personalizado",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ColorTextPrimary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                OutlinedTextField(
+                    value = selectedColorHex,
+                    onValueChange = { 
+                        if (it.length <= 9) selectedColorHex = it 
+                    },
+                    label = { Text("Código HEX", color = ColorTextSecondary) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ColorPrimaryAction,
+                        unfocusedBorderColor = ColorBorder,
+                        focusedTextColor = ColorTextPrimary,
+                        unfocusedTextColor = ColorTextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Spacer(modifier = Modifier.height(32.dp))
 
@@ -223,12 +251,19 @@ fun AdminGymSettingsScreen(
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
                             onClick = {},
-                            colors = ButtonDefaults.buttonColors(containerColor = selectedColorHex.toColor())
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = try { selectedColorHex.toColor() } catch(e: Exception) { ColorPrimaryAction }
+                            )
                         ) {
-                            Text("Botón Principal")
+                            Text("Botón Principal", color = Color.White)
+                        }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Texto Destacado", color = selectedColorHex.toColor(), fontWeight = FontWeight.Bold)
+                        Text(
+                            "Texto Destacado", 
+                            color = try { selectedColorHex.toColor() } catch(e: Exception) { ColorPrimaryAction }, 
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -259,8 +294,6 @@ fun AdminGymSettingsScreen(
                 }
             }
         }
-    }
-}
 
 private fun Color.toHex(): String {
     return String.format("#%06X", (0xFFFFFF and this.hashCode()))

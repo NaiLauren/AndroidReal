@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,17 +21,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.SubcomposeAsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.CircularProgressIndicator
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import java.util.Calendar
 
 @Composable
-fun HomeGreetingCard(userName: String) {
+fun HomeGreetingCard(userName: String, profileImageUrl: String? = null) {
     val greeting = getGreetingMessage()
     val emoji = getGreetingEmoji()
     val motivation = "Listo para darlo todo hoy. Revisa los Horarios y reserva tu clase."
 
     GlassCard(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Box {
             // Watermark decorativo
@@ -49,29 +56,54 @@ fun HomeGreetingCard(userName: String) {
                 modifier = Modifier.padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Saludo con Emoji
-                Text(
-                    text = buildAnnotatedString {
-                        withStyle(style = SpanStyle(
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Normal
-                        )) {
-                            append("$greeting,\n")
-                        }
-                        withStyle(style = SpanStyle(
-                            color = Color.White,
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold
-                        )) {
-                            append(userName)
-                        }
-                        withStyle(style = SpanStyle(fontSize = 32.sp)) {
-                            append(" $emoji")
-                        }
-                    },
-                    lineHeight = 42.sp
-                )
+                // Header: Saludo y Foto de Perfil
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(style = SpanStyle(
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Normal
+                            )) {
+                                append("$greeting,\n")
+                            }
+                            withStyle(style = SpanStyle(
+                                color = Color.White,
+                                fontSize = 36.sp,
+                                fontWeight = FontWeight.Bold
+                            )) {
+                                append(userName)
+                            }
+                            withStyle(style = SpanStyle(fontSize = 32.sp)) {
+                                append(" $emoji")
+                            }
+                        },
+                        lineHeight = 38.sp,
+                        modifier = Modifier.weight(1f) // Para que el texto tome el espacio disponible
+                    )
+                    
+                    // Foto de Perfil Cricular
+                    Box(
+                        modifier = Modifier
+                            .size(70.dp) // Tamaño generoso para destacar
+                            .clip(CircleShape)
+                            .background(Color.Gray.copy(alpha = 0.3f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        SubcomposeAsyncImage(
+                            model = profileImageUrl,
+                            contentDescription = "Foto de perfil",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop,
+                            loading = { CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary) },
+                            error = { Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(35.dp)) }
+                        )
+                    }
+                }
 
                 // Separador con Gradiente
                 Box(
