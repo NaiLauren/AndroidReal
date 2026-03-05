@@ -7,7 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,11 +38,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
+import com.aquiles.crosschapp.presentation.components.AnimatedXpRing
+import com.aquiles.crosschapp.presentation.components.animatedCounter
+import com.aquiles.crosschapp.presentation.components.animatedGlowGradient
+import com.aquiles.crosschapp.presentation.components.pulsingGlow
+import com.aquiles.crosschapp.presentation.components.FloatingParticlesBackground
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.layout.height
@@ -216,7 +222,7 @@ fun ProfileHeaderIOSStyle(
     onEditClick: () -> Unit,
     isLoadingImage: Boolean,
     onNavigateToRules: () -> Unit,
-    onNavigateToHistory: () -> Unit // Nuevo parámetro
+    onNavigateToHistory: () -> Unit
 ) {
     val nextLevelXP = LevelSystem.getNextLevelXp(user.xp)
     val prevLevelLimit = LevelSystem.getPreviousLevelLimit(user.xp)
@@ -228,9 +234,34 @@ fun ProfileHeaderIOSStyle(
     val memberSinceStr = user.registrationDate?.let { dateFormatMonth.format(it) } ?: "Enero 2025"
     val validUntilStr = user.creditValidUntil?.let { dateFormatMonth.format(it) } ?: "n/a"
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    // Animated counters for stats
+    val animAttendance by animatedCounter(attendanceCount)
+    val animBookings by animatedCounter(activeBookingsCount)
+    val animCredits by animatedCounter(user.credits)
 
-        // ZONA SUPERIOR: Foto, Botón Editar y Tarjeta de Nombre
+    // Animated XP progress bar
+    val animProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "xpBar"
+    )
+
+    // Decoration icon rotation animation
+    val infiniteTransition = rememberInfiniteTransition(label = "profileHeader")
+    val decorRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "decorRot"
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
         Box(modifier = Modifier.fillMaxWidth()) {
 
             // 1. Botón Editar Flotante
@@ -240,7 +271,7 @@ fun ProfileHeaderIOSStyle(
                     .align(Alignment.TopEnd)
                     .padding(end = 4.dp, top = 0.dp)
                     .shadow(elevation = 8.dp, shape = CircleShape)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape) // ROJO/COLOR TEMA
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
                     .size(44.dp)
             ) {
                 Icon(Icons.Default.Edit, contentDescription = "Editar", tint = Color.White, modifier = Modifier.size(20.dp))
@@ -253,50 +284,78 @@ fun ProfileHeaderIOSStyle(
                     .fillMaxWidth()
                     .padding(top = 10.dp)
             ) {
-                // Foto de Perfil
-                val avatarRingBrush = Brush.sweepGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.primary,
-                        Color.White,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                        MaterialTheme.colorScheme.primary
-                    )
-                )
-
+                // Avatar con anillo XP animado + aura pulsante
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(150.dp)
-                        .clip(CircleShape)
-                        .border(BorderStroke(4.dp, avatarRingBrush), CircleShape)
+                    modifier = Modifier.size(170.dp)
                 ) {
-                    if (isLoadingImage) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                    } else {
-                        SubcomposeAsyncImage(
-                            model = user.profileImageUrl,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                            error = { Box(Modifier.fillMaxSize().background(Color.Gray)) { Icon(Icons.Default.Person, null, modifier = Modifier.align(Alignment.Center), tint = Color.White) } }
-                        )
+                    // Anillo XP animado
+                    AnimatedXpRing(
+                        progress = progress,
+                        xp = user.xp,
+                        level = user.level,
+                        size = 168.dp,
+                        trackColor = Color.White.copy(alpha = 0.1f),
+                        progressColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+
+                    // Avatar con glow pulsante
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(148.dp)
+                            .pulsingGlow(
+                                color = MaterialTheme.colorScheme.primary,
+                                minAlpha = 0.15f,
+                                maxAlpha = 0.45f,
+                                durationMs = 2200
+                            )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(140.dp)
+                                .clip(CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isLoadingImage) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            } else {
+                                SubcomposeAsyncImage(
+                                    model = user.profileImageUrl,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    error = {
+                                        Box(Modifier.fillMaxSize().background(Color.Gray)) {
+                                            Icon(Icons.Default.Person, null,
+                                                modifier = Modifier.align(Alignment.Center),
+                                                tint = Color.White)
+                                        }
+                                    }
+                                )
+                            }
+                        }
                     }
-                    
+
+                    // Decoration icon con rotación
                     val decorationName = LevelSystem.getAvatarDecoration(user.level)
                     if (decorationName != null) {
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .offset(x = 4.dp, y = (-4).dp)
+                                .offset(x = (-4).dp, y = 4.dp)
                         ) {
                             Icon(
                                 imageVector = getIconByName(decorationName),
                                 contentDescription = "Rango ${user.level}",
-                                tint = if(user.level == "Elite") Color(0xFFFFD700) else MaterialTheme.colorScheme.primary,
+                                tint = if (user.level == "Elite") Color(0xFFFFD700)
+                                       else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier
                                     .size(36.dp)
                                     .shadow(8.dp, CircleShape)
-                                    .background(Color.White.copy(alpha=0.1f), CircleShape)
+                                    .background(Color.White.copy(alpha = 0.1f), CircleShape)
+                                    .rotate(decorRotation * 0.05f) // giño sutil
                             )
                         }
                     }
@@ -304,122 +363,133 @@ fun ProfileHeaderIOSStyle(
 
                 Spacer(Modifier.height(12.dp))
 
-                // TARJETA CRISTALINA PARA EL PERFIL
+                // TARJETA CRISTALINA CON GRADIENTE ANIMADO
                 com.aquiles.crosschapp.presentation.components.GlassCard(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .animatedGlowGradient(
+                            color1 = MaterialTheme.colorScheme.primary,
+                            color2 = Color(0xFF8B00FF),
+                            durationMs = 7000
+                        ),
                     shape = RoundedCornerShape(16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = user.fullName,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorTextPrimary,
-                            textAlign = TextAlign.Center
+                    Box {
+                        // Partículas sutiles en la card de perfil
+                        FloatingParticlesBackground(
+                            modifier = Modifier.matchParentSize().height(200.dp),
+                            particleColor = MaterialTheme.colorScheme.primary,
+                            particleCount = 8
                         )
+                        Column(
+                            modifier = Modifier.padding(vertical = 12.dp, horizontal = 16.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = user.fullName,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorTextPrimary,
+                                textAlign = TextAlign.Center
+                            )
 
-                        // SUBTITULOS FECHAS
-                        Text(
-                            text = "Miembro desde: $memberSinceStr",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = ColorTextSecondary,
-                            textAlign = TextAlign.Center
-                        )
-                        Text(
-                            text = "Válidos hasta el $validUntilStr",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary, // Resaltado en color tema
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
+                            Text(
+                                text = "Miembro desde: $memberSinceStr",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ColorTextSecondary,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "Válidos hasta el $validUntilStr",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
 
-                        Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(8.dp))
 
-                        // PROGRESS BAR LEVEL
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "Nivel ${user.level.uppercase()}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${user.xp} XP",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = ColorTextSecondary
-                                )
-                            }
-                            Spacer(Modifier.height(6.dp))
-                            // Custom Gradient Progress Bar
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color.White.copy(alpha = 0.2f)) // Track
-                            ) {
+                            // XP PROGRESS BAR ANIMADA
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Nivel ${user.level.uppercase()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${user.xp} XP",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ColorTextSecondary
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth(progress) // Animated by state passed to progress
-                                        .fillMaxHeight()
+                                        .fillMaxWidth()
+                                        .height(8.dp)
                                         .clip(RoundedCornerShape(4.dp))
-                                        .background(
-                                            brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                                colors = listOf(
-                                                    MaterialTheme.colorScheme.primary, // Orange
-                                                    Color(0xFFFFD700) // Gold/Yellow
+                                        .background(Color.White.copy(alpha = 0.2f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(animProgress)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(
+                                                brush = Brush.horizontalGradient(
+                                                    colors = listOf(
+                                                        MaterialTheme.colorScheme.primary,
+                                                        Color(0xFFFFD700)
+                                                    )
                                                 )
                                             )
-                                        )
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = "Próximo nivel en $xpNeeded XP",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ColorTextSecondary,
+                                    modifier = Modifier.align(Alignment.CenterHorizontally)
                                 )
                             }
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "Próximo nivel en $xpNeeded XP",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ColorTextSecondary,
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
-                            )
-                        }
 
-                        Spacer(Modifier.height(8.dp))
-                        
-                        // BOTONES GAMIFICACIÓN
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            OutlinedButton(
-                                onClick = onNavigateToRules,
-                                shape = RoundedCornerShape(50),
-                                border = BorderStroke(1.dp, ColorBorder),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                modifier = Modifier.height(32.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-                            ) {
-                                Text("Reglas", style = MaterialTheme.typography.labelSmall)
-                            }
-                            
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.height(8.dp))
 
-                            Button(
-                                onClick = { onNavigateToHistory() }, // Nuevo callback
-                                shape = RoundedCornerShape(50),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                modifier = Modifier.height(32.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                            // BOTONES
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-                                Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Historial", style = MaterialTheme.typography.labelSmall)
+                                OutlinedButton(
+                                    onClick = onNavigateToRules,
+                                    shape = RoundedCornerShape(50),
+                                    border = BorderStroke(1.dp, ColorBorder),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                    modifier = Modifier.height(32.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                ) {
+                                    Text("Reglas", style = MaterialTheme.typography.labelSmall)
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Button(
+                                    onClick = { onNavigateToHistory() },
+                                    shape = RoundedCornerShape(50),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.height(32.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                ) {
+                                    Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Historial", style = MaterialTheme.typography.labelSmall)
+                                }
                             }
                         }
                     }
@@ -429,11 +499,11 @@ fun ProfileHeaderIOSStyle(
 
         Spacer(Modifier.height(24.dp))
 
-        // ESTADÍSTICAS
+        // ESTADÍSTICAS CON CONTADORES ANIMADOS
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            ProfileStatCard(attendanceCount.toString(), "Clases", Icons.AutoMirrored.Filled.DirectionsRun, Modifier.weight(1f))
-            ProfileStatCard(activeBookingsCount.toString(), "Reservas", Icons.Default.Event, Modifier.weight(1f))
-            ProfileStatCard(user.credits.toString(), "Créditos", Icons.Default.ConfirmationNumber, Modifier.weight(1f))
+            ProfileStatCard(animAttendance.toString(), "Clases", Icons.AutoMirrored.Filled.DirectionsRun, Modifier.weight(1f))
+            ProfileStatCard(animBookings.toString(), "Reservas", Icons.Default.Event, Modifier.weight(1f))
+            ProfileStatCard(animCredits.toString(), "Créditos", Icons.Default.ConfirmationNumber, Modifier.weight(1f))
         }
     }
 }
