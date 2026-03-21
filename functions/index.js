@@ -442,3 +442,63 @@ exports.registerAttendance = onCall({ region: "southamerica-east1" }, async (req
         throw new HttpsError('internal', 'Error al procesar asistencia: ' + error.message);
     }
 });
+
+/**
+ * NUEVA FUNCIÓN: Se activa cuando un Challenge Result es validado o rechazado por un admin.
+ * Notifica al usuario y suma XP si es aprobado.
+ */
+exports.onChallengeResultValidated = onDocumentUpdated({
+    document: "challenge_results/{resultId}",
+    region: "southamerica-east1"
+}, async (event) => {
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+
+    // Solo procesar si el status cambió de "pending" a algo else
+    if (beforeData.validationStatus === afterData.validationStatus) {
+        return null;
+    }
+
+    const userId = afterData.userId;
+    const gymId = afterData.gym_id;
+    const challengeName = afterData.challengeName || "desafío";
+    const isApproved = afterData.validationStatus === "validated";
+    const isRejected = afterData.validationStatus === "rejected";
+
+    if (!isApproved && !isRejected) {
+        return null; // Estado desconocido, ignorar
+    }
+
+    // 1. Crear notificación en la app
+    let title, body, type;
+    if (isApproved) {
+        title = "¡Desafío Validado! 🏆";
+        body = `Tu resultado en "${challengeName}" fue aprobado. ¡Felicidades!`;
+        type = "CHALLENGE_APPROVED";
+    } else {
+        title = "Resultado No Validado ⚠️";
+        body = `Tu resultado en "${challengeName}" fue rechazado. Intenta nuevamente.`;
+        type = "CHALLENGE_REJECTED";
+    }
+
+    await createInAppNotification(userId, gymId, title, body, type);
+
+    // 2. Enviar push notification al usuario
+    const userDoc = await db.collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+        console.log(`Usuario ${userId} no encontrado para notificación de challenge`);
+        return null;
+    }
+
+    const fcmTokens = userDoc.data().fcmTokens;
+    if (fcmTokens && Array.isArray(fcmTokens) && fcmTokens.length > 0) {
+        await sendMulticastAndCleanup(fcmTokens, title, body, {
+            type: type,
+            challengeId: afterData.challengeId,
+            resultId: event.params.resultId
+        }, userId);
+    }
+
+    console.log(`Notificación de validación enviada a ${userId} para ${challengeName}`);
+    return null;
+});

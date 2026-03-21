@@ -155,6 +155,15 @@ class AdminViewModel : ViewModel() {
     private val _pendingResults = MutableStateFlow<List<ChallengeResult>>(emptyList())
     val pendingResults: StateFlow<List<ChallengeResult>> = _pendingResults.asStateFlow()
 
+    private val _challengeLeaderboard = MutableStateFlow<List<ChallengeResult>>(emptyList())
+    val challengeLeaderboard: StateFlow<List<ChallengeResult>> = _challengeLeaderboard.asStateFlow()
+
+    private val _globalChallengeRanking = MutableStateFlow<List<ChallengeResult>>(emptyList())
+    val globalChallengeRanking: StateFlow<List<ChallengeResult>> = _globalChallengeRanking.asStateFlow()
+
+    private val _isLoadingRanking = MutableStateFlow(false)
+    val isLoadingRanking: StateFlow<Boolean> = _isLoadingRanking.asStateFlow()
+
     init {
         listenForPendingRequests()
     }
@@ -2071,6 +2080,103 @@ class AdminViewModel : ViewModel() {
                 if (e != null) return@addSnapshotListener
                 _pendingChallengesCount.value = snapshot?.size() ?: 0
             }
+    }
+
+    // ========== CHALLENGE RESULT SUBMISSION ==========
+
+    fun submitChallengeResult(
+        challengeId: String,
+        score: String,
+        numericScore: Double,
+        isRx: Boolean,
+        notes: String,
+        videoUrl: String? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                val userId = UserSession.currentUser.value?.id ?: return@launch
+                val user = UserSession.currentUser.value ?: return@launch
+                val gymId = currentUserGymId ?: return@launch
+
+                // Get challenge name
+                val challengeDoc = firestore.collection("challenges")
+                    .document(challengeId)
+                    .get().await()
+
+                val challengeName = challengeDoc.getString("name") ?: "Desafío"
+
+                // Create result document
+                val resultData = hashMapOf(
+                    "challengeId" to challengeId,
+                    "challengeName" to challengeName,
+                    "userId" to userId,
+                    "userName" to (user.name ?: ""),
+                    "userLastName" to (user.lastName ?: ""),
+                    "userProfileImage" to (user.profileImage ?: ""),
+                    "userLevel" to (user.level ?: "Principiante"),
+                    "score" to score,
+                    "numericScore" to numericScore,
+                    "isRx" to isRx,
+                    "notes" to notes,
+                    "gym_id" to gymId,
+                    "validationStatus" to "pending",
+                    "videoUrl" to videoUrl,
+                    "date" to FieldValue.serverTimestamp()
+                )
+
+                firestore.collection("challenge_results")
+                    .add(resultData)
+                    .await()
+
+                Log.i("AdminViewModel", "Challenge result submitted successfully")
+
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error submitting challenge result", e)
+            }
+        }
+    }
+
+    // ========== LEADERBOARD & RANKING METHODS ==========
+    
+    fun loadChallengeLeaderboard(challengeId: String) {
+        viewModelScope.launch {
+            try {
+                val results = firestore.collection("challenge_results")
+                    .whereEqualTo("challengeId", challengeId)
+                    .whereEqualTo("validationStatus", "validated")
+                    .get().await()
+                    .toObjects(ChallengeResult::class.java)
+                
+                _challengeLeaderboard.value = results
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error loading challenge leaderboard", e)
+            }
+        }
+    }
+
+    fun loadGlobalChallengeRanking() {
+        viewModelScope.launch {
+            try {
+                _isLoadingRanking.value = true
+                val gymId = currentUserGymId ?: return@launch
+                
+                // Obtener todos los resultados validados de este gym
+                val results = firestore.collection("challenge_results")
+                    .whereEqualTo("gym_id", gymId)
+                    .whereEqualTo("validationStatus", "validated")
+                    .orderBy("numericScore", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(100)
+                    .get().await()
+                    .toObjects(ChallengeResult::class.java)
+                
+                _globalChallengeRanking.value = results
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error loading global ranking", e)
+                _globalChallengeRanking.value = emptyList()
+            } finally {
+                _isLoadingRanking.value = false
+            }
+        }
     }
 
 }
