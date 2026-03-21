@@ -19,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +32,7 @@ import com.aquiles.crosschapp.data.model.ChallengeResult
 import com.aquiles.crosschapp.data.service.VideoUploadService
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
+import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
 
@@ -59,7 +61,7 @@ fun SubmitChallengeResultScreen(
     ) { uri: Uri? ->
         if (uri != null) {
             val fileSize = getFileSize(context, uri)
-            val fileName = getFileName(context, uri)
+            val fileName = getFileName(context, uri) ?: "video"
             val (isValid, errorMsg) = VideoUploadService.validateVideoFile(fileSize, fileName)
 
             if (isValid) {
@@ -258,10 +260,11 @@ fun SubmitChallengeResultScreen(
                         // Upload video if selected
                         if (selectedVideoUri != null && uploadedVideoUrl == null) {
                             isUploading = true
+                            val userId = UserSession.currentUser.value?.id ?: ""
                             val result = VideoUploadService.uploadChallengeVideo(
                                 selectedVideoUri!!,
                                 challengeId,
-                                adminViewModel.currentUserId ?: ""
+                                userId
                             )
                             isUploading = false
 

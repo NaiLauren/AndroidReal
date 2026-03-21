@@ -2112,7 +2112,7 @@ class AdminViewModel : ViewModel() {
                     "userId" to userId,
                     "userName" to (user.name ?: ""),
                     "userLastName" to (user.lastName ?: ""),
-                    "userProfileImage" to (user.profileImage ?: ""),
+                    "userProfileImage" to (user.profileImageUrl ?: ""),
                     "userLevel" to (user.level ?: "Principiante"),
                     "score" to score,
                     "numericScore" to numericScore,
