@@ -115,7 +115,9 @@ class BenchmarkFeedViewModel : ViewModel() {
     private fun emitUnifiedFeed() {
         when (_currentTab.value) {
             FeedTab.TODAY -> {
-                _feedItems.value = _dailyFeedItems.value
+                // Filter items to ONLY show today's results
+                val todayItems = _dailyFeedItems.value.filter { isSameDay(it.date) }
+                _feedItems.value = todayItems
             }
             FeedTab.CHALLENGES -> {
                 _feedItems.value = _globalBenchmarks.value.map { raw ->
@@ -129,6 +131,20 @@ class BenchmarkFeedViewModel : ViewModel() {
                  }
             }
         }
+    }
+
+    private fun isSameDay(itemDate: java.util.Date?): Boolean {
+        if (itemDate == null) return false
+        
+        val calendar = java.util.Calendar.getInstance()
+        val today = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        val todayYear = calendar.get(java.util.Calendar.YEAR)
+        
+        val itemCal = java.util.Calendar.getInstance().apply { time = itemDate }
+        val itemDay = itemCal.get(java.util.Calendar.DAY_OF_YEAR)
+        val itemYear = itemCal.get(java.util.Calendar.YEAR)
+        
+        return today == itemDay && todayYear == itemYear
     }
 
     private fun mapToFeedUiItem(raw: BenchmarkResult, type: FeedItemType): FeedUiItem {
