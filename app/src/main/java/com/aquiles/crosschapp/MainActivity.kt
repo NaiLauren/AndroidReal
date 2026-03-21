@@ -43,6 +43,7 @@ import com.aquiles.crosschapp.ui.theme.CrossChAppTheme
 import com.aquiles.crosschapp.presentation.home.AdminPaymentConfigScreen // IMPORTANTE: Importar la nueva pantalla
 import com.aquiles.crosschapp.presentation.home.AdminCompetitionManagerScreen
 import com.aquiles.crosschapp.presentation.home.AdminCompetitionDetailScreen
+import com.aquiles.crosschapp.presentation.home.OwnerCreateCompetitionScreen
 import com.aquiles.crosschapp.presentation.competition.StudentCompetitionDetailScreen
 import java.time.LocalDate
 
@@ -610,6 +611,10 @@ fun NavGraphBuilder.mainGraph(
                     competitionId = competitionId
                 )
             }
+        }
+        
+        composable("owner_create_competition") {
+            OwnerCreateCompetitionScreen(navController = navController)
         }
         // ------------------------------
         

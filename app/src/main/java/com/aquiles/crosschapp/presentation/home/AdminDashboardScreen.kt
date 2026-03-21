@@ -236,6 +236,15 @@ fun AdminDashboardScreen(
                                 )
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
                                 
+                                if (!isSuperAdmin) {
+                                    AdminListRow(
+                                        title = "Crear Competencia",
+                                        icon = Icons.Default.EmojiEvents,
+                                        onClick = { navController.navigate("owner_create_competition") }
+                                    )
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
+                                }
+                                
                                 if (isSuperAdmin) {
                                     AdminListRow(
                                         title = "Benchmarks (WODs)",
