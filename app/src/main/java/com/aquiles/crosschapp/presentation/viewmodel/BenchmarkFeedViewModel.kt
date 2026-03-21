@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.aquiles.crosschapp.data.model.BenchmarkResult
+import com.aquiles.crosschapp.data.model.ChallengeResult
 import com.aquiles.crosschapp.data.model.Competition
 import com.aquiles.crosschapp.data.model.WodResult
 import com.google.firebase.firestore.FirebaseFirestore
@@ -16,11 +17,12 @@ import kotlinx.coroutines.tasks.await
 sealed class FeedState {
     object Idle : FeedState()
     object Loading : FeedState()
-    data class Success(val items: List<BenchmarkResult>) : FeedState()
+    data class Success(val items: List<Any>) : FeedState()
     data class Error(val message: String) : FeedState()
 }
 
-enum class FeedTab { TODAY, RECORDS, EVENTS }
+enum class FeedTab { TODAY, RECORDS, EVENTS, CHALLENGES }
+enum class FeedItemType { CLASS, BENCHMARK, COMPETITION, GLOBAL }
 
 // Wrapper for UI Items (Unifying WodResult and BenchmarkResult)
 data class FeedUiItem(
@@ -33,8 +35,11 @@ data class FeedUiItem(
     val score: String,
     val isRx: Boolean,
     val isVerified: Boolean,
-    val reactions: Map<String, String>, // [NEW] Mapa real de reacciones
-    val type: FeedTab
+    val reactions: Map<String, String>,
+    val type: FeedItemType, 
+    val videoUrl: String? = null,
+    val validationStatus: String? = null,
+    val gym_id: String = ""
 )
 
 
@@ -64,7 +69,14 @@ class BenchmarkFeedViewModel : ViewModel() {
     val availableBenchmarks = _availableBenchmarks.asStateFlow()
 
     private var listenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
-    private var dailyListenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null // [NEW]
+    private var dailyWodListener: com.google.firebase.firestore.ListenerRegistration? = null 
+    private var dailyBenchmarkListener: com.google.firebase.firestore.ListenerRegistration? = null
+    private var globalChallengesListener: com.google.firebase.firestore.ListenerRegistration? = null
+
+    // State for fusion pipeline
+    private val _wodResults = MutableStateFlow<List<WodResult>>(emptyList())
+    private val _localBenchmarks = MutableStateFlow<List<BenchmarkResult>>(emptyList())
+    private val _globalBenchmarks = MutableStateFlow<List<ChallengeResult>>(emptyList())
 
     // [NEW] Tab & Daily Feed
     private val _currentTab = MutableStateFlow(FeedTab.TODAY)
@@ -94,71 +106,204 @@ class BenchmarkFeedViewModel : ViewModel() {
         if (tab == FeedTab.EVENTS) {
             loadActiveCompetitions()
         }
+        if (tab == FeedTab.CHALLENGES) {
+            loadGlobalChallengesFeed()
+        }
     }
 
     // Call this when underlying data changes or tab changes
     private fun emitUnifiedFeed() {
-        if (_currentTab.value == FeedTab.TODAY) {
-            _feedItems.value = _dailyFeedItems.value
-        } else {
-             // Map Filtered Benchmarks to FeedUiItem
-             _feedItems.value = _filteredItems.value.mapIndexed { index, raw ->
-                FeedUiItem(
-                    id = raw.id,
-                    title = raw.benchmarkName,
-                    userName = "${raw.userName} ${raw.userLastName}".trim(), // Combine names
-                    userProfileImageUrl = raw.userProfileImageUrl,
-                    userLevel = raw.userLevel,
-                    date = raw.date,
-                    score = raw.score,
-                    isRx = raw.isRx,
-                    isVerified = raw.isVerified,
-                    reactions = raw.reactions,
-                    type = FeedTab.RECORDS
-                )
-             }
+        when (_currentTab.value) {
+            FeedTab.TODAY -> {
+                _feedItems.value = _dailyFeedItems.value
+            }
+            FeedTab.CHALLENGES -> {
+                _feedItems.value = _globalBenchmarks.value.map { raw ->
+                    mapChallengeToFeedUiItem(raw)
+                }
+            }
+            else -> {
+                 // Map Filtered Benchmarks to FeedUiItem (Local)
+                 _feedItems.value = _filteredItems.value.map { raw ->
+                    mapToFeedUiItem(raw, if (!raw.competitionId.isNullOrBlank()) FeedItemType.COMPETITION else FeedItemType.BENCHMARK)
+                 }
+            }
         }
     }
 
+    private fun mapToFeedUiItem(raw: BenchmarkResult, type: FeedItemType): FeedUiItem {
+        return FeedUiItem(
+            id = raw.id,
+            title = raw.benchmarkName,
+            userName = "${raw.userName} ${raw.userLastName}".trim(),
+            userProfileImageUrl = raw.userProfileImageUrl,
+            userLevel = raw.userLevel,
+            date = raw.date,
+            score = raw.score,
+            isRx = raw.isRx,
+            isVerified = raw.isVerified,
+            reactions = raw.reactions,
+            type = type,
+            videoUrl = raw.videoUrl,
+            validationStatus = raw.validationStatus,
+            gym_id = raw.gym_id
+        )
+    }
+
+    private fun mapChallengeToFeedUiItem(raw: ChallengeResult): FeedUiItem {
+        return FeedUiItem(
+            id = raw.id,
+            title = raw.challengeName,
+            userName = "${raw.userName} ${raw.userLastName}".trim(),
+            userProfileImageUrl = raw.userProfileImage,
+            userLevel = raw.userLevel.toString(),
+            date = raw.date,
+            score = raw.score,
+            isRx = raw.isRx,
+            isVerified = raw.validationStatus == "validated",
+            reactions = raw.reactions,
+            type = FeedItemType.GLOBAL,
+            videoUrl = raw.videoUrl,
+            validationStatus = raw.validationStatus,
+            gym_id = raw.gym_id
+        )
+    }
+
     private fun loadDailyFeed() {
-         val currentUser = UserSession.currentUser.value ?: return
-         if (currentUser.gym_id.isBlank()) return
-         
-         dailyListenerRegistration?.remove()
-         
-         // Start of Today
-         val calendar = java.util.Calendar.getInstance()
-         calendar.set(java.util.Calendar.HOUR_OF_DAY, 0); calendar.set(java.util.Calendar.MINUTE, 0); calendar.set(java.util.Calendar.SECOND, 0)
-         val startToday = calendar.time
-         
-         dailyListenerRegistration = firestore.collection("wod_results")
+        val currentUser = UserSession.currentUser.value ?: return
+        if (currentUser.gym_id.isBlank()) return
+        
+        // Cleanup listeners
+        dailyWodListener?.remove()
+        dailyBenchmarkListener?.remove()
+        globalChallengesListener?.remove()
+        
+        val calendar = java.util.Calendar.getInstance()
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0); calendar.set(java.util.Calendar.MINUTE, 0); calendar.set(java.util.Calendar.SECOND, 0)
+        val startToday = calendar.time
+        
+        // 1. WOD Results (Local)
+        dailyWodListener = firestore.collection("wod_results")
             .whereEqualTo("gym_id", currentUser.gym_id)
             .whereGreaterThanOrEqualTo("date", startToday)
-            .limit(100)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) { return@addSnapshotListener }
-                if (snapshot != null) {
-                    val rawItems = snapshot.toObjects(WodResult::class.java)
-                    // Map to UI Item
-                    val uiItems = rawItems.map { raw ->
-                        FeedUiItem(
-                            id = raw.id,
-                            title = raw.wodName ?: "WOD del Día",
-                            userName = if (raw.userName.isNotBlank()) raw.userName else "Atleta",
-                            userProfileImageUrl = raw.userProfileImageUrl,
-                            userLevel = if (raw.userLevel.isNotBlank()) raw.userLevel else "Novato",
-                            date = raw.date,
-                            score = raw.score,
-                            isRx = raw.isRx,
-                            isVerified = false,
-                            reactions = raw.reactions,
-                            type = FeedTab.TODAY
-                        )
-                    }.sortedByDescending { it.date }
-                    _dailyFeedItems.value = uiItems
-                    if (_currentTab.value == FeedTab.TODAY) emitUnifiedFeed()
+            .limit(50)
+            .addSnapshotListener { snapshot, _ ->
+                snapshot?.let {
+                    _wodResults.value = it.toObjects(WodResult::class.java)
+                    updateDailyUnifiedFeed()
                 }
             }
+
+        // 2. Local Benchmarks (Today)
+        dailyBenchmarkListener = firestore.collection("benchmark_results")
+            .whereEqualTo("gym_id", currentUser.gym_id)
+            .whereGreaterThanOrEqualTo("date", startToday)
+            .limit(50)
+            .addSnapshotListener { snapshot, _ ->
+                snapshot?.let {
+                    _localBenchmarks.value = it.toObjects(BenchmarkResult::class.java)
+                    updateDailyUnifiedFeed()
+                }
+            }
+
+        // 3. Global Challenges (Today)
+        globalChallengesListener = firestore.collection("challenge_results")
+            .whereEqualTo("gym_id", currentUser.gym_id)
+            .whereGreaterThanOrEqualTo("date", startToday)
+            .limit(50)
+            .addSnapshotListener { snapshot, _ ->
+                snapshot?.let {
+                    _globalBenchmarks.value = it.toObjects(ChallengeResult::class.java)
+                    updateDailyUnifiedFeed()
+                }
+            }
+    }
+
+    private fun loadGlobalChallengesFeed() {
+        globalChallengesListener?.remove()
+        
+        _feedState.value = FeedState.Loading
+        
+        globalChallengesListener = firestore.collection("challenge_results")
+            // Solo aprobados para el feed global general, o todos si queremos ranking
+            .orderBy("date", Query.Direction.DESCENDING)
+            .limit(100)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    _feedState.value = FeedState.Error("Error cargando desafíos")
+                    return@addSnapshotListener
+                }
+                snapshot?.let {
+                    val items = it.toObjects(ChallengeResult::class.java)
+                    _globalBenchmarks.value = items
+                    
+                    // Actualizar lista de benchmarks disponibles (Globales)
+                    if (_currentTab.value == FeedTab.CHALLENGES) {
+                        _availableBenchmarks.value = items.map { result -> result.challengeName }.distinct().sorted()
+                        applyFilters()
+                        _feedState.value = FeedState.Success(items)
+                    }
+                    
+                    if (_currentTab.value != FeedTab.RECORDS) {
+                         emitUnifiedFeed()
+                    }
+                }
+            }
+    }
+
+    private fun updateDailyUnifiedFeed() {
+        val currentUser = UserSession.currentUser.value ?: return
+        val currentGymId = currentUser.gym_id
+        
+        val wods = _wodResults.value.map { raw ->
+            FeedUiItem(
+                id = raw.id,
+                title = raw.wodName ?: "WOD del Día",
+                userName = raw.userName,
+                userProfileImageUrl = raw.userProfileImageUrl,
+                userLevel = raw.userLevel,
+                date = raw.date,
+                score = raw.score,
+                isRx = raw.isRx,
+                isVerified = false,
+                reactions = raw.reactions,
+                type = FeedItemType.CLASS,
+                validationStatus = raw.validationStatus
+            )
+        }
+
+        val localBenchmarks = _localBenchmarks.value.map { raw ->
+            val isCompetition = !raw.competitionId.isNullOrBlank()
+            FeedUiItem(
+                id = raw.id,
+                title = raw.benchmarkName,
+                userName = "${raw.userName} ${raw.userLastName}".trim(),
+                userProfileImageUrl = raw.userProfileImageUrl,
+                userLevel = raw.userLevel,
+                date = raw.date,
+                score = raw.score,
+                isRx = raw.isRx,
+                isVerified = raw.isVerified,
+                reactions = raw.reactions,
+                type = if (isCompetition) FeedItemType.COMPETITION else FeedItemType.BENCHMARK,
+                videoUrl = raw.videoUrl,
+                validationStatus = raw.validationStatus,
+                gym_id = raw.gym_id
+            )
+        }
+
+        val globalBenchmarks = _globalBenchmarks.value.map { raw ->
+            mapChallengeToFeedUiItem(raw)
+        }
+
+        // Merge and Sort
+        // [MOD] Incluir globales del feed de "Hoy" para que el usuario vea su guardado (Paridad iOS)
+        val combined = (wods + localBenchmarks + globalBenchmarks)
+            .distinctBy { it.id }
+            .sortedByDescending { it.date }
+
+        _dailyFeedItems.value = combined
+        if (_currentTab.value == FeedTab.TODAY) emitUnifiedFeed()
     }
 
 
@@ -169,7 +314,7 @@ class BenchmarkFeedViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val snap = firestore.collection("competitions")
-                    .whereEqualTo("gymId", currentUser.gym_id)
+                    .whereEqualTo("gym_id", currentUser.gym_id)
                     // Sin filtro isActive — el owner borra cuando quiere (igual que iOS)
                     .get().await()
                 _activeCompetitions.value = snap.toObjects(Competition::class.java)
@@ -343,7 +488,7 @@ class BenchmarkFeedViewModel : ViewModel() {
         }
 
         _filteredItems.value = currentList
-        if (_currentTab.value == FeedTab.RECORDS) emitUnifiedFeed()
+        if (_currentTab.value == FeedTab.RECORDS || _currentTab.value == FeedTab.CHALLENGES) emitUnifiedFeed()
     }
     
     private fun parseTimeToSeconds(timeString: String): Double {
@@ -371,16 +516,21 @@ class BenchmarkFeedViewModel : ViewModel() {
     }
 
     // MARK: - Reacciones Sociales
-    fun toggleReaction(itemId: String, itemType: FeedTab, emotion: String) {
+    fun toggleReaction(itemId: String, itemType: FeedItemType, emotion: String) {
         val currentUser = UserSession.currentUser.value ?: return
         val currentUserId = currentUser.id
-        val collectionName = if (itemType == FeedTab.TODAY) "wod_results" else "benchmark_results"
+        val collectionName = when (itemType) {
+            FeedItemType.CLASS -> "wod_results"
+            FeedItemType.GLOBAL -> "challenge_results"
+            else -> "benchmark_results"
+        }
         
         viewModelScope.launch {
             try {
                 val docRef = firestore.collection(collectionName).document(itemId)
                 firestore.runTransaction { transaction ->
                     val snapshot = transaction.get(docRef)
+                    @Suppress("UNCHECKED_CAST")
                     val currentReactions = snapshot.get("reactions") as? Map<String, String> ?: emptyMap()
                     
                     val newReactions = currentReactions.toMutableMap()
@@ -400,22 +550,27 @@ class BenchmarkFeedViewModel : ViewModel() {
         }
     }
 
-    fun toggleVerification(itemId: String, currentStatus: Boolean) {
+    fun updateValidationStatus(itemId: String, itemType: FeedItemType, newStatus: String) {
         val currentUser = UserSession.currentUser.value
-        // Security Check: Only admins (Client-side check, enforced by Security Rules)
         if (currentUser?.isAdmin != true && currentUser?.role != "owner") return
+
+        val collectionName = when (itemType) {
+            FeedItemType.CLASS -> "wod_results"
+            FeedItemType.GLOBAL -> "challenge_results"
+            else -> "benchmark_results"
+        }
 
         viewModelScope.launch {
             try {
-                val newStatus = !currentStatus
-                firestore.collection("benchmark_results")
+                firestore.collection(collectionName)
                     .document(itemId)
-                    .update("isVerified", newStatus)
+                    .update(
+                        "validationStatus", newStatus,
+                        "isVerified", newStatus == "approved"
+                    )
                     .await()
-                
-                // No necesitamos recargar manual (loadFeed), el listener lo hará solo.
             } catch (e: Exception) {
-                Log.e("BenchmarkFeedVM", "Error verifying result", e)
+                Log.e("BenchmarkFeedVM", "Error updating validation status", e)
             }
         }
     }
@@ -424,5 +579,8 @@ class BenchmarkFeedViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         listenerRegistration?.remove()
+        dailyWodListener?.remove()
+        dailyBenchmarkListener?.remove()
+        globalChallengesListener?.remove()
     }
 }

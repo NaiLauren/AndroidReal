@@ -41,6 +41,10 @@ class UserTrainingViewModel : ViewModel() {
     private val _xpRewardMessage = MutableStateFlow<String?>(null)
     val xpRewardMessage = _xpRewardMessage.asStateFlow()
 
+    /** Total de XP ganado mediante el Planificador Pro (cap máximo: 140 XP) */
+    private val _scheduleXpEarned = MutableStateFlow(0)
+    val scheduleXpEarned = _scheduleXpEarned.asStateFlow()
+
     private val currentUserGymId: String?
         get() = UserSession.currentUser.value?.gym_id
         
@@ -53,6 +57,7 @@ class UserTrainingViewModel : ViewModel() {
             fetchGymOperatingHours(user.gym_id)
             fetchUserIntentions(user.id, user.gym_id)
             observeGymHeatmap(user.gym_id)
+            fetchScheduleXpEarned(user.id)
         }
     }
 
@@ -84,6 +89,22 @@ class UserTrainingViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 Log.e("UserTrainingViewModel", "Error loading gym operating hours", e)
+            }
+        }
+    }
+
+    /** Carga el total de XP ganado con el Planificador Pro para mostrar la barra de progreso */
+    fun fetchScheduleXpEarned(userId: String) {
+        viewModelScope.launch {
+            try {
+                val snap = firestore.collection("xp_logs")
+                    .whereEqualTo("userId", userId)
+                    .whereEqualTo("type", "SCHEDULE_INTENT")
+                    .get().await()
+                val total = snap.documents.sumOf { (it.getLong("amount") ?: 0L).toInt() }
+                _scheduleXpEarned.value = total
+            } catch (e: Exception) {
+                Log.e("UserTrainingViewModel", "Error fetching schedule XP", e)
             }
         }
     }

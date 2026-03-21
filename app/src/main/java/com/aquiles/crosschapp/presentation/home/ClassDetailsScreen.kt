@@ -206,21 +206,13 @@ private fun ClassDetailsContent(
                 val isLoading = bookingState is BookingState.Loading || adminOperationState is ClassOperationState.Loading
 
                 GlassBottomBar {
-                    if (currentUser.isAdmin) {
-                        AdminActionButtons(
-                            gymClass = gymClass,
-                            isLoading = isLoading,
-                            onSaveAttendance = { adminViewModel.saveAttendance(gymClass.id, attendedUserIds.toList()) }
-                        )
-                    } else {
-                        StudentActionButtons(
-                            gymClass = gymClass,
-                            currentUser = currentUser,
-                            isLoading = isLoading,
-                            onBook = { scheduleViewModel.bookClass(gymClass.id, currentUser) },
-                            onCancel = { scheduleViewModel.cancelBooking(gymClass.id, currentUser) }
-                        )
-                    }
+                    StudentActionButtons(
+                        gymClass = gymClass,
+                        currentUser = currentUser,
+                        isLoading = isLoading,
+                        onBook = { scheduleViewModel.bookClass(gymClass.id, currentUser) },
+                        onCancel = { scheduleViewModel.cancelBooking(gymClass.id, currentUser) }
+                    )
                 }
             }
         }
@@ -281,8 +273,8 @@ private fun ClassDetailsContent(
                 ) {
                     item { ClassHeaderSection(gymClass) }
 
-                    // BOTÓN ALUMNO
-                    if (isEnrolled && isCheckInTime && !currentUser.isAdmin) {
+                    // BOTÓN ALUMNO (O ADMIN SI ENTRENA)
+                    if (isEnrolled && isCheckInTime) {
                         item {
                             if (alreadyCheckedIn) {
                                 Card(
@@ -417,6 +409,18 @@ private fun ClassDetailsContent(
                         }
                     } else {
                         item { AccessDeniedCard { navController.navigate("request_credits_screen") } }
+                    }
+
+                    if (currentUser.isAdmin) {
+                        item {
+                            Spacer(Modifier.height(16.dp))
+                            val isLoading = bookingState is BookingState.Loading || adminOperationState is ClassOperationState.Loading
+                            AdminActionButtons(
+                                gymClass = gymClass,
+                                isLoading = isLoading,
+                                onSaveAttendance = { adminViewModel.saveAttendance(gymClass.id, attendedUserIds.toList()) }
+                            )
+                        }
                     }
                 }
 

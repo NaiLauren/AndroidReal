@@ -66,6 +66,7 @@ class AdminViewModel : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
     private val storage = FirebaseStorage.getInstance()
     private var userListListener: com.google.firebase.firestore.ListenerRegistration? = null
+    private var challengesBadgeListener: com.google.firebase.firestore.ListenerRegistration? = null
 
     private val currentUserGymId: String?
         get() = UserSession.currentUserGymId.value
@@ -100,14 +101,20 @@ class AdminViewModel : ViewModel() {
     private val _scheduleOperationState = MutableStateFlow<String?>(null)
     val scheduleOperationState = _scheduleOperationState.asStateFlow()
 
-    private val _benchmarkWodsState = MutableStateFlow<BenchmarkWodsState>(BenchmarkWodsState.Loading)
-    val benchmarkWodsState: StateFlow<BenchmarkWodsState> = _benchmarkWodsState.asStateFlow()
+    private val _benchmarksState = MutableStateFlow<BenchmarkWodsState>(BenchmarkWodsState.Idle)
+    val benchmarksState: StateFlow<BenchmarkWodsState> = _benchmarksState.asStateFlow()
+
+    private val _challengesState = MutableStateFlow<GlobalChallengesState>(GlobalChallengesState.Idle)
+    val challengesState: StateFlow<GlobalChallengesState> = _challengesState.asStateFlow()
 
     private val _benchmarkOperationState = MutableStateFlow<BenchmarkOperationState>(BenchmarkOperationState.Idle)
     val benchmarkOperationState: StateFlow<BenchmarkOperationState> = _benchmarkOperationState.asStateFlow()
 
     private val _pendingRequestsCount = MutableStateFlow(0)
     val pendingRequestsCount = _pendingRequestsCount.asStateFlow()
+
+    private val _pendingChallengesCount = MutableStateFlow(0)
+    val pendingChallengesCount = _pendingChallengesCount.asStateFlow()
 
     // Suprimimos la advertencia "unused" porque probablemente la UI observa esto
     @Suppress("unused")
@@ -145,6 +152,9 @@ class AdminViewModel : ViewModel() {
     private val _activityImagesState = MutableStateFlow<Map<String, String>>(emptyMap())
     val activityImagesState: StateFlow<Map<String, String>> = _activityImagesState.asStateFlow()
 
+    private val _pendingResults = MutableStateFlow<List<ChallengeResult>>(emptyList())
+    val pendingResults: StateFlow<List<ChallengeResult>> = _pendingResults.asStateFlow()
+
     init {
         listenForPendingRequests()
     }
@@ -159,7 +169,11 @@ class AdminViewModel : ViewModel() {
             val gymId = currentUserGymId
 
             if (adminUser != null && (adminUser.role == "owner" || adminUser.role == "coach" || adminUser.isAdmin) && !gymId.isNullOrBlank()) {
-                action(this, adminUser, gymId)
+                try {
+                    action(this, adminUser, gymId)
+                } catch (e: Exception) {
+                    errorStateSetter("Error de servidor: ${e.message}")
+                }
             } else {
                 errorStateSetter("Error de permisos o de identificación del gimnasio. Tu sesión pudo haber expirado.")
             }
@@ -1096,6 +1110,9 @@ class AdminViewModel : ViewModel() {
 
     fun loadAllUsers() {
         val gymId = currentUserGymId ?: return
+        
+        // Iniciar listener de desafíos si no está activo
+        listenForPendingChallenges()
         markSetupStepComplete("gestion_alumnos")
         _userListState.value = UserListState.Loading
         userListListener?.remove()
@@ -1604,58 +1621,114 @@ class AdminViewModel : ViewModel() {
     fun clearWodDetails() { _wodDetailsState.value = WodDetailsState.Idle }
 
     // --- BENCHMARKS ---
-    fun loadBenchmarkWods() {
+    fun loadBenchmarks() {
         viewModelScope.launch {
             val gymId = currentUserGymId ?: return@launch
-            _benchmarkWodsState.value = BenchmarkWodsState.Loading
+            _benchmarksState.value = BenchmarkWodsState.Loading
             try {
-                // 1. Cargar benchmarks locales
-                val localSnap = firestore.collection("benchmark_wods")
+                val benchLocal = firestore.collection("benchmark_wods")
                     .whereEqualTo("gym_id", gymId)
-                    .orderBy("name")
-                    .get().await()
-                val local = localSnap.toObjects(BenchmarkWod::class.java)
+                    .get().await().toObjects(BenchmarkWod::class.java)
                 
-                // 2. Cargar benchmarks globales
-                val globalSnap = firestore.collection("benchmark_wods")
+                val benchGlobal = firestore.collection("benchmark_wods")
                     .whereEqualTo("gym_id", "")
-                    .get().await()
-                val allGlobal = globalSnap.toObjects(BenchmarkWod::class.java)
-                
-                // 🆕 FILTRAR por allowedGymIds
-                val global = allGlobal.filter { benchmark ->
-                    val allowedIds = benchmark.allowedGymIds
-                    if (!allowedIds.isNullOrEmpty()) {
-                        // Si tiene allowedGymIds, verificar que contenga el gymId actual
-                        allowedIds.contains(gymId)
-                    } else {
-                        // Si es null o vacío, disponible para todos
-                        true
-                    }
-                }
-                
-                // 3. Merge y ordenar
-                val all = (local + global).sortedBy { it.name }
-                _benchmarkWodsState.value = BenchmarkWodsState.Success(all)
+                    .get().await().toObjects(BenchmarkWod::class.java)
+                    .filter { it.allowedGymIds.isNullOrEmpty() || it.allowedGymIds?.contains(gymId) == true }
+
+                val all = (benchLocal + benchGlobal).sortedBy { it.name }
+                _benchmarksState.value = BenchmarkWodsState.Success(all)
             } catch (e: Exception) { 
-                _benchmarkWodsState.value = BenchmarkWodsState.Error(e.message ?: "Error") 
+                _benchmarksState.value = BenchmarkWodsState.Error(e.message ?: "Error") 
             }
         }
     }
+
+    // --- CHALLENGES ---
+    fun loadChallenges() {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            _challengesState.value = GlobalChallengesState.Loading
+            try {
+                val chalLocal = firestore.collection("challenges")
+                    .whereEqualTo("gym_id", gymId)
+                    .get().await().toObjects(GlobalChallenge::class.java)
+                
+                val chalGlobal = firestore.collection("challenges")
+                    .whereEqualTo("gym_id", "")
+                    .get().await().toObjects(GlobalChallenge::class.java)
+                    .filter { it.sponsorIds.isNullOrEmpty() || it.sponsorIds?.contains(gymId) == true }
+                
+                val all = (chalLocal + chalGlobal).sortedBy { it.name }
+                _challengesState.value = GlobalChallengesState.Success(all)
+            } catch (e: Exception) { 
+                _challengesState.value = GlobalChallengesState.Error(e.message ?: "Error") 
+            }
+        }
+    }
+
+    // Mantener por compatibilidad temporal si es necesario, pero redirigir
+    fun loadBenchmarkWods() {
+        loadBenchmarks()
+        loadChallenges()
+    }
+    
     fun saveBenchmark(bench: BenchmarkWod) {
         executeAdminAction({ _benchmarkOperationState.value = BenchmarkOperationState.Error(it)}) { _, gymId ->
             _benchmarkOperationState.value = BenchmarkOperationState.Loading
+            
             val ref = if(bench.id.isEmpty()) firestore.collection("benchmark_wods").document() else firestore.collection("benchmark_wods").document(bench.id)
-            ref.set(bench.copy(id = ref.id, gym_id = gymId)).await()
-            _benchmarkOperationState.value = BenchmarkOperationState.Success("Guardado.")
-            loadBenchmarkWods()
+            
+            ref.set(bench.copy(
+                id = ref.id, 
+                gym_id = gymId, 
+                isGlobal = false,
+                isDesafio = false
+            )).await()
+            
+            _benchmarkOperationState.value = BenchmarkOperationState.Success("Benchmark guardado.")
+            loadBenchmarks()
         }
     }
+    
+    fun saveGlobalChallenge(challenge: GlobalChallenge) {
+        executeAdminAction({ _benchmarkOperationState.value = BenchmarkOperationState.Error(it)}) { _, gymId ->
+            _benchmarkOperationState.value = BenchmarkOperationState.Loading
+            
+            val ref = if(challenge.id.isEmpty()) firestore.collection("challenges").document() else firestore.collection("challenges").document(challenge.id)
+            
+            // ACL: Solo el SuperAdmin puede crear desafíos globales.
+            val finalIsGlobal = challenge.isGlobal && UserSession.isSuperAdmin.value
+            val finalGymId = if (finalIsGlobal) "" else gymId
+            
+            ref.set(challenge.copy(
+                id = ref.id, 
+                gym_id = finalGymId, 
+                isGlobal = finalIsGlobal
+            )).await()
+            
+            _benchmarkOperationState.value = BenchmarkOperationState.Success("Desafío guardado.")
+            loadChallenges()
+        }
+    }
+    
     fun deleteBenchmark(id: String) {
         viewModelScope.launch {
-            try { firestore.collection("benchmark_wods").document(id).delete().await(); loadBenchmarkWods() } catch(_:Exception){}
+            try { 
+                firestore.collection("benchmark_wods").document(id).delete().await()
+                loadBenchmarks()
+            } catch(_:Exception){}
         }
     }
+    
+    fun deleteGlobalChallenge(id: String) {
+        viewModelScope.launch {
+            try { 
+                firestore.collection("challenges").document(id).delete().await()
+                loadChallenges()
+            } catch(_:Exception){}
+        }
+    }
+    
     fun resetBenchmarkOperationState() { _benchmarkOperationState.value = BenchmarkOperationState.Idle }
 
     // --- CORRECCIÓN APLICADA AQUÍ: Ruta correcta de Firebase ---
@@ -1914,6 +1987,7 @@ class AdminViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         userListListener?.remove()
+        challengesBadgeListener?.remove()
     }
     
     // MARK: - Setup Wizard Progress
@@ -1940,4 +2014,63 @@ class AdminViewModel : ViewModel() {
             }
         }
     }
+
+    // --- VALIDACIÓN DE DESAFÍOS ---
+    fun loadPendingChallengeResults() {
+        val gymId = currentUserGymId ?: return
+        viewModelScope.launch {
+            try {
+                val snapshot = firestore.collection("challenge_results")
+                    .whereEqualTo("gym_id", gymId)
+                    .whereEqualTo("validationStatus", "pending")
+                    .get()
+                    .await()
+                
+                val results = snapshot.toObjects(ChallengeResult::class.java)
+                _pendingResults.value = results.sortedByDescending { it.date }
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error loading pending results", e)
+            }
+        }
+    }
+
+    fun validateChallengeResult(result: ChallengeResult, approved: Boolean) {
+        viewModelScope.launch {
+            try {
+                val status = if (approved) "validated" else "rejected"
+                firestore.collection("challenge_results").document(result.id)
+                    .update("validationStatus", status)
+                    .await()
+                
+                if (approved) {
+                    GamificationService.addXp(
+                        userId = result.userId,
+                        gymId = result.gym_id,
+                        amount = 25,
+                        type = "CHALLENGE_VALIDATED",
+                        title = "Desafío Validado",
+                        description = "Ganaste XP por tu resultado en ${result.challengeName}",
+                        relatedId = result.id
+                    )
+                }
+                
+                _pendingResults.value = _pendingResults.value.filter { it.id != result.id }
+            } catch (e: Exception) {
+                Log.e("AdminViewModel", "Error validating result", e)
+            }
+        }
+    }
+    fun listenForPendingChallenges() {
+        val gymId = currentUserGymId ?: return
+        challengesBadgeListener?.remove()
+
+        challengesBadgeListener = firestore.collection("challenge_results")
+            .whereEqualTo("gym_id", gymId)
+            .whereEqualTo("validationStatus", "pending")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) return@addSnapshotListener
+                _pendingChallengesCount.value = snapshot?.size() ?: 0
+            }
+    }
+
 }

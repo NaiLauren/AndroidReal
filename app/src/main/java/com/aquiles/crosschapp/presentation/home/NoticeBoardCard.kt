@@ -1,6 +1,7 @@
 package com.aquiles.crosschapp.presentation.home
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,164 +55,183 @@ fun NoticeBoardCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .height(260.dp) // Fixed height for immersive look
+            .height(260.dp)
+            .border(
+                width = 1.5.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.35f),
+                        gymPrimaryColor.copy(alpha = 0.4f),
+                        Color.White.copy(alpha = 0.1f)
+                    )
+                ),
+                shape = RoundedCornerShape(20.dp)
+            ),
+        shape = RoundedCornerShape(20.dp)
     ) {
-        val imageUrl = notice.actualImageUrl
-        val hasImage = imageUrl.isNotBlank()
+        // Envolvemos todo el contenido en un Box con padding interno para dar el efecto de marco grueso que tiene iOS
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            val imageUrl = notice.actualImageUrl
+            val hasImage = imageUrl.isNotBlank()
 
-        // 1. Background Image (if exists)
-        if (hasImage) {
-            SubcomposeAsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(imageUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop,
-                loading = {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = gymPrimaryColor, modifier = Modifier.size(32.dp))
-                    }
-                },
-                error = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.05f),
-                                        Color.Transparent
+            // 1. Background Image (if exists)
+            if (hasImage) {
+                SubcomposeAsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.Crop,
+                    loading = {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = gymPrimaryColor, modifier = Modifier.size(32.dp))
+                        }
+                    },
+                    error = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = 0.05f),
+                                            Color.Transparent
+                                        )
                                     )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ImageNotSupported,
+                                contentDescription = "Image Error",
+                                tint = Color.Gray.copy(alpha = 0.5f),
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    }
+                )
+                
+                // 2. Scrim (Gradient Overlay for readability)
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.6f),
+                                    Color.Black.copy(alpha = 0.9f)
+                                ),
+                                startY = 100f // Start gradient earlier
+                            )
+                        )
+                )
+            } else {
+                 // Fallback for no image URL at all (same as error state but cleaner)
+                 Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.05f),
+                                    Color.Transparent
                                 )
-                            ),
+                            )
+                        )
+                )
+            }
+
+            // 3. Content Overlay
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Header (Icon & Priority)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Type Icon (with background for visibility)
+                     Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color.Black.copy(0.4f), androidx.compose.foundation.shape.CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ImageNotSupported,
-                            contentDescription = "Image Error",
-                            tint = Color.Gray.copy(alpha = 0.5f),
-                            modifier = Modifier.size(48.dp)
+                            imageVector = when (notice.type) {
+                                NoticeType.CLASS_CANCELLED -> Icons.Default.Cancel
+                                NoticeType.EVENT -> Icons.Default.EmojiEvents
+                                NoticeType.ACHIEVEMENT -> Icons.Default.Star
+                                NoticeType.PRICE_CHANGE -> Icons.Default.AttachMoney
+                                NoticeType.GENERAL -> Icons.Default.Campaign
+                                NoticeType.ANNOUNCEMENT -> Icons.Default.Campaign
+                            },
+                            contentDescription = null,
+                            tint = gymPrimaryColor,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                }
-            )
-            
-            // 2. Scrim (Gradient Overlay for readability)
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.6f),
-                                Color.Black.copy(alpha = 0.9f)
-                            ),
-                            startY = 100f // Start gradient earlier
-                        )
-                    )
-            )
-        } else {
-             // Fallback for no image URL at all (same as error state but cleaner)
-             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.05f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-        }
 
-        // 3. Content Overlay
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Header (Icon & Priority)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Type Icon (with background for visibility)
-                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(Color.Black.copy(0.4f), androidx.compose.foundation.shape.CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = when (notice.type) {
-                            NoticeType.CLASS_CANCELLED -> Icons.Default.Cancel
-                            NoticeType.EVENT -> Icons.Default.EmojiEvents
-                            NoticeType.ACHIEVEMENT -> Icons.Default.Star
-                            NoticeType.PRICE_CHANGE -> Icons.Default.AttachMoney
-                            NoticeType.GENERAL -> Icons.Default.Campaign
-                            NoticeType.ANNOUNCEMENT -> Icons.Default.Campaign
-                            null -> Icons.Default.Campaign // iOS notices without type
-                        },
-                        contentDescription = null,
-                        tint = gymPrimaryColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                if (isAdmin && onDelete != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .background(Color.Black.copy(0.4f), androidx.compose.foundation.shape.CircleShape)
-                            .clickable { onDelete() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    if (isAdmin && onDelete != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color.Black.copy(0.4f), androidx.compose.foundation.shape.CircleShape)
+                                .clickable { onDelete() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
                     }
                 }
-            }
 
-            // Bottom Content (Title, Message, Date)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = notice.title ?: "Novedades",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 2
-                )
-                
-                if (notice.message.isNotEmpty()) {
+                // Bottom Content (Title, Message, Date)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = notice.message,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(0.9f),
-                        maxLines = 3,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        text = notice.title ?: "Novedades",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 2
                     )
-                }
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = getRelativeTimeString(notice.createdAt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(0.6f)
-                    )
-                    if (notice.authorName.isNotEmpty()) {
+                    
+                    if (notice.message.isNotEmpty()) {
                         Text(
-                            text = " • ${notice.authorName}",
+                            text = notice.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(0.9f),
+                            maxLines = 3,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = getRelativeTimeString(notice.createdAt),
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(0.6f)
                         )
+                        if (notice.authorName.isNotEmpty()) {
+                            Text(
+                                text = " • ${notice.authorName}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(0.6f)
+                            )
+                        }
                     }
                 }
             }

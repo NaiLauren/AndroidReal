@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -281,74 +282,93 @@ fun TimelineSection(
     val dimColor = Color.Gray.copy(alpha = 0.3f)
     val circleRadiusDp = 8.dp
     
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp)
-            .drawBehind {
-                val circleRadius = circleRadiusDp.toPx()
-                val xOffset = circleRadius
-                val yStart = 16.dp.toPx()
-                val yEnd = size.height - 16.dp.toPx()
-                
-                val distance = yEnd - yStart
-                val splitY = yStart + (distance * progress)
-                val strokeW = 4.dp.toPx()
-                
-                if (progress > 0f) {
-                    drawLine(color = dimColor, start = androidx.compose.ui.geometry.Offset(xOffset, yStart), end = androidx.compose.ui.geometry.Offset(xOffset, splitY), strokeWidth = strokeW)
-                }
-                if (progress < 1f) {
-                    drawLine(color = primaryColor, start = androidx.compose.ui.geometry.Offset(xOffset, splitY), end = androidx.compose.ui.geometry.Offset(xOffset, yEnd), strokeWidth = strokeW)
-                }
-                
-                val startColor = if (progress > 0f) Color.Gray.copy(alpha=0.5f) else primaryColor
-                drawCircle(color = Color.Black, radius = circleRadius, center = androidx.compose.ui.geometry.Offset(xOffset, yStart))
-                drawCircle(color = startColor, radius = circleRadius - 2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(xOffset, yStart))
-                
-                val endColor = if (progress >= 1f) Color.Gray.copy(alpha=0.5f) else primaryColor
-                drawCircle(color = Color.Black, radius = circleRadius, center = androidx.compose.ui.geometry.Offset(xOffset, yEnd))
-                drawCircle(color = endColor, radius = circleRadius - 2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(xOffset, yEnd))
-            }
+    GlassCardSurface(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        shape = RoundedCornerShape(24.dp)
     ) {
-        Spacer(modifier = Modifier.width(32.dp))
-        
-        Column(modifier = Modifier.weight(1f)) {
-            // HEADER (Start)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(range.startTime, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (progress > 0f) Color.Gray else Color.White)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Apertura", style = MaterialTheme.typography.bodyMedium, color = primaryColor)
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // CONTENT
-            if (classesInRange.isEmpty()) {
-                GlassCardSurface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Acceso Libre", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("Espacio disponible para entrenar por tu cuenta.", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp)
+                .drawBehind {
+                    val circleRadiusDp = 8.dp
+                    val circleRadius = circleRadiusDp.toPx()
+                    val xOffset = 24.dp.toPx() // Same margin as iOS
+                    val yStart = 28.dp.toPx() // Adjusted to center with pill
+                    val yEnd = size.height - 28.dp.toPx()
+                    
+                    val distance = yEnd - yStart
+                    val splitY = yStart + (distance * progress)
+                    val strokeW = 4.dp.toPx()
+                    
+                    if (progress > 0f) {
+                        drawLine(color = dimColor, start = androidx.compose.ui.geometry.Offset(xOffset, yStart), end = androidx.compose.ui.geometry.Offset(xOffset, splitY), strokeWidth = strokeW)
+                    }
+                    if (progress < 1f) {
+                        drawLine(color = primaryColor, start = androidx.compose.ui.geometry.Offset(xOffset, splitY), end = androidx.compose.ui.geometry.Offset(xOffset, yEnd), strokeWidth = strokeW)
+                    }
+                    
+                    val startColor = if (progress > 0f) Color.Gray.copy(alpha=0.5f) else primaryColor
+                    drawCircle(color = Color.Black, radius = circleRadius, center = androidx.compose.ui.geometry.Offset(xOffset, yStart))
+                    drawCircle(color = startColor, radius = circleRadius - 2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(xOffset, yStart))
+                    
+                    val endColor = if (progress >= 1f) Color.Gray.copy(alpha=0.5f) else primaryColor
+                    drawCircle(color = Color.Black, radius = circleRadius, center = androidx.compose.ui.geometry.Offset(xOffset, yEnd))
+                    drawCircle(color = endColor, radius = circleRadius - 2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(xOffset, yEnd))
+                    
+                     // Current time indicator
+                    if (progress > 0f && progress < 1f) {
+                        drawCircle(color = primaryColor, radius = 10.dp.toPx(), center = androidx.compose.ui.geometry.Offset(xOffset, splitY))
+                        drawCircle(color = Color.White, radius = 10.dp.toPx(), center = androidx.compose.ui.geometry.Offset(xOffset, splitY), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
                     }
                 }
-            } else {
-                classesInRange.forEach { gymClass ->
-                    ClassItemCardGlass(gymClass = gymClass, onClick = { onClassClick(gymClass.id) })
-                    Spacer(modifier = Modifier.height(12.dp))
+        ) {
+            Spacer(modifier = Modifier.width(48.dp))
+            
+            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                // HEADER (Start)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(color = Color.White.copy(0.1f), shape = RoundedCornerShape(16.dp)) {
+                        Text(range.startTime, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (progress > 0f) Color.White.copy(0.6f) else Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(color = primaryColor.copy(0.15f), shape = RoundedCornerShape(16.dp)) {
+                         Text("APERTURA", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = primaryColor, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
                 }
-            }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            
-            // FOOTER (End)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(range.endTime, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = if (progress >= 1f) Color.Gray else Color.White)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Cierre", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // CONTENT
+                if (classesInRange.isEmpty()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.AutoMirrored.Filled.DirectionsWalk, contentDescription = null, tint = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Acceso Libre", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Espacio disponible para entrenar por tu cuenta. No hay clases guiadas en este horario.", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(0.6f))
+                    }
+                } else {
+                    classesInRange.forEach { gymClass ->
+                        ClassItemCardGlass(gymClass = gymClass, onClick = { onClassClick(gymClass.id) })
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // FOOTER (End)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(color = Color.White.copy(0.1f), shape = RoundedCornerShape(16.dp)) {
+                        Text(range.endTime, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (progress >= 1f) Color.White.copy(0.6f) else Color.White, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(color = Color.White.copy(0.1f), shape = RoundedCornerShape(16.dp)) {
+                         Text("CIERRE", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color.White.copy(0.5f), modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                }
             }
         }
     }

@@ -21,11 +21,11 @@ import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.aquiles.crosschapp.data.model.GymClass
 import com.aquiles.crosschapp.data.model.WodResult
+import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 import java.text.SimpleDateFormat
 import java.util.*
 
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
-private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
@@ -63,34 +63,34 @@ fun DailyWodCard(
                     contentDescription = "WOD Image",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
-                    loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ColorPrimaryAction) } }
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color(0xFF1C1C1E)), startY = 200f))
-                )
+                    loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = LocalPrimaryColor.current) } }
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color(0xFF1C1C1E)), startY = 200f))
+        )
 
-                // Time & Coach Badges
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Box(modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                        Text(text = "${timeFormatter.format(gymClass.dateTime ?: Date())} HS", color = ColorPrimaryAction, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                    }
-                    if (gymClass.coachName.isNotBlank()) {
-                        Box(modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-                            Text(text = "Coach: ${gymClass.coachName}", color = Color.White, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
+        // Time & Coach Badges
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Text(text = "${timeFormatter.format(gymClass.dateTime ?: Date())} HS", color = LocalPrimaryColor.current, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+            }
+            if (gymClass.coachName.isNotBlank()) {
+                Box(modifier = Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(text = "Coach: ${gymClass.coachName}", color = Color.White, style = MaterialTheme.typography.labelMedium)
                 }
+            }
+        }
 
-                // Title
-                Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
-                    Text(text = "TU CLASE DE HOY", style = MaterialTheme.typography.labelSmall, color = ColorPrimaryAction, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    Text(text = gymClass.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = ColorTextPrimary)
-                }
+        // Title
+        Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+            Text(text = "TU CLASE DE HOY", style = MaterialTheme.typography.labelSmall, color = LocalPrimaryColor.current, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text(text = gymClass.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = ColorTextPrimary)
+        }
 
                 // Expand Indicator
                 if (!isExpanded) {
@@ -119,7 +119,7 @@ fun DailyWodCard(
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Row(modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { isRx = !isRx }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White))
+                            Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = LocalPrimaryColor.current, uncheckedColor = ColorTextSecondary, checkmarkColor = Color.White))
                             Text("RX", fontWeight = FontWeight.Bold, color = if (isRx) ColorTextPrimary else ColorTextSecondary)
                         }
                         
@@ -127,7 +127,7 @@ fun DailyWodCard(
                         Button(
                             onClick = { onSaveResult(userResult, isRx, userNotes) },
                             enabled = userResult.isNotBlank() && !isSavingResult,
-                            colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction, disabledContainerColor = ColorPrimaryAction.copy(alpha = 0.5f)),
+                            colors = ButtonDefaults.buttonColors(containerColor = LocalPrimaryColor.current, disabledContainerColor = LocalPrimaryColor.current.copy(alpha = 0.5f)),
                             shape = RoundedCornerShape(12.dp),
                             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
                         ) {
@@ -160,8 +160,8 @@ fun WodGlassTextField(
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = ColorTextPrimary,
             unfocusedTextColor = ColorTextPrimary,
-            cursorColor = ColorPrimaryAction,
-            focusedBorderColor = ColorPrimaryAction,
+            cursorColor = LocalPrimaryColor.current,
+            focusedBorderColor = LocalPrimaryColor.current,
             unfocusedBorderColor = ColorBorder,
             focusedContainerColor = ColorInputBackground,
             unfocusedContainerColor = ColorInputBackground

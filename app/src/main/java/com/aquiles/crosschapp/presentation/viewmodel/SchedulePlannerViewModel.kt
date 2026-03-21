@@ -338,13 +338,10 @@ class SchedulePlannerViewModel : ViewModel() {
                 // 1. Calculate Dates
                 val calendar = Calendar.getInstance()
                 
-                // FIXED TIMEZONE OFFSET FOR MATERIAL 3 DATEPICKER
-                // Material3 DatePicker devuelve instantes en medianoche UTC, si el usuario esta en UTC-3 o -4 (Ej: 20hs del dia previo)
-                // la fecha "startDate" queda como del "día anterior" al instanciarla en el log local.
-                val utcOffset = TimeZone.getDefault().getOffset(startDate.time)
-                calendar.time = Date(startDate.time + utcOffset) // Compensamos el UTC OffSet local
+                // Ya compensado en la UI (AdminSchedulePlannerScreen)
+                calendar.time = startDate
 
-                // Reset to start of day? Swift did startOfDay.
+                // Limpieza de hora para el Start Day
                 calendar.set(Calendar.HOUR_OF_DAY, 0)
                 calendar.set(Calendar.MINUTE, 0)
                 calendar.set(Calendar.SECOND, 0)

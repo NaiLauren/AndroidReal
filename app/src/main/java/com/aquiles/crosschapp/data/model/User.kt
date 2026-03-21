@@ -25,6 +25,7 @@ data class User(
     var totalClassesAttended: Int = 0,
     var currentClassesReserved: Int = 0,
     
+    // --- PREFERENCIAS DE USUARIO ---
     // --- NUEVO: SCHEMA MATCHING ---
     var hasFreePass: Boolean = false,
     
@@ -50,7 +51,10 @@ data class User(
 
     // --- RASTRO DIGITAL LEGAL (AUDITORÍA) ---
     var waiverVersion: String? = null,
-    var waiverDevice: String? = null
+    var waiverDevice: String? = null,
+    var facilityName: String? = null,
+    var wallpaperStyle: String? = null,
+    val isSuperAdminField: Boolean = false // NUEVO: Flag desde Firestore
 ) {
     @get:Exclude
     val hasValidCredits: Boolean
@@ -75,6 +79,10 @@ data class User(
     @get:Exclude
     val isMember: Boolean
         get() = this.role == "member"
+
+    @get:Exclude
+    val isSuperAdmin: Boolean
+        get() = this.isSuperAdminField || this.role == "SUPER_ADMIN"
 
     // Permite entrar al Horario si es Admin, tiene créditos O tiene reservas pendientes.
     @get:Exclude

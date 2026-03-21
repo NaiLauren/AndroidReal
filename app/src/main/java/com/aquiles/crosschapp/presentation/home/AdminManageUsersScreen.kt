@@ -40,6 +40,8 @@ import com.aquiles.crosschapp.presentation.viewmodel.UserListState
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
+import com.aquiles.crosschapp.presentation.components.CompetitionSegmentedControl
+import com.aquiles.crosschapp.presentation.components.SetupStepBottomSheet
 import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
@@ -69,16 +71,9 @@ fun AdminManageUsersScreen(
     
     if (showSetupPopup) {
         SetupStep.entries.find { it.toKey() == setupStepKey }?.let { step ->
-            AlertDialog(
-                onDismissRequest = { showSetupPopup = false },
-                title = { Text(step.title, color = ColorTextPrimary) },
-                text = { Text(step.description, color = ColorTextSecondary) },
-                confirmButton = {
-                    Button(onClick = { showSetupPopup = false }, colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryAction)) { 
-                        Text("Entendido", color = Color.White) 
-                    }
-                },
-                containerColor = ColorGlassSurface
+            SetupStepBottomSheet(
+                step = step,
+                onDismiss = { showSetupPopup = false }
             )
         }
     }
@@ -93,10 +88,17 @@ fun AdminManageUsersScreen(
         adminViewModel.loadAllUsers()
     }
 
+    val filterItems = listOf("⚠️ Sin Firma", "Vencen", "A-Z")
+    val selectedFilterIndex = when(sortOrder) {
+        SortOrder.MISSING_WAIVER -> 0
+        SortOrder.EXPIRATION_SOON -> 1
+        SortOrder.ALPHABETICAL -> 2
+        else -> 0
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // .background(Color.Black.copy(alpha = 0.4f)) // Removed for glass background
     ) {
         Scaffold(
             topBar = {
@@ -135,30 +137,20 @@ fun AdminManageUsersScreen(
             ) {
                 GlassSearchBar(query = searchQuery, onQueryChange = { searchQuery = it })
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // 2. FILTROS (SCROLLABLE ROW SI SON MUCHOS)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // --- NUEVO FILTRO: SIN FIRMA ---
-                    GlassFilterChip(
-                        selected = sortOrder == SortOrder.MISSING_WAIVER,
-                        onClick = { sortOrder = SortOrder.MISSING_WAIVER },
-                        label = "⚠️ Sin Firma"
-                    )
-                    GlassFilterChip(
-                        selected = sortOrder == SortOrder.EXPIRATION_SOON,
-                        onClick = { sortOrder = SortOrder.EXPIRATION_SOON },
-                        label = "Vencen"
-                    )
-                    GlassFilterChip(
-                        selected = sortOrder == SortOrder.ALPHABETICAL,
-                        onClick = { sortOrder = SortOrder.ALPHABETICAL },
-                        label = "A-Z"
-                    )
-                }
+                CompetitionSegmentedControl(
+                    selectedIndex = selectedFilterIndex,
+                    items = filterItems,
+                    onIndexChanged = { index: Int ->
+                        sortOrder = when(index) {
+                            0 -> SortOrder.MISSING_WAIVER
+                            1 -> SortOrder.EXPIRATION_SOON
+                            2 -> SortOrder.ALPHABETICAL
+                            else -> SortOrder.MISSING_WAIVER
+                        }
+                    }
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 

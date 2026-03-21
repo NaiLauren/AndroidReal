@@ -290,8 +290,13 @@ fun NavGraphBuilder.mainGraph(
                 onNavigateToNotifications = { navController.navigate("notifications_screen") },
                 onNavigateToMessageArchive = { navController.navigate("message_archive") },
                 onNavigateToCreateNotice = { navController.navigate("create_notice") },
-                onNavigateToCompetition = { competitionId -> navController.navigate("student_competition/$competitionId") }
+                onNavigateToCompetition = { competitionId -> navController.navigate("student_competition/$competitionId") },
+                onNavigateToWall = { navController.navigate("wall_of_results") }
             )
+        }
+
+        composable("wall_of_results") {
+            WallOfResultsScreen(navController = navController)
         }
 
         composable("message_archive") {
@@ -307,12 +312,14 @@ fun NavGraphBuilder.mainGraph(
         }
 
         composable(BottomNavItem.Profile.route) {
+            val profileVm: ProfileViewModel = viewModel()
             ProfileScreen(
                 innerPadding = innerPadding,
-                profileViewModel = viewModel(),
+                profileViewModel = profileVm,
                 onEditProfileClicked = { navController.navigate("edit_profile_screen") },
                 onNavigateToRequestCredits = { navController.navigate("request_credits_screen") },
                 onNavigateToAdminDashboard = { navController.navigate("admin_dashboard_screen") },
+                onNavigateToAchievements = { navController.navigate("achievements_screen") },
                 onNavigateToRules = { navController.navigate("gamification_rules_screen") },
                 onNavigateToHistory = { navController.navigate("xp_history_screen") },
                 onLogout = onLogout
@@ -387,6 +394,14 @@ fun NavGraphBuilder.mainGraph(
                 navController = navController
             )
         }
+
+        composable("admin_validate_challenges") {
+            AdminValidateChallengesScreen(
+                innerPadding = innerPadding,
+                navController = navController,
+                adminViewModel = viewModel()
+            )
+        }
         composable("admin_credit_requests") {
             AdminCreditRequestsScreen(
                 innerPadding = innerPadding,
@@ -434,7 +449,21 @@ fun NavGraphBuilder.mainGraph(
             AdminManageBenchmarksScreen(
                 innerPadding = innerPadding,
                 navController = navController,
-                adminViewModel = viewModel()
+                adminViewModel = viewModel(),
+                onlyGlobal = false
+            )
+        }
+
+        composable(
+            route = "admin_manage_challenges?onlyGlobal={onlyGlobal}",
+            arguments = listOf(navArgument("onlyGlobal") { type = NavType.BoolType; defaultValue = false })
+        ) { backStackEntry ->
+            val onlyGlobalArg = backStackEntry.arguments?.getBoolean("onlyGlobal") ?: false
+            AdminManageChallengesScreen(
+                innerPadding = innerPadding,
+                navController = navController,
+                adminViewModel = viewModel(),
+                onlyGlobal = onlyGlobalArg
             )
         }
         
@@ -599,13 +628,29 @@ fun NavGraphBuilder.mainGraph(
             }
         }
         
-        // --- NUEVA RUTA: HISTORIAL XP ---
+        // --- RUTA: HISTORIAL XP ---
         composable("xp_history_screen") {
-            // Importación en línea o agregar import manual si falla.
-            // Asegurarse de tener: import com.aquiles.crosschapp.presentation.ui.gamification.XpHistoryScreen
             com.aquiles.crosschapp.presentation.ui.gamification.XpHistoryScreen(
                 onBackClick = { navController.popBackStack() }
             )
+        }
+
+        // --- RUTA: ÁLBUM DE LOGROS ---
+        composable("achievements_screen") {
+            val user by UserSession.currentUser.collectAsState()
+            val profileVm: ProfileViewModel = viewModel()
+            val attendanceState by profileVm.attendanceHistoryState.collectAsState()
+            val attendanceCount = if (attendanceState is AttendanceHistoryState.Success)
+                (attendanceState as AttendanceHistoryState.Success).records.size
+            else 0
+            if (user != null) {
+                com.aquiles.crosschapp.presentation.ui.gamification.AchievementsScreen(
+                    user = user!!,
+                    totalClassesAttended = attendanceCount,
+                    onBackClick = { navController.popBackStack() },
+                    onNavigateToRules = { navController.navigate("gamification_rules_screen") }
+                )
+            }
         }
         // --------------------------------
         composable(
@@ -650,15 +695,5 @@ fun NavGraphBuilder.mainGraph(
             )
         }
 
-        composable(
-            route = "student_competition/{competitionId}",
-            arguments = listOf(navArgument("competitionId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val competitionId = backStackEntry.arguments?.getString("competitionId") ?: ""
-            StudentCompetitionDetailScreen(
-                competitionId = competitionId,
-                navController = navController
-            )
-        }
     }
 }

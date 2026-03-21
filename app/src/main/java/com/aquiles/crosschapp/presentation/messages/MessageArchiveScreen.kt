@@ -1,18 +1,17 @@
 package com.aquiles.crosschapp.presentation.messages
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Attachment
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MarkEmailUnread
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,26 +19,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.aquiles.crosschapp.data.model.PersonalMessage
-import com.aquiles.crosschapp.presentation.viewmodel.MessageHistoryState
-import com.aquiles.crosschapp.presentation.viewmodel.MessageArchiveViewModel
 import com.aquiles.crosschapp.presentation.components.FullScreenMediaDialog
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import com.aquiles.crosschapp.presentation.viewmodel.MessageArchiveViewModel
+import com.aquiles.crosschapp.presentation.viewmodel.MessageHistoryState
 import java.text.SimpleDateFormat
 import java.util.*
 
-// --- DESIGN SYSTEM CONSTANTS ---
-private val ColorPrimaryAction = Color(0xFFFC5200)
+private val ColorPrimary = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
-private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
-private val ColorBorder = Color.White.copy(alpha = 0.15f)
-private val ColorError = Color(0xFFEF5350)
+private val ColorTextSecondary = Color.White.copy(alpha = 0.65f)
+private val ColorBubbleBg = Color(0xFF1C1C2E)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,61 +46,83 @@ fun MessageArchiveScreen(
 ) {
     val messagesState by viewModel.messagesState.collectAsState()
     var selectedMediaUrl by remember { mutableStateOf<String?>(null) }
+    var messageToDelete by remember { mutableStateOf<String?>(null) }
 
-    // --- UI STRUCTURE ---
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
-    ) {
-        Scaffold(
-            topBar = {
-                CenterAlignedTopAppBar(
-                    modifier = Modifier.height(72.dp),
-                    title = { Text("Mensajes", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
-                    navigationIcon = {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
-                        }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color(0xFF1C1C1E).copy(alpha = 0.85f))
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        "Mensajes",
+                        fontWeight = FontWeight.Bold,
+                        color = ColorTextPrimary,
+                        fontSize = 18.sp
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color(0xFF0D0D0D).copy(alpha = 0.9f)
                 )
-            },
-            containerColor = Color.Transparent
-        ) { localPadding ->
-            Box(modifier = Modifier.fillMaxSize().padding(localPadding)) {
-                when (val state = messagesState) {
-                    is MessageHistoryState.Loading -> {
-                        CircularProgressIndicator(color = ColorPrimaryAction, modifier = Modifier.align(Alignment.Center))
+            )
+        },
+        containerColor = Color.Transparent
+    ) { localPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(localPadding)) {
+            when (val state = messagesState) {
+                is MessageHistoryState.Loading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = ColorPrimary, strokeWidth = 3.dp)
                     }
-                    is MessageHistoryState.Error -> {
-                        Text(state.message, color = ColorError, modifier = Modifier.align(Alignment.Center))
+                }
+                is MessageHistoryState.Error -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(state.message, color = Color(0xFFFF3B30), modifier = Modifier.padding(24.dp), textAlign = TextAlign.Center)
                     }
-                    is MessageHistoryState.Empty -> {
-                        Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.MarkEmailUnread, null, tint = ColorTextSecondary.copy(alpha = 0.5f), modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("Bandeja vacía", color = ColorTextSecondary)
-                        }
-                    }
-                    is MessageHistoryState.Success -> {
-                        LazyColumn(
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            items(state.messages, key = { it.id }) { message ->
-                                MessageBubble(
-                                    message = message,
-                                    onDeleteClick = { viewModel.deleteMessage(message.id) },
-                                    onAttachmentClick = { url -> selectedMediaUrl = url }
-                                )
-                            }
+                }
+                is MessageHistoryState.Empty -> {
+                    MessagesEmptyState()
+                }
+                is MessageHistoryState.Success -> {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(state.messages, key = { it.id }) { message ->
+                            MessageCard(
+                                message = message,
+                                onDeleteClick = { messageToDelete = message.id },
+                                onAttachmentClick = { url -> selectedMediaUrl = url }
+                            )
                         }
                     }
                 }
             }
+
+            // Dialog confirmación de borrar
+            messageToDelete?.let { id ->
+                AlertDialog(
+                    onDismissRequest = { messageToDelete = null },
+                    title = { Text("Eliminar mensaje", color = ColorTextPrimary, fontWeight = FontWeight.Bold) },
+                    text = { Text("¿Querés eliminar este mensaje? Esta acción no se puede deshacer.", color = ColorTextSecondary) },
+                    confirmButton = {
+                        Button(
+                            onClick = { viewModel.deleteMessage(id); messageToDelete = null },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30))
+                        ) { Text("Eliminar", color = Color.White) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { messageToDelete = null }) { Text("Cancelar", color = ColorTextSecondary) }
+                    },
+                    containerColor = Color(0xFF1C1C2E),
+                    shape = RoundedCornerShape(20.dp)
+                )
+            }
         }
-        
+
         selectedMediaUrl?.let { url ->
             FullScreenMediaDialog(mediaUrl = url, onDismiss = { selectedMediaUrl = null })
         }
@@ -111,41 +130,53 @@ fun MessageArchiveScreen(
 }
 
 @Composable
-fun MessageBubble(
+private fun MessageCard(
     message: PersonalMessage,
     onDeleteClick: () -> Unit,
     onAttachmentClick: (String) -> Unit
 ) {
-    // Usamos GlassCard para cada mensaje en la bandeja en lugar de una burbuja de chat genérica
+    val initials = message.sender_name
+        .split(" ")
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        .joinToString("")
+        .ifBlank { "?" }
+
     GlassCard(
-        modifier = Modifier.fillMaxWidth().clickable {
-            // Si no hay botón adjunto, podríamos expandir o hacer algo al click. Por ahora no hace nada.
-        },
-        shape = RoundedCornerShape(16.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                1.dp,
+                Brush.linearGradient(
+                    listOf(Color.White.copy(0.12f), ColorPrimary.copy(0.15f), Color.White.copy(0.05f))
+                ),
+                RoundedCornerShape(20.dp)
+            ),
+        shape = RoundedCornerShape(20.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            // Header: Icono + Remitente + Fecha
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar / Icono Sender
+                // Avatar con iniciales y gradiente
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(androidx.compose.foundation.shape.CircleShape)
-                        .background(ColorPrimaryAction.copy(alpha = 0.2f)),
+                        .size(46.dp)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(ColorPrimary, Color(0xFFFF6B35))
+                            ),
+                            CircleShape
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.MarkEmailUnread,
-                        contentDescription = null,
-                        tint = ColorPrimaryAction,
-                        modifier = Modifier.size(18.dp)
+                    Text(
+                        text = initials,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
                     )
                 }
 
@@ -154,60 +185,141 @@ fun MessageBubble(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = message.sender_name,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = ColorTextPrimary
                     )
                     Text(
                         text = formatTimestamp(message.timestamp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = ColorTextSecondary
+                        color = Color.White.copy(0.35f)
                     )
                 }
 
-                // Delete Button
-                IconButton(onClick = onDeleteClick, modifier = Modifier.size(24.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Borrar",
-                        tint = ColorTextSecondary.copy(alpha = 0.5f)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Body
-            if (message.content.isNotBlank()) {
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = ColorTextSecondary,
-                    lineHeight = 22.sp
-                )
-            }
-
-            // Attachment
-            if (!message.attachmentUrl.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedButton(
-                    onClick = { onAttachmentClick(message.attachmentUrl!!) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, ColorBorder),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ColorTextPrimary)
+                // Botón borrar
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(Color.White.copy(0.05f), CircleShape)
+                        .border(1.dp, Color.White.copy(0.1f), CircleShape)
+                        .clickable { onDeleteClick() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Attachment, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Ver Adjunto", style = MaterialTheme.typography.labelMedium)
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Borrar",
+                        tint = Color.White.copy(0.4f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            // Separador sutil
+            Spacer(Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color.Transparent, Color.White.copy(0.08f), Color.Transparent)
+                        )
+                    )
+            )
+            Spacer(Modifier.height(12.dp))
+
+            // Cuerpo del mensaje con fondo sutil
+            if (message.content.isNotBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White.copy(0.04f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ColorTextSecondary,
+                        lineHeight = 22.sp
+                    )
+                }
+            }
+
+            // Adjunto
+            if (!message.attachmentUrl.isNullOrBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(ColorPrimary.copy(0.08f), RoundedCornerShape(12.dp))
+                        .border(1.dp, ColorPrimary.copy(0.25f), RoundedCornerShape(12.dp))
+                        .clickable { onAttachmentClick(message.attachmentUrl!!) }
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(ColorPrimary.copy(0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Attachment, null, tint = ColorPrimary, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("Archivo adjunto", style = MaterialTheme.typography.labelMedium, color = ColorTextPrimary, fontWeight = FontWeight.SemiBold)
+                            Text("Toca para ver", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, null, tint = ColorPrimary.copy(0.7f), modifier = Modifier.size(16.dp))
+                    }
                 }
             }
         }
     }
 }
 
+@Composable
+private fun MessagesEmptyState() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(40.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .background(
+                        Brush.radialGradient(listOf(ColorPrimary.copy(0.15f), Color.Transparent)),
+                        CircleShape
+                    )
+                    .border(1.dp, ColorPrimary.copy(0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.MarkEmailUnread, null, tint = Color.White.copy(0.3f), modifier = Modifier.size(48.dp))
+            }
+            Text("Bandeja vacía", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
+            Text(
+                "Cuando el coach o el gym te envíen un mensaje, va a aparecer acá.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = ColorTextSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 20.sp
+            )
+        }
+    }
+}
+
 fun formatTimestamp(date: Date?): String {
     if (date == null) return ""
-    val sdf = SimpleDateFormat("dd MMM, HH:mm", Locale.forLanguageTag("es-ES")) // Formato más corto
-    return sdf.format(date)
+    val now = System.currentTimeMillis()
+    val diff = now - date.time
+    return when {
+        diff < 60_000L -> "Ahora"
+        diff < 3600_000L -> "${diff / 60_000} min"
+        diff < 86400_000L -> "${diff / 3600_000} h"
+        diff < 172800_000L -> "Ayer"
+        else -> SimpleDateFormat("dd MMM · HH:mm", Locale.forLanguageTag("es-ES")).format(date)
+    }
 }

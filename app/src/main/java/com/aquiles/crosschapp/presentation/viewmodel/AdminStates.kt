@@ -85,12 +85,14 @@ sealed class AppConfigState {
     object Loading: AppConfigState()
     data class Success(val imagesByDay: Map<String, String>) : AppConfigState()
     data class Error(val message: String) : AppConfigState()
+    object Idle : AppConfigState()
 }
 
 sealed class BenchmarkWodsState {
     data object Loading: BenchmarkWodsState()
     data class Success(val wods: List<BenchmarkWod>) : BenchmarkWodsState()
     data class Error(val message: String) : BenchmarkWodsState()
+    object Idle : BenchmarkWodsState()
 }
 
 sealed class WodsDashboardState {

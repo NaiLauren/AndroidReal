@@ -4,6 +4,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -223,7 +224,7 @@ fun AnimatedXpRing(
     progress: Float,
     xp: Int,
     level: String,
-    size: Dp = 130.dp,
+    ringSize: Dp = 130.dp,
     trackColor: Color = Color.White.copy(alpha = 0.1f),
     progressColor: Color = Color(0xFFFC5200),
     modifier: Modifier = Modifier
@@ -250,9 +251,9 @@ fun AnimatedXpRing(
 
     val sweepAngle = animatedProgress * 360f
 
-    Canvas(modifier = modifier.then(Modifier.size(size))) {
+    Canvas(modifier = modifier.then(Modifier.size(ringSize))) {
         val strokeWidth = 12.dp.toPx()
-        val diameter = this.size.minDimension - strokeWidth
+        val diameter = size.minDimension - strokeWidth
         val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
         val arcSize = androidx.compose.ui.geometry.Size(diameter, diameter)
 
@@ -288,7 +289,7 @@ fun AnimatedXpRing(
         if (sweepAngle > 5f) {
             val endAngleRad = Math.toRadians((-90f + sweepAngle).toDouble())
             val radius = diameter / 2f
-            val center = Offset(this.size.width / 2f, this.size.height / 2f)
+            val center = Offset(size.width / 2f, size.height / 2f)
             val dotCenter = Offset(
                 (center.x + radius * cos(endAngleRad)).toFloat(),
                 (center.y + radius * sin(endAngleRad)).toFloat()
@@ -312,5 +313,5 @@ fun animatedCounter(target: Int, durationMs: Int = 1200): State<Int> {
             animationSpec = tween(durationMs, easing = FastOutSlowInEasing)
         )
     }
-    return derivedStateOf { animatable.value.toInt() }
+    return remember { derivedStateOf { animatable.value.toInt() } }
 }

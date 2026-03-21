@@ -33,6 +33,9 @@ data class BenchmarkResult(
     val likeCount: Int = 0,
     val reactions: Map<String, String> = emptyMap(), // Firebase: { "userId": "fire/flex/clap" }
     
+    // Video Verification
+    val videoUrl: String? = null,
+    
     // Competencias (sincronizado con iOS — BenchmarkResult.swift)
     val validationStatus: String? = null, // "pending", "approved", "rejected"
     val competitionId: String? = null,

@@ -51,7 +51,10 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.Image
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.res.painterResource
 import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 
 // --- CONSTANTES DE DISEÑO MEJORADAS ---
@@ -298,6 +301,8 @@ fun EditProfileScreen(
                                 }
                             }
                         }
+
+                        // El selector de Fondos de Pantalla fue movido a la nube según configuración del Gym
 
                         // --- CONTACTO ---
                         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {

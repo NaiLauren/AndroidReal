@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,6 +36,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import androidx.compose.foundation.layout.height
+import com.aquiles.crosschapp.presentation.home.Column
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -50,8 +52,9 @@ fun AdminDashboardScreen(
     navController: NavController,
     adminViewModel: AdminViewModel = viewModel()
 ) {
-    // Collect pending requests count
+    // Collect pending requests and challenges count
     val pendingRequests by adminViewModel.pendingRequestsCount.collectAsState()
+    val pendingChallenges by adminViewModel.pendingChallengesCount.collectAsState()
     
     // Collect current gym for setup progress
     val currentGym by UserSession.currentGym.collectAsState()
@@ -59,6 +62,7 @@ fun AdminDashboardScreen(
     // Trigger loading of requests on enter
     LaunchedEffect(Unit) {
         adminViewModel.loadPendingRequests()
+        adminViewModel.listenForPendingChallenges()
         adminViewModel.checkAndCloseYesterday()
     }
 
@@ -100,25 +104,29 @@ fun AdminDashboardScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                // 1. HEADER (Texto estático, sin GlassCard para no parecer botón)
+                // 1. HEADER (Efecto Glass solicitado por el usuario)
                 item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp)
+                    GlassCard(
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Bienvenido al Panel de Control",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = ColorTextPrimary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Gestiona tu gimnasio en tiempo real",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = ColorTextSecondary
-                        )
+                        Column(
+                            modifier = Modifier
+                                .padding(20.dp)
+                        ) {
+                            Text(
+                                text = "Bienvenido al Panel de Control",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ColorTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Gestiona tu gimnasio en tiempo real",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ColorTextSecondary
+                            )
+                        }
                     }
                 }
                 
@@ -203,27 +211,46 @@ fun AdminDashboardScreen(
                         GlassCard(
                             shape = RoundedCornerShape(12.dp)
                         ) {
+                            val isSuperAdmin by UserSession.isSuperAdmin.collectAsState()
                             Column {
-                            AdminListRow(
+                                if (isSuperAdmin) {
+                                    AdminListRow(
+                                        title = "Desafíos Globales",
+                                        icon = Icons.Default.Public,
+                                        onClick = { navController.navigate("admin_manage_challenges?onlyGlobal=true") }
+                                    )
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
+                                } else {
+                                    AdminListRow(
+                                        title = "Desafíos del Centro",
+                                        icon = Icons.Default.EmojiEvents,
+                                        onClick = { navController.navigate("admin_manage_challenges?onlyGlobal=false") }
+                                    )
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
+                                }
+                                
+                                AdminListRow(
                                     title = "Gestionar Packs",
                                     icon = Icons.AutoMirrored.Filled.Label, // Fixed deprecation
                                     onClick = { navController.navigate("admin_manage_packs_screen") }
                                 )
                                 HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
                                 
-                                AdminListRow(
-                                    title = "Torneos y Compe",
-                                    icon = Icons.Default.EmojiEvents, // Trophy icon
-                                    onClick = { navController.navigate("admin_competition_manager") }
-                                )
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
+                                if (isSuperAdmin) {
+                                    AdminListRow(
+                                        title = "Benchmarks (WODs)",
+                                        icon = Icons.AutoMirrored.Filled.List,
+                                        onClick = { navController.navigate("admin_manage_benchmarks") }
+                                    )
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
 
-                                AdminListRow(
-                                    title = "Benchmarks (WODs)",
-                                    icon = Icons.AutoMirrored.Filled.List, // List.star equivalent
-                                    onClick = { navController.navigate("admin_manage_benchmarks") }
-                                )
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
+                                    AdminListRow(
+                                        title = "Torneos y Compe",
+                                        icon = Icons.Default.EmojiEvents,
+                                        onClick = { navController.navigate("admin_competition_manager") }
+                                    )
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
+                                }
 
                                 AdminListRow(
                                     title = "Ajustes de Marca",
@@ -236,6 +263,14 @@ fun AdminDashboardScreen(
                                     title = "Novedades y Avisos",
                                     icon = Icons.Default.Campaign,
                                     onClick = { navController.navigate("admin_news_screen") }
+                                )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
+
+                                AdminListRow(
+                                    title = "Buzón de Desafíos Globales",
+                                    icon = Icons.Default.Verified,
+                                    badgeCount = pendingChallenges,
+                                    onClick = { navController.navigate("admin_validate_challenges") }
                                 )
                             }
                         }
@@ -380,6 +415,7 @@ fun DashboardCard(
 fun AdminListRow(
     title: String,
     icon: ImageVector,
+    badgeCount: Int = 0,
     onClick: () -> Unit
 ) {
     Row(
@@ -391,6 +427,7 @@ fun AdminListRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
+            modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -403,15 +440,36 @@ fun AdminListRow(
             Text(
                 text = title, 
                 color = Color.White.copy(alpha = 0.9f),
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-            contentDescription = null,
-            modifier = Modifier.size(12.dp),
-            tint = Color.White.copy(alpha = 0.3f)
-        )
+        
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (badgeCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .background(Color.Red, CircleShape)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = badgeCount.toString(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = Color.White.copy(alpha = 0.3f)
+            )
+        }
     }
 }
 

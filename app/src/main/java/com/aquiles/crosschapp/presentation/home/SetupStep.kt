@@ -2,6 +2,8 @@ package com.aquiles.crosschapp.presentation.home
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.ui.graphics.vector.ImageVector
 
 enum class SetupStep(
@@ -29,7 +31,7 @@ enum class SetupStep(
         "Arma tu Plantilla",
         "Añade las clases guiadas en los horarios fijos de tu semana.",
         "💡 Ubicación en el futuro:\nBusca 'Horarios Fijos' en la sección principal del mando.",
-        Icons.Default.ViewList,
+        Icons.AutoMirrored.Filled.ViewList,
         "admin_schedule_planner"
     ),
     TORNEO_LISTO(
@@ -59,6 +61,28 @@ enum class SetupStep(
         "💡 Ubicación en el futuro:\nBusca el botón 'Alumnos' morado en el panel central.",
         Icons.Default.People,
         "admin_manage_users"
+    ),
+    // Pasos específicos para flujo de competencia
+    POST_LOG(
+        "Postea un Resultado",
+        "Para crear una competencia, primero debes postear un resultado (Log) en el muro.",
+        "💡 Ubicación:\nVe a Inicio y pulsa el botón '+' para subir un resultado.",
+        Icons.Default.PostAdd,
+        "social_feed"
+    ),
+    SELECT_WOD(
+        "Selecciona el WOD",
+        "Ahora selecciona el WOD que servirá como base para el ranking de la competencia.",
+        "💡 Ubicación:\nBusca 'Benchmarks (WODs)' en Configuración Avanzada.",
+        Icons.AutoMirrored.Filled.List,
+        "admin_manage_benchmarks"
+    ),
+    CREATE_COMPETITION(
+        "Crea la Competencia",
+        "¡Listo! Ahora puedes definir los detalles de tu competencia y lanzarla.",
+        "💡 Ubicación:\nBusca 'Torneos y Compe' en Configuración Avanzada.",
+        Icons.Default.Add,
+        "admin_competition_manager"
     );
 
     fun toKey(): String {

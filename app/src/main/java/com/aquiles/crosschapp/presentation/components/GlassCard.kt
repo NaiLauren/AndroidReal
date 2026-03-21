@@ -38,8 +38,15 @@ private val GlassBorderEnd = Color.White.copy(alpha = 0.03f)
 fun GlassCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(20.dp),
+    borderBrush: Brush? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val defaultBorderBrush = Brush.linearGradient(
+        colors = listOf(GlassBorderStart, GlassBorderEnd),
+        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+    )
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -54,11 +61,7 @@ fun GlassCard(
             .border(
                 border = BorderStroke(
                     width = 1.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(GlassBorderStart, GlassBorderEnd),
-                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                    )
+                    brush = borderBrush ?: defaultBorderBrush
                 ),
                 shape = shape
             )

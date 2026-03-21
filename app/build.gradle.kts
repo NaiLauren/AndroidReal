@@ -13,8 +13,8 @@ android {
         applicationId = "com.aquiles.crosschapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.2"
+        versionCode = 1001
+        versionName = "1.2.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -41,10 +41,15 @@ android {
         compose = true
     }
 
-    // --- AGREGADO: Ignorar errores de Lint para permitir la subida ---
+    // --- CORREGIDO: Lint habilitado para Google Play ---
     lint {
-        checkReleaseBuilds = false
+        checkReleaseBuilds = true
         abortOnError = false
+        // Ignorar warnings específicos que no bloquean el lanzamiento
+        disable.add("OldTargetApi")
+        disable.add("GradleDependency")
+        disable.add("UseKtx")
+        disable.add("UseTomlInstead")
     }
 }
 

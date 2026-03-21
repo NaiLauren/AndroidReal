@@ -24,8 +24,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.aquiles.crosschapp.presentation.viewmodel.BenchmarkFeedViewModel
+import com.aquiles.crosschapp.presentation.viewmodel.FeedItemType
 import com.aquiles.crosschapp.presentation.viewmodel.FeedState
 import com.aquiles.crosschapp.presentation.viewmodel.FeedTab
+import com.aquiles.crosschapp.presentation.viewmodel.FeedUiItem
 import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 import dev.chrisbanes.haze.hazeChild
@@ -52,9 +54,10 @@ fun SocialFeedScreen(
     val activeCompetitions by benchmarkFeedViewModel.activeCompetitions.collectAsState()
 
     val currentUser = UserSession.currentUser.collectAsState().value
+    var selectedItemForValidation by remember { mutableStateOf<FeedUiItem?>(null) }
 
     LaunchedEffect(Unit) {
-        benchmarkFeedViewModel.loadFeed()
+        benchmarkFeedViewModel.setTab(currentTab)
     }
 
     Scaffold(
@@ -253,7 +256,7 @@ fun SocialFeedScreen(
                                 },
                                 onLongClick = {
                                     if (currentUser?.isAdmin == true || currentUser?.role == "owner") {
-                                        benchmarkFeedViewModel.toggleVerification(feedItem.id, feedItem.isVerified)
+                                        selectedItemForValidation = feedItem
                                     }
                                 }
                             )
@@ -263,6 +266,53 @@ fun SocialFeedScreen(
                 else -> {}
             }
             } // end Events else branch
+        }
+
+        // --- VALIDATION DIALOG ---
+        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+        selectedItemForValidation?.let { item ->
+            AlertDialog(
+                onDismissRequest = { selectedItemForValidation = null },
+                title = { Text("Validar Resultado", color = Color.White) },
+                text = { 
+                    Column {
+                        Text("Usuario: ${item.userName}", color = Color.White.copy(alpha = 0.8f))
+                        Text("Resultado: ${item.score}", color = Color.White.copy(alpha = 0.8f))
+                        if (!item.videoUrl.isNullOrBlank()) {
+                            TextButton(onClick = { 
+                                uriHandler.openUri(item.videoUrl)
+                            }) {
+                                Text("Video disponible ✅", color = LocalPrimaryColor.current)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            benchmarkFeedViewModel.updateValidationStatus(item.id, item.type, "approved")
+                            selectedItemForValidation = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF34C759))
+                    ) { Text("Aprobar") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(
+                            onClick = {
+                                benchmarkFeedViewModel.updateValidationStatus(item.id, item.type, "rejected")
+                                selectedItemForValidation = null
+                            }
+                        ) { Text("Rechazar", color = Color(0xFFFF3B30)) }
+                        
+                        TextButton(onClick = { selectedItemForValidation = null }) {
+                            Text("Cancelar", color = Color.White)
+                        }
+                    }
+                },
+                containerColor = Color(0xFF1C1C1E),
+                shape = RoundedCornerShape(24.dp)
+            )
         }
     }
 }

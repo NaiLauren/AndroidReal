@@ -6,12 +6,19 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -53,6 +60,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import androidx.compose.foundation.layout.height
 
+import androidx.compose.ui.res.painterResource
+
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
 private val ColorPrimaryAction = Color(0xFFFC5200) // Tu naranja
@@ -70,8 +79,9 @@ fun ProfileScreen(
     onEditProfileClicked: () -> Unit,
     onNavigateToRequestCredits: () -> Unit,
     onNavigateToAdminDashboard: () -> Unit,
+    onNavigateToAchievements: () -> Unit = {},
     onNavigateToRules: () -> Unit,
-    onNavigateToHistory: () -> Unit, // Nuevo parámetro
+    onNavigateToHistory: () -> Unit,
     onLogout: () -> Unit
 ) {
     val profileState by profileViewModel.userState.collectAsState()
@@ -132,8 +142,8 @@ fun ProfileScreen(
                                 attendanceCount = realAttendanceCount,
                                 onEditClick = onEditProfileClicked,
                                 isLoadingImage = profileUpdateState is ProfileUpdateState.Loading,
-                                onNavigateToRules = onNavigateToRules,
-                                onNavigateToHistory = onNavigateToHistory // Pasar callback
+                                onNavigateToAchievements = onNavigateToAchievements,
+                                onNavigateToHistory = onNavigateToHistory
                             )
                         }
 
@@ -168,31 +178,13 @@ fun ProfileScreen(
                             }
                         }
 
-                        // Historiales
+                        // Historiales — Segmented Control estilo iOS
                         item {
-                            GlassCardSection(title = "Historial") {
-                                ExpandableHistorySection(
-                                    title = "Solicitudes de Créditos",
-                                    icon = Icons.Default.LocalActivity,
-                                    state = profileViewModel.creditHistoryState.collectAsState().value
-                                ) { req -> CreditHistoryItemRow(req as CreditRequest) }
-
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = ColorBorder)
-
-                                ExpandableHistorySection(
-                                    title = "Movimientos de Cuenta",
-                                    icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                                    state = profileViewModel.transactionHistoryState.collectAsState().value
-                                ) { tx -> TransactionHistoryItemRow(tx as CreditTransaction) }
-
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = ColorBorder)
-
-                                ExpandableHistorySection(
-                                    title = "Historial de Clases",
-                                    icon = Icons.AutoMirrored.Filled.DirectionsRun,
-                                    state = profileViewModel.attendanceHistoryState.collectAsState().value
-                                ) { rec -> AttendanceHistoryItemRow(rec as EnrichedAttendanceRecord) }
-                            }
+                            ProfileHistorySegmentedSection(
+                                creditState = profileViewModel.creditHistoryState.collectAsState().value,
+                                transactionState = profileViewModel.transactionHistoryState.collectAsState().value,
+                                attendanceState = profileViewModel.attendanceHistoryState.collectAsState().value
+                            )
                         }
 
                         // Cerrar Sesión
@@ -221,8 +213,8 @@ fun ProfileHeaderIOSStyle(
     attendanceCount: Int,
     onEditClick: () -> Unit,
     isLoadingImage: Boolean,
-    onNavigateToRules: () -> Unit,
-    onNavigateToHistory: () -> Unit
+    onNavigateToAchievements: () -> Unit = {},
+    onNavigateToHistory: () -> Unit = {}
 ) {
     val nextLevelXP = LevelSystem.getNextLevelXp(user.xp)
     val prevLevelLimit = LevelSystem.getPreviousLevelLimit(user.xp)
@@ -294,7 +286,7 @@ fun ProfileHeaderIOSStyle(
                         progress = progress,
                         xp = user.xp,
                         level = user.level,
-                        size = 168.dp,
+                        ringSize = 168.dp,
                         trackColor = Color.White.copy(alpha = 0.1f),
                         progressColor = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.align(Alignment.Center)
@@ -463,32 +455,59 @@ fun ProfileHeaderIOSStyle(
 
                             Spacer(Modifier.height(8.dp))
 
-                            // BOTONES
+                            // BOTONES DE GAMIFICACIÓN (paridad iOS)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceEvenly
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OutlinedButton(
-                                    onClick = onNavigateToRules,
-                                    shape = RoundedCornerShape(50),
-                                    border = BorderStroke(1.dp, ColorBorder),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                    modifier = Modifier.height(32.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-                                ) {
-                                    Text("Reglas", style = MaterialTheme.typography.labelSmall)
-                                }
-                                Spacer(Modifier.width(8.dp))
+                                // Botón principal: Álbum de Logros
                                 Button(
-                                    onClick = { onNavigateToHistory() },
+                                    onClick = onNavigateToAchievements,
                                     shape = RoundedCornerShape(50),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                    modifier = Modifier.height(32.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
+                                        contentColor = Color.White
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(36.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                    elevation = ButtonDefaults.buttonElevation(0.dp)
                                 ) {
-                                    Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Historial", style = MaterialTheme.typography.labelSmall)
+                                    Icon(
+                                        Icons.Default.EmojiEvents,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFFD700),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "Ver Álbum de Logros",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                // Botón secundario: Historial XP
+                                IconButton(
+                                    onClick = onNavigateToHistory,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(
+                                            Color.White.copy(alpha = 0.1f),
+                                            CircleShape
+                                        )
+                                ) {
+                                    Icon(
+                                        Icons.Default.History,
+                                        contentDescription = "Historial XP",
+                                        tint = Color.White.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }
@@ -593,40 +612,128 @@ fun ActiveReservationRow(gymClass: GymClass) {
     }
 }
 
-@Suppress("UNCHECKED_CAST")
+// =====================================================
+// SEGMENTED HISTORY SECTION — estilo iOS
+// =====================================================
+
+private enum class ProfileHistoryTab(val label: String) {
+    REQUESTS("Solicitudes"),
+    TRANSACTIONS("Movimientos"),
+    ATTENDANCE("Asistencia")
+}
+
 @Composable
-fun ExpandableHistorySection(title: String, icon: ImageVector, state: Any, content: @Composable (Any) -> Unit) {
-    var isExpanded by remember { mutableStateOf(false) }
-    val rotation by animateFloatAsState(targetValue = if (isExpanded) 90f else 0f, label = "arrow")
+fun ProfileHistorySegmentedSection(
+    creditState: CreditHistoryState,
+    transactionState: TransactionHistoryState,
+    attendanceState: AttendanceHistoryState
+) {
+    var selectedTab by remember { mutableStateOf(ProfileHistoryTab.REQUESTS) }
+    val tabs = ProfileHistoryTab.entries
 
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { isExpanded = !isExpanded }.padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, null, tint = ColorTextSecondary, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(12.dp))
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = ColorTextPrimary, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.weight(1f))
-            Icon(Icons.Default.KeyboardArrowDown, null, tint = ColorTextSecondary, modifier = Modifier.rotate(rotation))
-        }
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
-        AnimatedVisibility(visible = isExpanded) {
-            Column(modifier = Modifier.padding(start = 8.dp, top = 8.dp)) {
-                when (state) {
-                    is CreditHistoryState.Loading, is TransactionHistoryState.Loading, is AttendanceHistoryState.Loading ->
-                        Box(Modifier.fillMaxWidth().padding(12.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), color = ColorPrimaryAction) }
-                    is CreditHistoryState.Empty, is TransactionHistoryState.Empty, is AttendanceHistoryState.Empty ->
-                        Text("No hay registros.", Modifier.padding(8.dp), color = ColorTextSecondary.copy(alpha = 0.5f), fontStyle = FontStyle.Italic)
-                    is CreditHistoryState.Success -> state.requests.forEach { content(it) }
-                    is TransactionHistoryState.Success -> state.transactions.forEach { content(it) }
-                    is AttendanceHistoryState.Success -> state.records.forEach { content(it) }
+            // Segmented Control con animación
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .padding(4.dp)
+            ) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    tabs.forEach { tab ->
+                        val isSelected = selectedTab == tab
+                        val bgColor by animateColorAsState(
+                            targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            label = "tabBg"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(bgColor)
+                                .clickable {
+                                    selectedTab = tab
+                                }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
                 }
-                Spacer(Modifier.height(12.dp))
+            }
+
+            // Contenido del tab seleccionado
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    (fadeIn() + slideInVertically { it / 8 }).togetherWith(fadeOut())
+                },
+                label = "historyContent"
+            ) { tab ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    when (tab) {
+                        ProfileHistoryTab.REQUESTS -> HistoryTabContent(creditState) { CreditHistoryItemRow(it as CreditRequest) }
+                        ProfileHistoryTab.TRANSACTIONS -> HistoryTabContent(transactionState) { TransactionHistoryItemRow(it as CreditTransaction) }
+                        ProfileHistoryTab.ATTENDANCE -> HistoryTabContent(attendanceState) { AttendanceHistoryItemRow(it as EnrichedAttendanceRecord) }
+                    }
+                }
             }
         }
     }
 }
+
+@Suppress("UNCHECKED_CAST")
+@Composable
+private fun HistoryTabContent(state: Any, itemContent: @Composable (Any) -> Unit) {
+    when (state) {
+        is CreditHistoryState.Loading, is TransactionHistoryState.Loading, is AttendanceHistoryState.Loading ->
+            Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) {
+                CircularProgressIndicator(Modifier.size(24.dp), color = ColorPrimaryAction)
+            }
+        is CreditHistoryState.Empty, is TransactionHistoryState.Empty, is AttendanceHistoryState.Empty ->
+            Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), Alignment.Center) {
+                Text("No hay registros aún.", color = ColorTextSecondary.copy(alpha = 0.6f), fontStyle = FontStyle.Italic)
+            }
+        is CreditHistoryState.Success -> {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                state.requests.forEachIndexed { i, item ->
+                    itemContent(item)
+                    if (i < state.requests.size - 1) HorizontalDivider(color = ColorBorder.copy(alpha = 0.5f))
+                }
+            }
+        }
+        is TransactionHistoryState.Success -> {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                state.transactions.forEachIndexed { i, item ->
+                    itemContent(item)
+                    if (i < state.transactions.size - 1) HorizontalDivider(color = ColorBorder.copy(alpha = 0.5f))
+                }
+            }
+        }
+        is AttendanceHistoryState.Success -> {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                state.records.forEachIndexed { i, item ->
+                    itemContent(item)
+                    if (i < state.records.size - 1) HorizontalDivider(color = ColorBorder.copy(alpha = 0.5f))
+                }
+            }
+        }
+        else -> Unit
+    }
+}
+
 
 @Composable
 fun TransactionHistoryItemRow(tx: CreditTransaction) {
@@ -660,15 +767,67 @@ fun CreditHistoryItemRow(req: CreditRequest) {
         "REJECTED" -> "Rechazado" to ColorError
         else -> "Pendiente" to Color(0xFFFFD600)
     }
-    val dateFormat = SimpleDateFormat("dd/MM HH:mm", Locale.forLanguageTag("es-ES"))
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text(text = statusText, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = statusColor)
-            req.requestDate?.let { Text(text = dateFormat.format(it), style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary) }
+    val dateFormat = SimpleDateFormat("dd MMM, HH:mm", Locale.forLanguageTag("es-ES"))
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Icono circular
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(statusColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = when(req.status) {
+                    "APPROVED" -> Icons.Default.CheckCircle
+                    "REJECTED" -> Icons.Default.Cancel
+                    else -> Icons.Default.HourglassTop
+                },
+                contentDescription = null,
+                tint = statusColor,
+                modifier = Modifier.size(22.dp)
+            )
         }
-        Spacer(Modifier.height(4.dp))
-        Text(text = req.comboName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = ColorTextPrimary)
-        Text(text = "${req.creditsRequested} créditos", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = req.comboName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = ColorTextPrimary
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${req.creditsRequested} créditos",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ColorTextSecondary
+                )
+                req.requestDate?.let {
+                    Text("•", color = ColorTextSecondary)
+                    Text(
+                        text = dateFormat.format(it),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ColorTextSecondary
+                    )
+                }
+            }
+        }
+        // Badge de estado
+        Surface(
+            color = statusColor.copy(alpha = 0.15f),
+            shape = RoundedCornerShape(50)
+        ) {
+            Text(
+                text = statusText,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                color = statusColor,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
@@ -686,19 +845,39 @@ private fun getIconByName(name: String): ImageVector {
 @Composable
 fun AttendanceHistoryItemRow(rec: EnrichedAttendanceRecord) {
     val dateFormat = SimpleDateFormat("EEEE dd 'de' MMMM, HH:mm", Locale.forLanguageTag("es-ES"))
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Text(
-            text = rec.classDetails?.name ?: "Clase (Sin detalles)",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-            color = ColorTextPrimary
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Acento lateral color naranja (estilo iOS)
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(44.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(ColorPrimaryAction)
         )
-        rec.record.classDate?.let {
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
             Text(
-                text = dateFormat.format(it).replaceFirstChar { c -> c.uppercase() },
-                style = MaterialTheme.typography.bodySmall,
-                color = ColorTextSecondary
+                text = rec.classDetails?.name ?: "Clase",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = ColorTextPrimary
             )
+            rec.record.classDate?.let {
+                Text(
+                    text = dateFormat.format(it).replaceFirstChar { c -> c.uppercase() },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ColorTextSecondary
+                )
+            }
         }
+        Icon(
+            imageVector = Icons.Default.CheckCircle,
+            contentDescription = null,
+            tint = ColorSuccess.copy(alpha = 0.7f),
+            modifier = Modifier.size(18.dp)
+        )
     }
 }

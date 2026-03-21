@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -57,6 +58,13 @@ import java.time.LocalDate
 import java.time.format.TextStyle as JavaTextStyle
 import java.util.*
 import androidx.compose.ui.draw.scale // [Fix] Import scale
+import androidx.compose.animation.core.*
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.KeyboardType
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -64,6 +72,7 @@ private val ColorGlassInput = Color(0xFFFFFFFF).copy(alpha = 0.07f)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color(0xFFAAAAAA)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
+private val ColorError = Color(0xFFEF5350)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,15 +104,22 @@ fun WodsScreen(
     // Estados de Datos
     val dailyClassesState by wodsViewModel.dailyClassesState.collectAsState()
     val todayWod by wodsViewModel.todayWod.collectAsState()
-    val tomorrowWod by wodsViewModel.tomorrowWod.collectAsState()
     val wodsState by wodsViewModel.wodsState.collectAsState()
+    val benchmarkWodsState by adminViewModel.benchmarksState.collectAsState()
+    val hasActiveCompetition by wodsViewModel.hasActiveCompetition.collectAsState()
 
     val nextBookingState by scheduleViewModel.nextBookingState.collectAsState()
     val appConfigState by adminViewModel.appConfigState.collectAsState()
+    val globalChallenges by wodsViewModel.globalChallenges.collectAsState()
 
     // Estados de guardado
     val saveWodResultState by performanceViewModel.saveResultState.collectAsState()
+    val saveChallengeResultState by wodsViewModel.saveChallengeResultState.collectAsState()
     val saveBenchmarkState by performanceViewModel.saveBenchmarkState.collectAsState()
+    val globalBenchmarkRecords by performanceViewModel.globalBenchmarkRecordsState.collectAsState()
+
+    // --- DIALOGS FOR GLOBAL CHALLENGES ---
+    var selectedChallengeToLog by remember { mutableStateOf<GlobalChallenge?>(null) }
 
     // Imágenes de Actividad (iOS Parity)
     val activityImages by adminViewModel.activityImagesState.collectAsState()
@@ -153,6 +169,7 @@ fun WodsScreen(
         val user = currentUser
         if (user != null && !currentUserGymId.isNullOrBlank()) {
             wodsViewModel.listenForDashboardWods()
+            wodsViewModel.loadGlobalChallenges() // Cargar todos los desafíos globales
             adminViewModel.loadAppConfig()
             adminViewModel.loadBenchmarkWods()
             performanceViewModel.loadInitialData()
@@ -179,6 +196,20 @@ fun WodsScreen(
         }
     }
 
+    LaunchedEffect(saveChallengeResultState) {
+        if (saveChallengeResultState is ChallengeSaveState.Success) {
+            successMessage = (saveChallengeResultState as ChallengeSaveState.Success).message
+            showSuccessDialog = true
+            performanceViewModel.loadInitialData() // Refresh records for Performance Screen
+            wodsViewModel.resetChallengeSaveState()
+        } else if (saveChallengeResultState is ChallengeSaveState.Error) {
+            successMessage = (saveChallengeResultState as ChallengeSaveState.Error).message
+            // Usamos el mismo diálogo pero podríamos cambiar el icono a ERROR si FeedbackDialog lo soporta
+            showSuccessDialog = true 
+            wodsViewModel.resetChallengeSaveState()
+        }
+    }
+
     // --- DIALOG COMPONENT ---
     FeedbackDialog(
         show = showSuccessDialog,
@@ -187,6 +218,25 @@ fun WodsScreen(
         message = successMessage,
         onDismiss = { showSuccessDialog = false }
     )
+
+    // --- CHALLENGE LOG DIALOG ---
+    if (selectedChallengeToLog != null) {
+        ChallengeLogDialog(
+            challenge = selectedChallengeToLog!!,
+            onDismiss = { selectedChallengeToLog = null },
+            onSave = { score, isRx, notes ->
+                wodsViewModel.logChallengeResult(
+                    challengeId = selectedChallengeToLog!!.id,
+                    challengeName = selectedChallengeToLog!!.name,
+                    score = score,
+                    isRx = isRx,
+                    notes = notes
+                )
+                selectedChallengeToLog = null
+            },
+            isSaving = saveChallengeResultState is ChallengeSaveState.Loading
+        )
+    }
 
     // --- UI STRUCTURE ---
     Box(
@@ -320,7 +370,8 @@ fun WodsScreen(
                                                     isPublic = isPublic
                                                 )
                                             },
-                                            isSavingResult = saveWodResultState is SaveResultState.Loading
+                                            isSavingResult = saveWodResultState is SaveResultState.Loading,
+                                            isPremium = hasActiveCompetition
                                         )
                                     }
                                 }
@@ -350,61 +401,62 @@ fun WodsScreen(
                         }
                     }
                 }
-
                 }
 
-                // PRÓXIMA RESERVA / MAÑANA
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionTitle("Próxima Clase")
-                        when (val booking = nextBookingState) {
-                            is NextBookingState.Loading -> GlassLoadingCard(height = 140.dp)
-                            is NextBookingState.Success -> {
-                                booking.nextClass?.let {
-                                    NextBookingCardSmall(gymClass = it, onClick = { onNavigateToClassDetail(it.id) })
-                                } ?: InfoCardSmall(icon = Icons.Default.EventAvailable, title = "Sin Reserva", message = "Reserva tu plaza")
-                            }
-                            is NextBookingState.Error -> InfoCardSmall(icon = Icons.Default.Error, title = "Error", message = "No cargó info")
-                        }
-                    }
-
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionTitle("Mañana")
-                        if (hasValidAccess) {
-                            if (wodsState is WodsState.Loading) {
-                                GlassLoadingCard(height = 140.dp)
-                            } else {
-                                tomorrowWod?.let {
-                                    TomorrowWodCardSmall(wod = it, onClick = { onNavigateToScheduleAtDate(LocalDate.now().plusDays(1)) })
-                                } ?: RestDayCardSmall()
-                            }
-                        } else {
-                            AccessBlockedCard(title = "Bloqueado", message = "Requiere Créditos", onClick = onNavigateToRequestCredits)
-                        }
+                // --- NUEVO: CARRUSEL DE DESAFÍOS GLOBALES (DEBAJO DEL WOD) ---
+                if (hasValidAccess && globalChallenges.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    SectionTitle("Desafíos Globales")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (globalChallenges.isNotEmpty()) {
+                        GlobalChallengePager(
+                            challenges = globalChallenges, 
+                            onNavigateToBenchmarks = onNavigateToBenchmarks,
+                            onLogClick = { selectedChallengeToLog = it }
+                        )
                     }
                 }
 
-                // BENCHMARKS
+                // --- PRÓXIMA CLASE ---
+                when (val booking = nextBookingState) {
+                    is NextBookingState.Success -> {
+                        booking.nextClass?.let {
+                            com.aquiles.crosschapp.presentation.components.GlassCard(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                                shape = RoundedCornerShape(24.dp)
+                            ) {
+                                Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    NextBookingInnerColumn(gymClass = it, onClick = { onNavigateToClassDetail(it.id) })
+                                }
+                            }
+                        }
+                    }
+                    else -> Spacer(Modifier.height(0.dp))
+                }
+
+                // --- ACCESO A BENCHMARKS ---
                 SectionTitle("Benchmarks")
                 BenchmarkAccessCard(onClick = onNavigateToBenchmarks)
 
                 Spacer(modifier = Modifier.height(80.dp))
             }
+        }
 
-            if (todayWod != null) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    FloatingCameraButton(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 50.dp, end = 16.dp),
-                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }
-                    )
-                }
+        // --- BOTÓN FLOTANTE DE CÁMARA (Si hay WOD) ---
+        if (todayWod != null) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                FloatingCameraButton(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 50.dp, end = 16.dp),
+                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }
+                )
             }
         }
     }
+    }
 }
-}
+
 
 // =====================================================
 // COMPONENTES UI
@@ -443,7 +495,8 @@ fun WodPagerCard(
     imageUrl: String?,
     existingResult: WodResult?,
     onSaveResult: (result: String, isRx: Boolean, notes: String, isPublic: Boolean) -> Unit,
-    isSavingResult: Boolean
+    isSavingResult: Boolean,
+    isPremium: Boolean = false
 ) {
     var userResult by remember(existingResult) { mutableStateOf(existingResult?.score ?: "") }
     var userNotes by remember(existingResult) { mutableStateOf(existingResult?.notes ?: "") }
@@ -454,12 +507,55 @@ fun WodPagerCard(
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val hasResult = existingResult != null
     val validationStatus = existingResult?.validationStatus
+    
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scaleCard by animateFloatAsState(if (isPremium && isPressed) 0.97f else 1f)
+    
+    // Premium Border Animation
+    val infiniteTransition = rememberInfiniteTransition()
+    val rotationAnimation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(3000, easing = LinearEasing), RepeatMode.Restart)
+    )
 
-    com.aquiles.crosschapp.presentation.components.GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scaleCard)
+            .padding(top = if (isPremium) 24.dp else 0.dp)
+            .clickable(
+                 interactionSource = interactionSource,
+                 indication = null,
+                 onClick = { if (isPremium) haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+            )
     ) {
-        Column {
+        // Glowing Border for Premium
+        if (isPremium) {
+             Box(
+                 modifier = Modifier
+                     .matchParentSize()
+                     .background(
+                         Brush.sweepGradient(
+                             colors = listOf(Color(0xFFFFD700), Color(0xFFFF5A00), Color(0xFFFFD700)),
+                             center = androidx.compose.ui.geometry.Offset(Float.NaN, Float.NaN) // Just to bypass errors, graphicsLayer takes care of rotation natively below
+                         ),
+                         shape = RoundedCornerShape(24.dp)
+                     )
+                     .graphicsLayer { rotationZ = rotationAnimation }
+                     .border(2.dp, Brush.sweepGradient(listOf(Color(0xFFFFD700), Color(0xFFFF5A00), Color(0xFFFFD700))), RoundedCornerShape(24.dp))
+                     // Applying blur is tricky in standard modifier, we just use a border to simulate glow.
+             )
+        }
+
+        com.aquiles.crosschapp.presentation.components.GlassCard(
+            modifier = Modifier.fillMaxWidth().then(if (isPremium) Modifier.background(Color.White.copy(alpha=0.15f), RoundedCornerShape(24.dp)) else Modifier),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Column {
             // ── IMAGEN CABECERA ──────────────────────────────────
             Box(modifier = Modifier.height(200.dp)) {
                 SubcomposeAsyncImage(
@@ -553,7 +649,7 @@ fun WodPagerCard(
                 HorizontalDivider(color = ColorBorder, thickness = 1.dp)
 
                 // ── ZONA RESULTADO (si ya existe) ─────────────────
-                if (hasResult && existingResult != null) {
+                if (existingResult != null) {
                     // Mostrar resultado guardado + indicador validación
                     Box(
                         modifier = Modifier
@@ -654,11 +750,11 @@ fun WodPagerCard(
                     contentPadding = PaddingValues(vertical = 14.dp)
                 ) {
                     if (isSavingResult) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
-                    else Text(if (hasResult) "Actualizar Resultado" else "Guardar Resultado", fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
+}
 }
 
 // Badge helper para validación
@@ -707,60 +803,101 @@ fun RestDayWodCard(imageUrl: String?) {
 }
 
 @Composable
-fun NextBookingCardSmall(gymClass: GymClass, onClick: () -> Unit) {
+fun NextBookingInnerColumn(gymClass: GymClass, onClick: () -> Unit) {
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val dayFormatter = remember { SimpleDateFormat("EEE dd", Locale.forLanguageTag("es-ES")) }
     val dateStr = gymClass.dateTime?.let { dayFormatter.format(it) }?.uppercase() ?: ""
     val timeStr = gymClass.dateTime?.let { timeFormatter.format(it) } ?: ""
 
-    com.aquiles.crosschapp.presentation.components.GlassCard(
-        modifier = Modifier.height(160.dp).clickable(onClick = onClick)
+    Column(
+        modifier = Modifier.fillMaxSize().clickable(onClick = onClick).padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Etiqueta sección
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "PRÓXIMA CLASE",
+                style = MaterialTheme.typography.labelSmall,
+                color = LocalPrimaryColor.current,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp
+            )
+            Text(
+                text = gymClass.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (gymClass.coachName.isNotBlank()) {
                 Text(
-                    text = "PRÓXIMA CLASE",
+                    text = gymClass.coachName,
                     style = MaterialTheme.typography.labelSmall,
-                    color = LocalPrimaryColor.current,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp
+                    color = Color.White.copy(alpha = 0.5f)
                 )
-                Text(
-                    text = gymClass.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (gymClass.coachName.isNotBlank()) {
-                    Text(
-                        text = gymClass.coachName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.5f)
-                    )
-                }
             }
-            // Footer: fecha + hora con badge
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = dateStr, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .background(LocalPrimaryColor.current, RoundedCornerShape(20.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = dateStr, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
-                Row(
-                    modifier = Modifier
-                        .background(LocalPrimaryColor.current, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.AccessTime, null, tint = Color.White, modifier = Modifier.size(11.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(timeStr, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                Icon(Icons.Default.AccessTime, null, tint = Color.White, modifier = Modifier.size(11.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(timeStr, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun GlobalChallengePager(
+    challenges: List<GlobalChallenge>, 
+    onNavigateToBenchmarks: () -> Unit,
+    onLogClick: (GlobalChallenge) -> Unit
+) {
+    val pagerState = rememberPagerState(pageCount = { challenges.size })
+    
+    Column(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(horizontal = 0.dp),
+            pageSpacing = 12.dp
+        ) { page ->
+            val challenge = challenges[page]
+
+            GlobalChallengeCard(
+                challenge = challenge, 
+                userRecord = null, // TODO: Cargar el récord real del usuario de WodsViewModel
+                onClick = onNavigateToBenchmarks, // O donde quieras navegar
+                onLogClick = { onLogClick(challenge) }
+            )
+        }
+        
+        if (challenges.size > 1) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                repeat(challenges.size) { iteration ->
+                    val color = if (pagerState.currentPage == iteration) Color(0xFFFFD700) else Color.White.copy(alpha = 0.3f)
+                    Box(
+                        modifier = Modifier
+                            .padding(2.dp)
+                            .clip(CircleShape)
+                            .background(color)
+                            .size(6.dp)
+                    )
                 }
             }
         }
@@ -768,99 +905,333 @@ fun NextBookingCardSmall(gymClass: GymClass, onClick: () -> Unit) {
 }
 
 @Composable
-fun TomorrowWodCardSmall(wod: Wod, onClick: () -> Unit) {
+fun GlobalChallengeCard(
+    challenge: GlobalChallenge, 
+    userRecord: ChallengeResult?,
+    onClick: () -> Unit,
+    onLogClick: () -> Unit
+) {
+    val (typeText, icon) = remember(challenge.scoreType, challenge.measurementUnit) {
+        val unit = (challenge.measurementUnit ?: challenge.scoreType).uppercase()
+        when {
+            unit.contains("TIME") || unit.contains("TIEMPO") -> "MEJOR TIEMPO" to Icons.Default.Timer
+            unit.contains("WEIGHT") || unit.contains("PESO") || unit.contains("KG") || unit.contains("LB") -> "MÁXIMO PESO" to Icons.Default.FitnessCenter
+            unit.contains("REPS") || unit.contains("REPETICIONES") || unit.contains("AMRAP") -> "MÁX REPETICIONES" to Icons.Default.Repeat
+            unit.contains("ROUND") || unit.contains("RONDAS") -> "MÁX RONDAS" to Icons.Default.Refresh
+            unit.contains("DISTANCE") || unit.contains("DISTANCIA") || unit.contains("METROS") -> "MAYOR DISTANCIA" to Icons.Default.Straighten
+            else -> "PUNTUACIÓN" to Icons.Default.EmojiEvents
+        }
+    }
+
     com.aquiles.crosschapp.presentation.components.GlassCard(
-        modifier = Modifier.height(160.dp).clickable(onClick = onClick)
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Etiqueta sección
-                Text(
-                    text = "MAÑANA",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF64D2FF),
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp
-                )
-                Text(
-                    text = wod.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (!wod.scoreType.isNullOrBlank()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Fondo decorativo sutil
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 30.dp, y = 30.dp)
+                    .background(Color(0xFFFFD700).copy(alpha = 0.05f), CircleShape)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
+                        verticalAlignment = Alignment.CenterVertically, 
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier
-                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            .background(Color(0xFFFFD700).copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Icon(Icons.Default.EmojiEvents, null, tint = Color(0xFFFFD700), modifier = Modifier.size(10.dp))
-                        Text(wod.scoreType!!, style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
+                        Icon(icon, null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
+                        Text(
+                            text = typeText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = Color(0xFFFFD700),
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.2.sp
+                        )
+                    }
+                    
+                    Text(
+                        text = challenge.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    if (userRecord != null) {
+                        Column {
+                            Text(
+                                text = "TU RÉCORD",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = userRecord.score,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFD700)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Sin marcas aún",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.4f),
+                            fontStyle = FontStyle.Italic
+                        )
+                    }
+
+                    Button(
+                        onClick = onLogClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFFD700),
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = if (userRecord != null) "NUEVO" else "REGISTRAR",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "Desafío de Comunidad 🌎",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+                        color = Color(0xFFFFD700).copy(alpha = 0.8f)
+                    )
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (userRecord != null) "✓ REGISTRADO" else "PENDIENTE",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = if (userRecord != null) Color(0xFF30D158) else Color.White.copy(alpha = 0.4f),
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    if (userRecord == null) {
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFC5200))), 
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .clickable(onClick = onLogClick)
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                "CARGAR MARCA", 
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), 
+                                color = Color.Black.copy(alpha = 0.9f), 
+                                fontWeight = FontWeight.Black
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                .clickable(onClick = onClick)
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                "VER PODIO", 
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), 
+                                color = Color.White.copy(alpha = 0.7f), 
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
-            // Footer: botón ver
-            Row(
+        }
+    }
+}
+
+@Composable
+fun ChallengeLogDialog(
+    challenge: GlobalChallenge,
+    onDismiss: () -> Unit,
+    onSave: (String, Boolean, String) -> Unit,
+    isSaving: Boolean
+) {
+    var score by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    var isRx by remember { mutableStateOf(true) }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(modifier = Modifier.padding(16.dp).fillMaxWidth().wrapContentHeight()) {
+            com.aquiles.crosschapp.presentation.components.GlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                shape = RoundedCornerShape(24.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("Ver horarios", style = MaterialTheme.typography.labelSmall, color = Color(0xFF64D2FF), fontWeight = FontWeight.Bold)
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = Color(0xFF64D2FF), modifier = Modifier.size(12.dp))
+                    Text(
+                        text = "REGISTRAR DESAFÍO",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFFFD700),
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = challenge.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+
+                    GlassTextField(
+                        value = score,
+                        onValueChange = { score = it },
+                        label = "Resultado (${challenge.measurementUnit ?: "Puntos"})",
+                        keyboardType = if (challenge.measurementUnit.contains("TIME")) 
+                            KeyboardType.Text 
+                        else 
+                            KeyboardType.Number
+                    )
+
+                    GlassTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = "Notas (Opcional)"
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { isRx = !isRx }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = isRx,
+                            onCheckedChange = { isRx = it },
+                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFFFFD700))
+                        )
+                        Text("RX (Nivel competitivo)", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("CANCELAR", color = Color.White.copy(alpha = 0.6f))
+                        }
+                        Button(
+                            onClick = { onSave(score, isRx, notes) },
+                            enabled = score.isNotBlank() && !isSaving,
+                            modifier = Modifier.weight(1f).height(45.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isSaving) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black)
+                            } else {
+                                Text("GUARDAR", color = Color.Black, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+// TomorrowWodInnerColumn ELIMINADA (Se utiliza espacio para Desafíos Globales)
+
+@Composable
+fun InfoInnerColumn(icon: ImageVector, title: String, message: String) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(imageVector = icon, contentDescription = title, modifier = Modifier.size(24.dp), tint = ColorTextSecondary)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = ColorTextSecondary)
+        Text(text = message, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, color = ColorTextSecondary.copy(alpha = 0.5f))
+    }
+}
+
+@Composable
+fun RestDayInnerColumn() {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(Icons.Default.Spa, contentDescription = null, tint = ColorTextSecondary.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Descanso", color = ColorTextSecondary, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun AccessBlockedInnerColumn(title: String, message: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().clickable(onClick = onClick).padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(imageVector = Icons.Default.Lock, contentDescription = title, modifier = Modifier.size(24.dp), tint = ColorError)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = ColorError)
+        Text(text = message, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, color = ColorError.copy(alpha = 0.8f))
     }
 }
 
 @Composable
 fun RestDayCardSmall() {
     GlassCard(modifier = Modifier.height(140.dp)) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Spa, contentDescription = null, tint = ColorTextSecondary.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Descanso", color = ColorTextSecondary, fontWeight = FontWeight.Bold)
-            }
-        }
+        RestDayInnerColumn()
     }
 }
 
 @Composable
 fun InfoCardSmall(icon: ImageVector, title: String, message: String) {
     GlassCard(modifier = Modifier.height(140.dp)) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(imageVector = icon, contentDescription = title, modifier = Modifier.size(24.dp), tint = ColorTextSecondary)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = ColorTextSecondary)
-            Text(text = message, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, color = ColorTextSecondary.copy(alpha = 0.5f))
-        }
+        InfoInnerColumn(icon, title, message)
     }
 }
 
 @Composable
-fun AccessBlockedCard(title: String, message: String, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().height(140.dp).clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, LocalPrimaryColor.current.copy(alpha = 0.6f)), colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)) {
-        Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Lock, contentDescription = null, tint = LocalPrimaryColor.current)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = title, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
-            Text(text = message, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
-        }
+fun AccessBlockedCard(title: String, message: String, onClick: () -> Unit = {}) {
+    com.aquiles.crosschapp.presentation.components.GlassCard(
+        modifier = Modifier.height(140.dp)
+    ) {
+        AccessBlockedInnerColumn(title, message, onClick)
     }
 }
 

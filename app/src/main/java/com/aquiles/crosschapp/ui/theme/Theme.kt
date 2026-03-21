@@ -79,6 +79,7 @@ fun CrossChAppTheme(
         SideEffect {
             val window = (view.context as Activity).window
 
+            @Suppress("DEPRECATION")
             window.navigationBarColor = Color.Transparent.toArgb()
 
 

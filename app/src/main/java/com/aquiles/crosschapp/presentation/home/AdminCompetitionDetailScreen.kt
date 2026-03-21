@@ -50,6 +50,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import com.aquiles.crosschapp.presentation.components.CompetitionSegmentedControl
+import com.aquiles.crosschapp.ui.theme.*
 import androidx.compose.foundation.layout.height
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,18 +122,11 @@ fun AdminCompetitionDetailScreen(
                 CompetitionHeader(comp, onEditClick = { showEditSheet = true })
 
                 // Tabs
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color.Black.copy(alpha = 0.4f),
-                    contentColor = Color(0xFFFC5200)
-                ) {
-                    Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }) {
-                        Text("Eventos", modifier = Modifier.padding(12.dp), color = if (selectedTab == 0) Color(0xFFFC5200) else Color.White.copy(alpha = 0.6f), fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
-                    }
-                    Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }) {
-                        Text("Ranking", modifier = Modifier.padding(12.dp), color = if (selectedTab == 1) Color(0xFFFC5200) else Color.White.copy(alpha = 0.6f), fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
+                CompetitionSegmentedControl(
+                    selectedIndex = selectedTab,
+                    items = listOf("Eventos", "Ranking"),
+                    onIndexChanged = { selectedTab = it }
+                )
 
                 if (selectedTab == 0) {
                 // Linked Classes Section
@@ -428,7 +423,7 @@ fun CompetitionRankingSection(
     onReject: (resultId: String) -> Unit
 ) {
     val resultsByUser = results.associateBy { it.userId }
-    val usersWithoutResult = enrolledUsers.filter { user -> user.id != null && !resultsByUser.containsKey(user.id) }
+    val usersWithoutResult = enrolledUsers.filter { user -> !resultsByUser.containsKey(user.id) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -510,9 +505,9 @@ fun CompetitionParticipantRow(
     onReject: () -> Unit
 ) {
     val rankColor = when (rank) {
-        1 -> Color(0xFFFFD700)
-        2 -> Color(0xFFC0C0C0)
-        3 -> Color(0xFFCD7F32)
+        1 -> ColorGold
+        2 -> ColorSilver
+        3 -> ColorBronze
         else -> Color.White.copy(alpha = 0.3f)
     }
 
@@ -543,15 +538,15 @@ fun CompetitionParticipantRow(
                 Text(entry.userName, color = Color.White, fontWeight = FontWeight.Bold)
                 if (entry.isPending) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(6.dp).background(Color(0xFFFF9500), CircleShape))
+                        Box(Modifier.size(6.dp).background(StatusPending, CircleShape))
                         Spacer(Modifier.width(4.dp))
-                        Text("Pendiente de validación", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF9500))
+                        Text("Pendiente de validación", style = MaterialTheme.typography.labelSmall, color = StatusPending)
                     }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(6.dp).background(Color(0xFF34C759), CircleShape))
+                        Box(Modifier.size(6.dp).background(SuccessGreen, CircleShape))
                         Spacer(Modifier.width(4.dp))
-                        Text("Aprobado", style = MaterialTheme.typography.labelSmall, color = Color(0xFF34C759))
+                        Text("Aprobado", style = MaterialTheme.typography.labelSmall, color = SuccessGreen)
                     }
                 }
             }
@@ -559,11 +554,11 @@ fun CompetitionParticipantRow(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     entry.score,
-                    color = if (entry.isPending) Color(0xFFFF9500) else Color.White,
+                    color = if (entry.isPending) StatusPending else Color.White,
                     fontWeight = FontWeight.Bold
                 )
                 if (entry.isRx) {
-                    Text("RX", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF9500), fontWeight = FontWeight.Black)
+                    Text("RX", style = MaterialTheme.typography.labelSmall, color = StatusPending, fontWeight = FontWeight.Black)
                 }
             }
 
@@ -571,10 +566,10 @@ fun CompetitionParticipantRow(
                 Spacer(Modifier.width(8.dp))
                 Column {
                     IconButton(onClick = onApprove, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Default.Check, "Aprobar", tint = Color(0xFF34C759), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Check, "Aprobar", tint = SuccessGreen, modifier = Modifier.size(18.dp))
                     }
                     IconButton(onClick = onReject, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Default.Close, "Rechazar", tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Close, "Rechazar", tint = ErrorRed, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -685,9 +680,9 @@ fun CompetitionHeader(comp: Competition, onEditClick: () -> Unit) {
             
             val status = comp.resolveStatus()
             val statusColor = when (status) {
-                CompetitionStatus.ONGOING -> Color.Green
-                CompetitionStatus.UPCOMING -> Color.Blue
-                CompetitionStatus.FINISHED -> Color.Red
+                CompetitionStatus.ONGOING -> SuccessGreen
+                CompetitionStatus.UPCOMING -> StatusUpcoming
+                CompetitionStatus.FINISHED -> ErrorRed
                 else -> Color.Gray
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

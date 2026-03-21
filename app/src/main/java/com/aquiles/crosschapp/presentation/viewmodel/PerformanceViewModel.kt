@@ -92,6 +92,9 @@ class PerformanceViewModel : ViewModel() {
     private val _dailyWodRecordsState = MutableStateFlow<PerformanceState>(PerformanceState.Idle)
     val dailyWodRecordsState = _dailyWodRecordsState.asStateFlow()
 
+    private val _globalBenchmarkRecordsState = MutableStateFlow<PerformanceState>(PerformanceState.Idle)
+    val globalBenchmarkRecordsState = _globalBenchmarkRecordsState.asStateFlow()
+
     private val _achievementsState = MutableStateFlow<AchievementState>(AchievementState.Idle)
     val achievementsState = _achievementsState.asStateFlow()
 
@@ -111,65 +114,116 @@ class PerformanceViewModel : ViewModel() {
     fun loadInitialData() {
         val user = UserSession.currentUser.value ?: return
         Log.d("PerfViewModel", "Cargando datos iniciales para ${user.email}")
-        loadBenchmarkRecords(user.id, user.gym_id)
+        loadAllBenchmarkRecords(user.id, user.gym_id)
         loadDailyWodRecords(user.id, user.gym_id)
         checkAndAwardAchievements(user)
         loadAttendanceData(user.id, TimeRange.MONTH)
     }
 
-    // --- BENCHMARKS ---
-    fun loadBenchmarkRecords(userId: String, gymId: String) {
+    // --- BENCHMARKS (LOCAL & GLOBAL) ---
+    private fun loadAllBenchmarkRecords(userId: String, gymId: String?) {
         _benchmarkRecordsState.value = PerformanceState.Loading
+        _globalBenchmarkRecordsState.value = PerformanceState.Loading
+        
         viewModelScope.launch {
             try {
-                // Removed orderBy to avoid missing index errors
-                val resultsSnapshot = firestore.collection("benchmark_results")
+                // Obtenemos todos los resultados del usuario (locales del gym actual y los globales sin gym_id)
+                // Para ser más robustos, podríamos traer todos los del usuario si no son demasiados, 
+                // pero por ahora filtramos por el gym actual y los vacíos.
+                val benchmarkQuery = firestore.collection("benchmark_results")
                     .whereEqualTo("userId", userId)
-                    .whereEqualTo("gym_id", gymId)
-                    .get().await()
+                val challengeQuery = firestore.collection("challenge_results")
+                    .whereEqualTo("userId", userId)
                 
-                val results = resultsSnapshot.toObjects(BenchmarkResult::class.java)
-                    .sortedByDescending { it.date } // Sort in memory
+                val benchmarkSnap = benchmarkQuery.get().await()
+                val challengeSnap = challengeQuery.get().await()
                 
-                if (results.isEmpty()) {
+                val allBenchResults = benchmarkSnap.toObjects(BenchmarkResult::class.java)
+                val allChallengeResults = challengeSnap.toObjects(ChallengeResult::class.java)
+                
+                if (allBenchResults.isEmpty() && allChallengeResults.isEmpty()) {
                     _benchmarkRecordsState.value = PerformanceState.Success(emptyList())
+                    _globalBenchmarkRecordsState.value = PerformanceState.Success(emptyList())
                     return@launch
                 }
 
-                val benchmarkIds = results.map { it.benchmarkId }.distinct().filter { it.isNotBlank() }
+                val benchmarkIds = (allBenchResults.map { it.benchmarkId } + allChallengeResults.map { it.challengeId })
+                    .distinct().filter { it.isNotBlank() }
                 val benchmarksMap = mutableMapOf<String, BenchmarkWod>()
                 
-                 if (benchmarkIds.isNotEmpty()) {
-                     val deferreds = benchmarkIds.map { id ->
-                        val docRef = firestore.collection("benchmarks").document(id)
+                if (benchmarkIds.isNotEmpty()) {
+                    // Cargar detalles de benchmarks/desafíos en paralelo desde ambas colecciones
+                    val deferreds = benchmarkIds.map { id ->
                         async {
                             try {
+                                // Try benchmark_wods first
+                                val docRef = firestore.collection("benchmark_wods").document(id)
                                 val doc = docRef.get().await()
-                                doc.toObject(BenchmarkWod::class.java)?.copy(id = doc.id)
-                            } catch (e: Exception) {
-                                null
+                                var bench = doc.toObject(BenchmarkWod::class.java)
+                                
+                                // If not found, try challenges collection
+                                if (bench == null) {
+                                    val challengeDoc = firestore.collection("challenges").document(id).get().await()
+                                    bench = challengeDoc.toObject(BenchmarkWod::class.java)
+                                    bench?.copy(id = challengeDoc.id)
+                                } else {
+                                    bench.copy(id = doc.id)
+                                }
+                            } catch (e: Exception) { 
+                                Log.e("PerfViewModel", "Error fetching detail for $id", e)
+                                null 
                             }
                         }
-                     }
-                     
-                     deferreds.awaitAll().forEach { benchmark ->
-                         if (benchmark != null) {
-                             benchmarksMap[benchmark.id] = benchmark
-                         }
-                     }
-                 }
+                    }
+                    deferreds.awaitAll().filterNotNull().forEach { benchmarksMap[it.id] = it }
+                }
 
-                val records = results.map { res ->
+                // Fusionamos los récords mapéandolos a PerformanceRecord
+                val allBenchRecords = allBenchResults.map { res ->
                     PerformanceRecord(result = res, wodDetails = benchmarksMap[res.benchmarkId])
                 }
-                _benchmarkRecordsState.value = PerformanceState.Success(records)
+                val allChalRecords = allChallengeResults.map { res ->
+                    PerformanceRecord(result = res, wodDetails = benchmarksMap[res.challengeId])
+                }
+
+                val allRecords = (allBenchRecords + allChalRecords).sortedByDescending { 
+                    (it.result as? BenchmarkResult)?.date ?: (it.result as? ChallengeResult)?.date ?: Date(0)
+                }
+
+                // Separación inteligente (iOS Parity): Los de challenge_results son siempre Desafíos. 
+                // Y los de benchmark_results podrían tener el flag isDesafio antiguo.
+                val benchmarkRecords = allRecords.filter { 
+                    if (it.result is ChallengeResult) return@filter false
+                    val bench = it.wodDetails as? BenchmarkWod
+                    bench?.isDesafio != true
+                }
+                val challengeRecords = allRecords.filter { 
+                    if (it.result is ChallengeResult) return@filter true
+                    val bench = it.wodDetails as? BenchmarkWod
+                    bench?.isDesafio == true
+                }
+
+                _benchmarkRecordsState.value = PerformanceState.Success(benchmarkRecords)
+                _globalBenchmarkRecordsState.value = PerformanceState.Success(challengeRecords)
 
             } catch (e: Exception) {
                 Log.e("PerfViewModel", "Error loading benchmarks", e)
-                _benchmarkRecordsState.value = PerformanceState.Error("Error al cargar benchmarks: ${e.localizedMessage}")
+                val errorMsg = "Error al cargar marcas: ${e.localizedMessage}"
+                _benchmarkRecordsState.value = PerformanceState.Error(errorMsg)
+                _globalBenchmarkRecordsState.value = PerformanceState.Error(errorMsg)
             }
         }
     }
+
+    fun loadBenchmarkRecords(userId: String, gymId: String) {
+        loadAllBenchmarkRecords(userId, gymId)
+    }
+
+    fun loadGlobalBenchmarkRecords(userId: String) {
+        // Esta función ahora es redundante pero la mantenemos por compatibilidad si se llama sola
+        loadAllBenchmarkRecords(userId, UserSession.currentUser.value?.gym_id)
+    }
+
 
     // --- DAILY WODS ---
     fun loadDailyWodRecords(userId: String, gymId: String) {
@@ -343,7 +397,7 @@ class PerformanceViewModel : ViewModel() {
         }
     }
 
-    fun saveBenchmarkResult(benchmark: BenchmarkWod, score: String, isRx: Boolean, notes: String, date: Date, isPublic: Boolean = true) {
+    fun saveBenchmarkResult(benchmark: BenchmarkWod, score: String, isRx: Boolean, notes: String, date: Date, isPublic: Boolean = true, videoUrl: String? = null) {
         val user = UserSession.currentUser.value ?: return
         if (user.gym_id.isBlank()) return
 
@@ -360,7 +414,7 @@ class PerformanceViewModel : ViewModel() {
 
                 val result = BenchmarkResult(
                     userId = user.id,
-                    gym_id = user.gym_id,
+                    gym_id = user.gym_id, // Siempre asociar al gym del usuario para validación del Owner
                     benchmarkId = benchmark.id,
                     benchmarkName = benchmark.name,
                     score = score.trim(),
@@ -379,7 +433,12 @@ class PerformanceViewModel : ViewModel() {
                     numericScore = numericScore,
                     
                     // Social
-                    isPublic = isPublic
+                    isPublic = isPublic,
+                    
+                    // Video & Validation
+                    videoUrl = videoUrl,
+                    validationStatus = if (benchmark.isGlobal) "pending" else null,
+                    facilityName = user.facilityName // Asegurar que el gym_id tenga nombre
                 )
                 
                 firestore.collection("benchmark_results").add(result).await()
@@ -517,6 +576,11 @@ class PerformanceViewModel : ViewModel() {
                     userId = resultObject.userId
                     gymId = resultObject.gym_id
                     firestore.collection("benchmark_results").document(resultObject.id).delete().await()
+                } else if (isBenchmark && resultObject is ChallengeResult) {
+                    if (resultObject.id.isBlank()) return@launch
+                    userId = resultObject.userId
+                    gymId = resultObject.gym_id
+                    firestore.collection("challenge_results").document(resultObject.id).delete().await()
                 } else if (!isBenchmark && resultObject is WodResult) {
                     userId = resultObject.userId
                     gymId = resultObject.gym_id

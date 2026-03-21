@@ -35,7 +35,11 @@ import com.aquiles.crosschapp.presentation.components.pulsingGlow
 import java.util.Calendar
 
 @Composable
-fun HomeGreetingCard(userName: String, profileImageUrl: String? = null) {
+fun HomeGreetingCard(
+    userName: String, 
+    profileImageUrl: String? = null,
+    primaryColor: Color
+) {
     val greeting = getGreetingMessage()
     val emoji = getGreetingEmoji()
     val motivation = "Listo para darlo todo hoy. Revisa los Horarios y reserva tu clase."
@@ -73,8 +77,8 @@ fun HomeGreetingCard(userName: String, profileImageUrl: String? = null) {
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 12.dp)
             .animatedGlowGradient(
-                color1 = Color(0xFFFC5200),
-                color2 = Color(0xFF8B00FF),
+                color1 = primaryColor,
+                color2 = primaryColor.copy(alpha = 0.5f),
                 durationMs = 6000
             ),
         shape = RoundedCornerShape(24.dp)
@@ -83,7 +87,7 @@ fun HomeGreetingCard(userName: String, profileImageUrl: String? = null) {
             // Partículas flotantes dentro de la card
             FloatingParticlesBackground(
                 modifier = Modifier.matchParentSize(),
-                particleColor = Color(0xFFFC5200),
+                particleColor = primaryColor,
                 particleCount = 14
             )
 
@@ -140,7 +144,7 @@ fun HomeGreetingCard(userName: String, profileImageUrl: String? = null) {
                         modifier = Modifier
                             .size(80.dp)
                             .pulsingGlow(
-                                color = Color(0xFFFC5200),
+                                color = primaryColor,
                                 minAlpha = 0.2f,
                                 maxAlpha = 0.55f,
                                 durationMs = 1800
@@ -152,7 +156,7 @@ fun HomeGreetingCard(userName: String, profileImageUrl: String? = null) {
                                 .clip(CircleShape)
                                 .background(
                                     Brush.radialGradient(
-                                        listOf(Color(0xFFFC5200).copy(0.3f), Color.Gray.copy(0.3f))
+                                        colors = listOf(primaryColor.copy(0.3f), Color.Gray.copy(0.3f))
                                     ),
                                     CircleShape
                                 ),
@@ -203,9 +207,9 @@ fun HomeGreetingCard(userName: String, profileImageUrl: String? = null) {
                             Brush.horizontalGradient(
                                 colors = listOf(
                                     Color.Transparent,
-                                    Color(0xFFFC5200).copy(alpha = glowAlpha),
+                                    primaryColor.copy(alpha = glowAlpha),
                                     Color.White.copy(alpha = glowAlpha),
-                                    Color(0xFFFC5200).copy(alpha = glowAlpha),
+                                    primaryColor.copy(alpha = glowAlpha),
                                     Color.Transparent
                                 )
                             )
@@ -224,15 +228,6 @@ fun HomeGreetingCard(userName: String, profileImageUrl: String? = null) {
     }
 }
 
-private fun getGreetingMessage(): String {
-    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-    return when (hour) {
-        in 5..11 -> "Buenos días"
-        in 12..19 -> "Buenas tardes"
-        else -> "Buenas noches"
-    }
-}
-
 private fun getGreetingEmoji(): String {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     return when (hour) {
@@ -241,5 +236,14 @@ private fun getGreetingEmoji(): String {
         in 12..17 -> "💪"
         in 18..19 -> "🌇"
         else -> "🌙"
+    }
+}
+
+private fun getGreetingMessage(): String {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    return when (hour) {
+        in 5..11 -> "Buenos días"
+        in 12..19 -> "Buenas tardes"
+        else -> "Buenas noches"
     }
 }

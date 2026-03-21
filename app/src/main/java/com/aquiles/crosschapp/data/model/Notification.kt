@@ -29,9 +29,12 @@ data class Notification(
     val userId: String = "",
     val gym_id: String = "",
     val title: String = "",
-    // CRÍTICO: Cambiado de @PropertyName("body") a "message" para sincronizar con iOS.
-    // iOS siempre escribe y lee el campo "message". Android ahora hace lo mismo.
-    val message: String = "",
+    // "message" es el campo principal. Se usa PropertyName para forzar el nombre exacto.
+    @get:PropertyName("message") @set:PropertyName("message")
+    var message: String = "",
+    // CRÍTICO: Firestore CustomClassMapper quita el prefijo "is" de los booleanos en Kotlin
+    // (busca setRead() en vez de setIsRead()). @PropertyName fuerza el nombre exacto "isRead".
+    @get:PropertyName("isRead") @set:PropertyName("isRead")
     var isRead: Boolean = false,
     val type: String = NotificationType.GENERAL_ANNOUNCEMENT.name,
     @ServerTimestamp

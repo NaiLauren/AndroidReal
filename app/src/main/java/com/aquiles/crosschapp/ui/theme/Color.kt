@@ -13,6 +13,13 @@ val NeutralMediumGrey = Color(0xFF38303B)
 val NeutralLightGrey = Color(0xFFB1A5B6)
 val NeutralWhite = Color(0xFFFFFFFF)
 
-// Colores Semánticos
-val SuccessGreen = Color(0xFF4CAF50)
-val ErrorRed = Color(0xFFD32F2F)
+// Colores Semánticos (Status)
+val SuccessGreen = Color(0xFF34C759)
+val ErrorRed = Color(0xFFFF3B30)
+val StatusUpcoming = Color(0xFF0A84FF)
+val StatusPending = Color(0xFFFF9500)
+
+// Podium
+val ColorGold = Color(0xFFFFD700)
+val ColorSilver = Color(0xFFC0C0C0)
+val ColorBronze = Color(0xFFCD7F32)

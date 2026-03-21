@@ -12,8 +12,10 @@ import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.google.firebase.firestore.FieldPath
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import android.util.Log
 
 class StudentCompetitionViewModel : ViewModel() {
 
@@ -31,8 +33,13 @@ class StudentCompetitionViewModel : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _enrolledUsers = MutableStateFlow<List<User>>(emptyList())
+    val enrolledUsers: StateFlow<List<User>> = _enrolledUsers.asStateFlow()
+
     private val _myEntry = MutableStateFlow<RankingEntry?>(null)
     val myEntry: StateFlow<RankingEntry?> = _myEntry.asStateFlow()
+
+    private var listenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
 
     fun loadCompetition(competitionId: String) {
         _isLoading.value = true
@@ -55,68 +62,85 @@ class StudentCompetitionViewModel : ViewModel() {
 
     private suspend fun loadRanking(competition: Competition) {
         val criteria = competition.resolveCriteriaEnum()
+        listenerRegistration?.remove()
+
+        // Cargar usuarios inscritos
+        viewModelScope.launch {
+            try {
+                if (competition.linkedClassIds.isNotEmpty()) {
+                    val classesSnap = db.collection("gymClasses")
+                        .whereIn(FieldPath.documentId(), competition.linkedClassIds.take(10))
+                        .get().await()
+                    
+                    val enrolledIds = classesSnap.documents.flatMap { 
+                        @Suppress("UNCHECKED_CAST")
+                        (it.get("enrolledUserIds") as? List<String>) ?: emptyList() 
+                    }.toSet().toList()
+
+                    if (enrolledIds.isNotEmpty()) {
+                        val usersSnap = db.collection("users")
+                            .whereIn(FieldPath.documentId(), enrolledIds.take(10))
+                            .get().await()
+                            
+                        _enrolledUsers.value = usersSnap.toObjects(User::class.java)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("StudentCompetitionVM", "Error loading enrolled users", e)
+            }
+        }
         
         try {
-            // 1. Obtener todos los resultados (WOD Results) vinculados a esta competencia
-            // Nota: En Android BenchmarkResult se usa también para WodResult mapeado, pero la colección raw es 'wod_results'
-            // Asumimos que los resultados de competencia se guardan en 'wod_results' con 'competitionId' set.
-            
-            val snapshot = db.collection("wod_results")
+            // Utilizamos SnapshotListener para reflejar las Emojis (reactions) en tiempo real
+            listenerRegistration = db.collection("wod_results")
                 .whereEqualTo("competitionId", competition.id)
                 .whereEqualTo("validationStatus", "approved") // Solo validados
-                .get()
-                .await()
-            
-            val results = snapshot.toObjects(BenchmarkResult::class.java) // Usamos BenchmarkResult como DTO compatible
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        _errorMessage.value = "Error calculando ranking: ${error.message}"
+                        return@addSnapshotListener
+                    }
 
-            // 2. Agrupar por Usuario (Si es acumulativo o "Best score")
-            // Para simplicidad inicial y paridad con lo visto en iOS SocialViewModel, 
-            // asumimos "Best Score" si es una competencia de un solo evento, 
-            // o "Accumulative" si es multicompetencia.
-            // PERO: Si la competencia tiene 'linkedClassIds', probablemente sea un evento único o serie.
-            
-            // LÓGICA DE RANKING:
-            // Por ahora, asumiremos que cada usuario tiene UN resultado válido principal. 
-            // Si hay múltiples, tomamos el mejor o la suma según criterio.
-            
-            // Vamos a agrupar por usuario y tomar el MEJOR resultado
-            val resultsByUser = results.groupBy { it.userId }
-            
-            val rankingEntries = resultsByUser.map { (userId, userResults) ->
-                // Calcular Score del Usuario
-                val bestResult = getBestResult(userResults, criteria)
-                
-                // Enriquecer con datos de usuario (esto requiere fetch adicional si no está en el result,
-                // pero BenchmarkResult tiene userName/userProfileImage desnormalizados a menudo.
-                // Si faltan, deberíamos hacer fetch de usuarios. Por eficiencia, usaremos lo que hay en result por ahora.)
-                
-                RankingEntry(
-                    userId = userId,
-                    userName = bestResult.userName.ifBlank { "Atleta" },
-                    userProfileImageUrl = bestResult.userProfileImageUrl,
-                    userLevel = bestResult.userLevel,
-                    score = bestResult.numericScore,
-                    scoreDisplay = bestResult.score,
-                    rank = 0 // Se asigna después de ordenar
-                )
-            }
-            
-            // 3. Ordenar
-            val sortedEntries = sortRanking(rankingEntries, criteria)
-            
-            // 4. Asignar Rank
-            val finalRanking = sortedEntries.mapIndexed { index, entry ->
-                entry.copy(rank = index + 1)
-            }
-            
-            _ranking.value = finalRanking
-            
-            // 5. Asignar Ranking de Usuario Actual
-            val currentUserId = UserSession.getCurrentUserId()
-            _myEntry.value = finalRanking.find { it.userId == currentUserId }
+                    if (snapshot != null) {
+                        val results = snapshot.toObjects(BenchmarkResult::class.java)
+
+                        val resultsByUser = results.groupBy { it.userId }
+                        
+                        val rankingEntries = resultsByUser.map { (userId, userResults) ->
+                            val bestResult = getBestResult(userResults, criteria)
+                            
+                            RankingEntry(
+                                userId = userId,
+                                userName = bestResult.userName.ifBlank { "Atleta" },
+                                userProfileImageUrl = bestResult.userProfileImageUrl,
+                                userLevel = bestResult.userLevel,
+                                score = bestResult.numericScore,
+                                scoreDisplay = bestResult.score,
+                                rank = 0, // Se asigna después de ordenar
+                                resultId = bestResult.id,
+                                validationStatus = bestResult.validationStatus,
+                                reactions = bestResult.reactions
+                            )
+                        }
+                        
+                        // Ordenar
+                        val sortedEntries = sortRanking(rankingEntries, criteria)
+                        
+                        // Asignar Rank
+                        val finalRanking = sortedEntries.mapIndexed { index, entry ->
+                            entry.copy(rank = index + 1)
+                        }
+                        
+                        _ranking.value = finalRanking
+                        
+                        // Asignar Ranking de Usuario Actual
+                        val currentUserId = UserSession.getCurrentUserId()
+                        _myEntry.value = finalRanking.find { it.userId == currentUserId }
+                    }
+                }
             
         } catch (e: Exception) {
-            _errorMessage.value = "Error calculando ranking: ${e.message}"
+            _errorMessage.value = "Error inicializando ranking: ${e.message}"
         }
     }
 
@@ -135,5 +159,39 @@ class StudentCompetitionViewModel : ViewModel() {
             RankingCriteria.TIME -> entries.sortedBy { it.score } // Ascendente
             RankingCriteria.REPS, RankingCriteria.LOAD, RankingCriteria.POINTS -> entries.sortedByDescending { it.score } // Descendente
         }
+    }
+
+    // MANDATO: Actualziar solo elements especificos `affectedKeys().hasOnly(['reactions'])`
+    fun toggleReaction(resultId: String, emotion: String) {
+        val currentUser = UserSession.currentUser.value ?: return
+        val currentUserId = currentUser.id
+        
+        viewModelScope.launch {
+            try {
+                val docRef = db.collection("wod_results").document(resultId)
+                db.runTransaction { transaction ->
+                    val snapshot = transaction.get(docRef)
+                    @Suppress("UNCHECKED_CAST")
+                    val currentReactions = snapshot.get("reactions") as? Map<String, String> ?: emptyMap()
+                    
+                    val newReactions = currentReactions.toMutableMap()
+                    if (newReactions[currentUserId] == emotion) {
+                        newReactions.remove(currentUserId)
+                    } else {
+                        newReactions[currentUserId] = emotion
+                    }
+                    
+                    transaction.update(docRef, "reactions", newReactions)
+                    null
+                }.await()
+            } catch (e: Exception) {
+                Log.e("StudentCompetitionVM", "Error updating reaction", e)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        listenerRegistration?.remove()
     }
 }

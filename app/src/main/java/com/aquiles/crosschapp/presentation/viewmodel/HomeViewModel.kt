@@ -182,23 +182,27 @@ class HomeViewModel : ViewModel() {
 
     private fun listenForActiveCompetitions(gymId: String) {
         competitionsJob?.cancel()
+        
+        // Calcular fecha de hace 7 días para competencias que acaban de terminar
+        val calendar = java.util.Calendar.getInstance()
+        calendar.add(java.util.Calendar.DAY_OF_MONTH, -7)
+        val sevenDaysAgo = com.google.firebase.Timestamp(calendar.time)
         competitionsJob = viewModelScope.launch {
-            com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                .collection("competitions")
-                .whereEqualTo("gym_id", gymId)
-                // Sin filtro de isActive ni fecha — igual que iOS.
-                // El owner decide borrarlas desde el panel de admin.
-                .orderBy("endDate", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                .addSnapshotListener { snapshot, e ->
-                    if (e != null) {
-                        Log.e(TAG, "Error listening for competitions", e)
-                        return@addSnapshotListener
+            try {
+                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("competitions")
+                    .whereEqualTo("gym_id", gymId)
+                    .whereGreaterThanOrEqualTo("endDate", sevenDaysAgo)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.e(TAG, "Error in competitions listener", error)
+                            return@addSnapshotListener
+                        }
+                        val list = snapshot?.toObjects(com.aquiles.crosschapp.data.model.Competition::class.java) ?: emptyList()
+                        _activeCompetitions.value = list.sortedByDescending { it.endDate }
                     }
-                    if (snapshot != null) {
-                        val comps = snapshot.toObjects(com.aquiles.crosschapp.data.model.Competition::class.java)
-                        _activeCompetitions.value = comps
-                    }
-                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error setting up competition listeners", e)
+            }
         }
     }
 

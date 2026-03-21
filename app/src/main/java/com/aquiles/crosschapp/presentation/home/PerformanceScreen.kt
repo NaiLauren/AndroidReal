@@ -2,7 +2,17 @@ package com.aquiles.crosschapp.presentation.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -36,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
 import java.text.SimpleDateFormat
@@ -44,6 +55,7 @@ import kotlin.math.ceil
 import androidx.compose.foundation.layout.height
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.components.GlassAlertDialog
+import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -68,6 +80,7 @@ fun PerformanceScreen(
     val dailyWodState by performanceViewModel.dailyWodRecordsState.collectAsState()
     val achievementsState by performanceViewModel.achievementsState.collectAsState()
     val chartState by performanceViewModel.attendanceChartState.collectAsState()
+    val globalBenchmarkState by performanceViewModel.globalBenchmarkRecordsState.collectAsState()
     val currentUser by UserSession.currentUser.collectAsState()
     
     var showingTrainingConfig by remember { mutableStateOf(false) }
@@ -119,31 +132,13 @@ fun PerformanceScreen(
                         onTimeRangeSelected = { performanceViewModel.onTimeRangeSelected(it) }
                     )
 
-                    // 2. RÉCORDS Y MARCAS
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Column(Modifier.weight(1f)) {
-                            // Header con Botón
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(end = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                SectionLabel("BENCHMARKS")
-                                Text(
-                                    text = "Ranking >", 
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = ColorPrimaryAction, 
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.clickable { onNavigateToLeaderboard() }
-                                )
-                            }
-                            RecordCardGlass(state = benchmarkState, label = "Benchmark", viewModel = performanceViewModel, isBenchmark = true)
-                        }
-                        Column(Modifier.weight(1f)) {
-                            SectionLabel("RESULTADO DE CLASES")
-                            RecordCardGlass(state = dailyWodState, label = "Clase", viewModel = performanceViewModel, isBenchmark = false)
-                        }
-                    }
+                    // 2. RÉCORDS UNIFICADOS (iOS Parity Redesign)
+                    UnifiedPerformanceRecordsCard(
+                        wodRecordsState = dailyWodState,
+                        benchmarkRecordsState = benchmarkState,
+                        globalBenchmarkRecordsState = globalBenchmarkState,
+                        viewModel = performanceViewModel
+                    )
 
                     // 3. LOGROS
                     Column {
@@ -155,26 +150,43 @@ fun PerformanceScreen(
                 }
             }
 
-            // XP Reward Popup Overlay
+            // XP Reward Popup Overlay — Mejorado
             val xpMessage by userTrainingViewModel.xpRewardMessage.collectAsState()
             AnimatedVisibility(
                 visible = xpMessage != null,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 100.dp)
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 96.dp)
+                    .zIndex(10f),
+                enter = slideInVertically(initialOffsetY = { -it }, animationSpec = spring()) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }, animationSpec = tween(300)) + fadeOut()
             ) {
                 if (xpMessage != null) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(Brush.linearGradient(listOf(Color(0xFFFF9800), Color(0xFFFC5200))))
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color(0xFFFF9800), Color(0xFFFC5200))
+                                )
+                            )
+                            .border(1.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(50))
+                            .padding(horizontal = 28.dp, vertical = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = xpMessage!!,
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("⚡", fontSize = 18.sp)
+                            Text(
+                                text = xpMessage!!,
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                style = MaterialTheme.typography.titleMedium,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
                     }
                 }
             }
@@ -383,20 +395,116 @@ fun WeeklyAttendanceSummary(days: List<WeeklyAttendanceDay>) {
     }
 }
 
-// --- RECORD CARDS ---
+// =====================================================
+// RÉCORDS UNIFICADOS (3 PESTAÑAS)
+// =====================================================
 
 private data class DisplayRecord(
     val name: String, val date: Date?, val score: String, val isRx: Boolean,
     val notes: String, val description: String, val uniqueId: String
 )
 
+enum class PerformanceTab { CLASSES, BENCHMARKS, CHALLENGES }
+
+@Composable
+fun UnifiedPerformanceRecordsCard(
+    wodRecordsState: PerformanceState,
+    benchmarkRecordsState: PerformanceState,
+    globalBenchmarkRecordsState: PerformanceState,
+    viewModel: PerformanceViewModel
+) {
+    var selectedTab by remember { mutableStateOf(PerformanceTab.CLASSES) }
+    val primaryColor = LocalPrimaryColor.current
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header con Pestañas
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.03f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PerformanceTab.values().forEach { tab ->
+                    val isSelected = selectedTab == tab
+                    val label = when(tab) {
+                        PerformanceTab.CLASSES -> "MIS CLASES"
+                        PerformanceTab.BENCHMARKS -> "MIS BENCHMARKS"
+                        PerformanceTab.CHALLENGES -> "MIS DESAFÍOS"
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) primaryColor.copy(alpha = 0.15f) else Color.Transparent)
+                            .clickable { selectedTab = tab }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold,
+                            color = if (isSelected) primaryColor else Color.White.copy(alpha = 0.4f),
+                            letterSpacing = 0.8.sp
+                        )
+                    }
+                }
+            }
+
+            // Contenido dinámico según pestaña
+            Box(modifier = Modifier.weight(1f)) {
+                when (selectedTab) {
+                    PerformanceTab.CLASSES -> {
+                        RecordColumnInsideGlass(
+                            state = wodRecordsState,
+                            label = "Mis Marcas",
+                            viewModel = viewModel,
+                            isBenchmark = false,
+                            showHeaderLabel = false
+                        )
+                    }
+                    PerformanceTab.BENCHMARKS -> {
+                        RecordColumnInsideGlass(
+                            state = benchmarkRecordsState,
+                            label = "Mis Récords",
+                            viewModel = viewModel,
+                            isBenchmark = true,
+                            showHeaderLabel = false
+                        )
+                    }
+                    PerformanceTab.CHALLENGES -> {
+                        RecordColumnInsideGlass(
+                            state = globalBenchmarkRecordsState,
+                            label = "Mis Desafíos Globales",
+                            viewModel = viewModel,
+                            isBenchmark = true,
+                            showHeaderLabel = false
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecordCardGlass(
+fun RecordColumnInsideGlass(
     state: PerformanceState,
     label: String,
     viewModel: PerformanceViewModel,
-    isBenchmark: Boolean
+    isBenchmark: Boolean,
+    modifier: Modifier = Modifier,
+    headerAction: (@Composable () -> Unit)? = null,
+    showHeaderLabel: Boolean = true
 ) {
     var showHistory by remember { mutableStateOf(false) }
 
@@ -412,45 +520,46 @@ fun RecordCardGlass(
         )
     }
 
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp)
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
             .clickable { 
                 if (state is PerformanceState.Success && state.records.isNotEmpty()) {
                     showHistory = true 
                 }
-            },
-        shape = RoundedCornerShape(20.dp)
+            }
+            .padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp).fillMaxSize(),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
             // Header con ícono historial
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape)
-                    )
-                    Text(
-                        text = label.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        letterSpacing = 1.sp
-                    )
+                if (showHeaderLabel) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        )
+                        Text(
+                            text = label.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            letterSpacing = 1.sp
+                        )
+                    }
                 }
-                if (state is PerformanceState.Success && state.records.isNotEmpty()) {
+                
+                headerAction?.invoke()
+                
+                if (headerAction == null && state is PerformanceState.Success && state.records.isNotEmpty()) {
                     Icon(
                         imageVector = Icons.Default.History, 
                         contentDescription = "Ver Historial",
@@ -534,7 +643,6 @@ fun RecordCardGlass(
                 }
             }
         }
-    }
 }
 
 private fun extractRecordData(record: PerformanceRecord): DisplayRecord {
@@ -545,9 +653,14 @@ private fun extractRecordData(record: PerformanceRecord): DisplayRecord {
             description = (record.wodDetails as? Wod)?.description ?: "", uniqueId = res.wodId
         )
         is BenchmarkResult -> DisplayRecord(
-            name = (record.wodDetails as? BenchmarkWod)?.name ?: res.benchmarkName,
+            name = (record.wodDetails as? BenchmarkWod)?.name ?: (record.wodDetails as? GlobalChallenge)?.name ?: res.benchmarkName,
             date = res.date, score = res.score, isRx = res.isRx, notes = res.notes,
-            description = (record.wodDetails as? BenchmarkWod)?.description ?: "", uniqueId = res.benchmarkId
+            description = (record.wodDetails as? BenchmarkWod)?.description ?: (record.wodDetails as? GlobalChallenge)?.description ?: "", uniqueId = res.benchmarkId
+        )
+        is ChallengeResult -> DisplayRecord(
+            name = (record.wodDetails as? GlobalChallenge)?.name ?: (record.wodDetails as? BenchmarkWod)?.name ?: res.challengeName,
+            date = res.date, score = res.score, isRx = res.isRx, notes = res.notes,
+            description = (record.wodDetails as? GlobalChallenge)?.description ?: (record.wodDetails as? BenchmarkWod)?.description ?: "", uniqueId = res.challengeId
         )
         else -> DisplayRecord("Error", null, "", false, "", "", "")
     }
@@ -846,92 +959,337 @@ fun RecordHistoryItem(
 fun TrainingScheduleSummarySectionGlass(viewModel: UserTrainingViewModel, onConfigure: () -> Unit) {
     val intentions by viewModel.userIntentions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val currentWeekday = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
+    val todayIntentions = intentions.filter { it.dayOfWeek == currentWeekday }.sortedBy { it.time }
 
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp)
+    // Nombres cortos de los días L-D (semana empieza lunes, Calendar usa Dom=1)
+    val dayNames = listOf("D","L","M","M","J","V","S")
+    // Días del alfabeto calendario: 1=Dom, 2=Lun … 7=Sab
+    val calDays = listOf(1,2,3,4,5,6,7)
+
+    // Animación de borde angular tipo iOS
+    val infiniteTransition = rememberInfiniteTransition(label = "todayBorder")
+    val borderAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.5f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(1800, easing = LinearEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "borderAlpha"
+    )
+
+    val dayOfWeekName = remember {
+        val cal = Calendar.getInstance()
+        val sdf = java.text.SimpleDateFormat("EEEE", java.util.Locale.forLanguageTag("es-ES"))
+        sdf.format(cal.time).replaceFirstChar { it.uppercase() }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .border(
+                width = 1.5.dp,
+                brush = Brush.horizontalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = borderAlpha),
+                        Color(0xFFFFD700).copy(alpha = borderAlpha * 0.6f),
+                        MaterialTheme.colorScheme.primary.copy(alpha = borderAlpha)
+                    )
+                ),
+                shape = RoundedCornerShape(20.dp)
+            )
     ) {
-        Column(Modifier.padding(20.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0xFF1A1A2E).copy(alpha = 0.95f),
+                            Color(0xFF0F0F1A).copy(alpha = 0.98f)
+                        )
+                    )
+                )
+        ) {
+            // ── HEADER ────────────────────────────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("Mi Entrenamiento de Hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ColorTextPrimary)
-                    Text("Centro Abierto", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Ícono grande con fondo
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🏋️", fontSize = 26.sp)
+                    }
+                    Column {
+                        Text(
+                            "Hoy · $dayOfWeekName",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                        Text(
+                            if (todayIntentions.isEmpty() && !isLoading && intentions.isNotEmpty())
+                                "Sin entrenamiento planificado"
+                            else if (intentions.isEmpty() && !isLoading)
+                                "Planificador no configurado"
+                            else
+                                "${todayIntentions.size} turno${if (todayIntentions.size != 1) "s" else ""} agendado${if (todayIntentions.size != 1) "s" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (todayIntentions.isNotEmpty()) MaterialTheme.colorScheme.primary
+                                    else Color.White.copy(alpha = 0.5f)
+                        )
+                    }
                 }
-                IconButton(onClick = onConfigure) {
-                    Icon(Icons.Default.Edit, contentDescription = "Configurar", tint = MaterialTheme.colorScheme.primary)
+
+                // Botón editar premium
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .clickable { onConfigure() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Configurar",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-
-            if (isLoading) {
-                Box(Modifier.fillMaxWidth(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
-            } else if (intentions.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            // ── MINI CALENDARIO SEMANAL ───────────────────────────────────
+            if (intentions.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(Icons.Default.Schedule, contentDescription = null, tint = ColorTextSecondary.copy(alpha = 0.5f), modifier = Modifier.size(32.dp))
-                    Text("No has configurado tu rutina.", style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
-                    TextButton(onClick = onConfigure) {
-                        Text("Configurar ahora", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    calDays.forEachIndexed { idx, calDay ->
+                        val hasIntention = intentions.any { it.dayOfWeek == calDay }
+                        val isToday = calDay == currentWeekday
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                dayNames[idx],
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isToday) MaterialTheme.colorScheme.primary
+                                        else Color.White.copy(alpha = 0.4f),
+                                fontWeight = if (isToday) FontWeight.Black else FontWeight.Normal
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when {
+                                            isToday && hasIntention -> MaterialTheme.colorScheme.primary
+                                            isToday -> Color.White.copy(alpha = 0.12f)
+                                            hasIntention -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                            else -> Color.Transparent
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (hasIntention) {
+                                    Text(
+                                        if (isToday) "•••" else "•",
+                                        fontSize = if (isToday) 8.sp else 10.sp,
+                                        color = if (isToday) Color.White
+                                                else MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp)).padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    val currentWeekday = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
-                    val todayIntentions = intentions.filter { it.dayOfWeek == currentWeekday }.sortedBy { it.time }
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                color = Color.White.copy(alpha = 0.08f)
+            )
+
+            // ── CONTENIDO PRINCIPAL ───────────────────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                when {
+                    isLoading -> {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 20.dp), Alignment.Center) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
+                        }
                     }
 
-                    if (todayIntentions.isEmpty()) {
+                    intentions.isEmpty() -> {
+                        // Estado: Sin planificador configurado
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text("📅", fontSize = 48.sp)
+                            Text(
+                                "Aún no configuraste tu rutina",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                "Planifica tus días de entrenamiento y gana XP cada semana 🚀",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.5f),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Button(
+                                onClick = onConfigure,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Configurar Planificador", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    todayIntentions.isEmpty() -> {
+                        // Estado: Hoy es día de descanso o no planificado
                         val operatingHours by viewModel.gymOperatingHours.collectAsState()
                         val heatmapData by viewModel.heatmapData.collectAsState()
                         val emptyState = getEmptyStateMessage(operatingHours, heatmapData, currentWeekday)
-                        
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Icon(
-                                imageVector = emptyState.icon,
-                                contentDescription = null,
-                                tint = if (emptyState.isActive) MaterialTheme.colorScheme.primary else ColorTextSecondary.copy(alpha = 0.8f),
-                                modifier = Modifier.size(32.dp)
-                            )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.White.copy(alpha = 0.05f))
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        if (emptyState.isActive)
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                        else Color.White.copy(alpha = 0.06f)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = emptyState.icon,
+                                    contentDescription = null,
+                                    tint = if (emptyState.isActive) MaterialTheme.colorScheme.primary
+                                           else Color.White.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
-                                    text = emptyState.title,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    emptyState.title,
+                                    style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (emptyState.isActive) Color.White else ColorTextSecondary
+                                    color = if (emptyState.isActive) Color.White else Color.White.copy(alpha = 0.6f)
                                 )
                                 Text(
-                                    text = emptyState.message,
+                                    emptyState.message,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = ColorTextSecondary,
-                                    fontStyle = if (emptyState.isActive) FontStyle.Normal else FontStyle.Italic
+                                    color = Color.White.copy(alpha = 0.45f),
+                                    fontStyle = if (!emptyState.isActive) FontStyle.Italic else FontStyle.Normal
                                 )
                             }
                         }
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                            todayIntentions.forEach { intention ->
-                                Row(
-                                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.1f)).padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(intention.time, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    CapacityIndicatorGlassView(viewModel, currentWeekday, intention.time)
+                    }
+
+                    else -> {
+                        // Estado: Hay turnos agendados para hoy
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.horizontalScroll(rememberScrollState())
+                            ) {
+                                todayIntentions.forEach { intention ->
+                                    // Chip de turno premium
+                                    Column(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                            .border(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                                                RoundedCornerShape(14.dp)
+                                            )
+                                            .padding(horizontal = 18.dp, vertical = 14.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            "🕐",
+                                            fontSize = 20.sp
+                                        )
+                                        Text(
+                                            intention.time,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Black,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        CapacityIndicatorGlassView(viewModel, currentWeekday, intention.time)
+                                    }
                                 }
+                            }
+                            // Motivación
+                            val successGreen = Color(0xFF4CAF50)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(successGreen.copy(alpha = 0.08f))
+                                    .border(1.dp, successGreen.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text("✅", fontSize = 16.sp)
+                                Text(
+                                    "¡Entrenamiento planificado! Toca el planificador para ganar XP 💪",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = successGreen,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
@@ -947,9 +1305,15 @@ fun TrainingScheduleSectionGlass(viewModel: UserTrainingViewModel) {
     val operatingHours by viewModel.gymOperatingHours.collectAsState()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
     val heatmapData by viewModel.heatmapData.collectAsState()
-    
+    val scheduleXpEarned by viewModel.scheduleXpEarned.collectAsState()
+
+    val XP_CAP = 140
+    val xpProgress = (scheduleXpEarned / XP_CAP.toFloat()).coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(targetValue = xpProgress, label = "xpProgress")
+    val capReached = scheduleXpEarned >= XP_CAP
+
     var highlightQuietHours by remember { mutableStateOf(false) }
-    
+
     val today = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
     var selectedDayTab by remember { mutableStateOf(today) }
     
@@ -976,11 +1340,69 @@ fun TrainingScheduleSectionGlass(viewModel: UserTrainingViewModel) {
     val activeHours = if (minHour > maxHour) (7..22).toList() else (minHour..maxHour).toList()
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Header Texts
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            Text("Planificador Pro", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Color.White)
-            Text("Toca una franja horaria para agendar tu entrenamiento y sumar XP \uD83D\uDE80", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
+        // Header con progreso XP
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Planificador Pro",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+                // Badge de XP ganado
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            if (capReached) Color(0xFF34C759).copy(alpha = 0.2f)
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (capReached) "140/140 XP ✓" else "$scheduleXpEarned/140 XP",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (capReached) Color(0xFF34C759) else MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            // Barra de progreso XP del planificador
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(50)),
+                    color = if (capReached) Color(0xFF34C759) else MaterialTheme.colorScheme.primary,
+                    trackColor = Color.White.copy(alpha = 0.1f)
+                )
+                Text(
+                    text = if (capReached)
+                        "🏆 ¡Límite alcanzado! Ya ganaste el máximo de XP con el planificador."
+                    else
+                        "Toca una franja para agendar tu entrenamiento y sumar XP 🚀",
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (capReached) Color(0xFF34C759).copy(alpha = 0.8f) else ColorTextSecondary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
+
 
         if (activeDays.isEmpty()) {
             Box(

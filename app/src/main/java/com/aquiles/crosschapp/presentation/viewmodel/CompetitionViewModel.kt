@@ -38,12 +38,14 @@ class CompetitionViewModel : ViewModel() {
             try {
                 val snapshot = db.collection("competitions")
                     .whereEqualTo("gym_id", gymId)
-                    // Sin filtro isActive — el owner ve todas y borra desde el panel
-                    .orderBy("endDate", Query.Direction.DESCENDING)
+                    // Sin filtro isActive — el owner ve todas
+                    // Sin orderBy para evitar índice compuesto en Firestore
                     .get()
                     .await()
 
+                // Ordenamos client-side por endDate descendente
                 val comps = snapshot.toObjects(Competition::class.java)
+                    .sortedByDescending { it.endDate }
                 _competitions.value = comps
             } catch (e: Exception) {
                 _errorMessage.value = "Error al cargar competencias: ${e.message}"
@@ -166,8 +168,9 @@ class CompetitionViewModel : ViewModel() {
         _isLoading.value = true
         viewModelScope.launch {
             try {
+                // Hard-delete: borra el documento permanentemente
                 db.collection("competitions").document(competitionId)
-                    .update("isActive", false) // Soft delete matches iOS
+                    .delete()
                     .await()
                 loadCompetitions()
             } catch (e: Exception) {

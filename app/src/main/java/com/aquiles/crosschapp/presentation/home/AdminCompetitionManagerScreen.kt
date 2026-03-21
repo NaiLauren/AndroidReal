@@ -1,6 +1,7 @@
 package com.aquiles.crosschapp.presentation.home
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,13 +11,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -33,12 +38,21 @@ import com.aquiles.crosschapp.data.model.CompetitionType
 import com.aquiles.crosschapp.data.model.RankingCriteria
 import com.aquiles.crosschapp.data.model.ScoreStrategy
 import com.aquiles.crosschapp.data.model.ValidationRule
+import com.aquiles.crosschapp.domain.competition.CompetitionFormValidator
 import com.aquiles.crosschapp.presentation.viewmodel.CompetitionViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import com.aquiles.crosschapp.ui.theme.*
+import com.aquiles.crosschapp.presentation.components.SetupStepBottomSheet
+import com.aquiles.crosschapp.presentation.components.ValidationErrorBanner
+import com.aquiles.crosschapp.presentation.components.BrandOrange
+import com.aquiles.crosschapp.presentation.components.ErrorRed
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Brush
+
+import com.aquiles.crosschapp.presentation.common.AppBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,16 +65,9 @@ fun AdminCompetitionManagerScreen(
     
     if (showSetupPopup) {
         SetupStep.entries.find { it.toKey() == setupStepKey }?.let { step ->
-            AlertDialog(
-                onDismissRequest = { showSetupPopup = false },
-                title = { Text(step.title, color = Color.White) },
-                text = { Text(step.description, color = Color.White.copy(alpha = 0.7f)) },
-                confirmButton = {
-                    Button(onClick = { showSetupPopup = false }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFC5200))) { 
-                        Text("Entendido", color = Color.White) 
-                    }
-                },
-                containerColor = Color(0xFF1C1C1E).copy(alpha = 0.70f).copy(alpha = 0.70f)
+            SetupStepBottomSheet(
+                step = step,
+                onDismiss = { showSetupPopup = false }
             )
         }
     }
@@ -234,9 +241,9 @@ fun CompetitionCard(competition: Competition, onClick: () -> Unit, onDelete: () 
                 // Status Dot
                 val status = competition.resolveStatus()
                 val statusColor = when (status) {
-                    CompetitionStatus.ONGOING -> Color.Green
-                    CompetitionStatus.UPCOMING -> Color.Blue
-                    CompetitionStatus.FINISHED -> Color.Red
+                    CompetitionStatus.ONGOING -> SuccessGreen
+                    CompetitionStatus.UPCOMING -> StatusUpcoming
+                    CompetitionStatus.FINISHED -> ErrorRed
                     else -> Color.Gray
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -278,9 +285,10 @@ fun CreateCompetitionDialog(
     var type by remember { mutableStateOf(CompetitionType.MONTHLY) }
     var criteria by remember { mutableStateOf(RankingCriteria.POINTS) }
     var startDate by remember { mutableStateOf(Date()) }
-    var endDate by remember { mutableStateOf(Date()) } 
+    var endDate by remember { mutableStateOf(Date(System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L)) }
     var prizeDescription by remember { mutableStateOf("") }
     var xpReward by remember { mutableStateOf("500") }
+    var criteriaFieldValue by remember { mutableStateOf("") } // campo dinámico por criterio
     // Event specific
     var eventTime by remember { mutableStateOf("10:00") }
     var maxCapacity by remember { mutableStateOf("50") }
@@ -289,6 +297,15 @@ fun CreateCompetitionDialog(
 
     var scoreStrategy by remember { mutableStateOf(ScoreStrategy.RELATIVE) }
     var validationRule by remember { mutableStateOf(ValidationRule.MANUAL) }
+
+    // Estados de validación del formulario
+    var formErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var showValidationAlert by remember { mutableStateOf(false) }
+
+    // Campos dinámicos según criterio seleccionado
+    val criteriaFieldConfig = remember(criteria) {
+        CompetitionFormValidator.getCriteriaFieldConfig(criteria)
+    }
 
     // Date Picker Logic
     var showStartDatePicker by remember { mutableStateOf(false) }
@@ -311,6 +328,20 @@ fun CreateCompetitionDialog(
         }
     }
 
+    if (showEndDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerStateEnd.selectedDateMillis?.let { endDate = Date(it) }
+                    showEndDatePicker = false
+                }) { Text("OK") }
+            }
+        ) {
+            DatePicker(state = datePickerStateEnd)
+        }
+    }
+
     if (showTimePicker) {
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
@@ -324,208 +355,398 @@ fun CreateCompetitionDialog(
         )
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Nueva Competencia") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp) 
-                    .padding(vertical = 8.dp),
-                 verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Nueva Competencia", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar")
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = Color.Black.copy(alpha = 0.9f),
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
+                )
+            )
+        },
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        AppBackground(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            // Un Box para proporcionar BoxScope y permitir .align()
+            Box(modifier = Modifier.fillMaxSize()) {
                 val scrollState = rememberScrollState()
+                
                 Column(
-                    modifier = Modifier.verticalScroll(scrollState),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
                 ) {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Título") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
-                        label = { Text("Descripción") },
-                        maxLines = 3
-                    )
-                    
-                    HorizontalDivider()
-                    Text("Configuración General", style = MaterialTheme.typography.labelMedium)
-
-                    // Type Selector
-                    var expandedType by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedTextField(
-                            value = type.value,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Tipo") },
-                            trailingIcon = { IconButton(onClick = { expandedType = true }) { Icon(Icons.Default.ArrowDropDown, "Select") } }
+                    if (formErrors.isNotEmpty()) {
+                        ValidationErrorBanner(errors = formErrors)
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                                      Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(horizontal = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        Text(
+                            "Configura los detalles de tu próximo evento para motivar a la comunidad.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.6f)
                         )
-                        DropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
-                            CompetitionType.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.value) },
-                                    onClick = { type = option; expandedType = false }
-                                )
-                            }
-                        }
-                    }
 
-                    // Criteria Selector
-                    var expandedCrit by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedTextField(
-                            value = criteria.value,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Criterio") },
-                            trailingIcon = { IconButton(onClick = { expandedCrit = true }) { Icon(Icons.Default.ArrowDropDown, "Select") } }
+                        BasicInfoSection(
+                            title = title,
+                            onTitleChange = { 
+                                title = it
+                                if (it.isNotBlank()) formErrors = formErrors.toMutableMap().also { m -> m.remove("title") }
+                            },
+                            description = description,
+                            onDescriptionChange = { 
+                                description = it
+                                if (it.isNotBlank()) formErrors = formErrors.toMutableMap().also { m -> m.remove("description") }
+                            },
+                            formErrors = formErrors
                         )
-                        DropdownMenu(expanded = expandedCrit, onDismissRequest = { expandedCrit = false }) {
-                            RankingCriteria.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.value) },
-                                    onClick = { criteria = option; expandedCrit = false }
-                                )
-                            }
-                        }
-                    }
 
-                    // Score Strategy Selector
-                    var expandedScore by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedTextField(
-                            value = scoreStrategy.name,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Estrategia de Puntaje") },
-                            trailingIcon = { IconButton(onClick = { expandedScore = true }) { Icon(Icons.Default.ArrowDropDown, "Select") } },
-                            modifier = Modifier.fillMaxWidth()
+                        TechnicalConfigSection(
+                            type = type,
+                            onTypeChange = { type = it },
+                            criteria = criteria,
+                            onCriteriaChange = { 
+                                criteria = it
+                                criteriaFieldValue = ""
+                                formErrors = formErrors.toMutableMap().also { m -> m.remove("criteriaField") }
+                            },
+                            criteriaFieldValue = criteriaFieldValue,
+                            onCriteriaFieldValueChange = { criteriaFieldValue = it },
+                            criteriaFieldConfig = criteriaFieldConfig,
+                            formErrors = formErrors
                         )
-                        DropdownMenu(expanded = expandedScore, onDismissRequest = { expandedScore = false }) {
-                            ScoreStrategy.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.name) },
-                                    onClick = { scoreStrategy = option; expandedScore = false }
-                                )
-                            }
-                        }
-                    }
 
-                    // Validation Rule Selector
-                    var expandedValidation by remember { mutableStateOf(false) }
-                    Box {
-                        OutlinedTextField(
-                            value = validationRule.name,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Regla de Validación") },
-                            trailingIcon = { IconButton(onClick = { expandedValidation = true }) { Icon(Icons.Default.ArrowDropDown, "Select") } },
-                            modifier = Modifier.fillMaxWidth()
+                        ScheduleAndCapacitySection(
+                            startDate = startDate,
+                            onShowStartDatePicker = { showStartDatePicker = true },
+                            endDate = endDate,
+                            onShowEndDatePicker = { showEndDatePicker = true },
+                            eventTime = eventTime,
+                            onShowTimePicker = { showTimePicker = true },
+                            isEvent = type == CompetitionType.RANGE,
+                            maxCapacity = maxCapacity,
+                            onMaxCapacityChange = { if (it.all { c -> c.isDigit() }) maxCapacity = it }
                         )
-                        DropdownMenu(expanded = expandedValidation, onDismissRequest = { expandedValidation = false }) {
-                            ValidationRule.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.name) },
-                                    onClick = { validationRule = option; expandedValidation = false }
-                                )
-                            }
-                        }
-                    }
 
-                    HorizontalDivider()
-                    Text("Fechas", style = MaterialTheme.typography.labelMedium)
-                    
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { showStartDatePicker = true },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(startDate))
-                        }
-                        OutlinedButton(
-                            onClick = { showEndDatePicker = true },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(endDate))
-                        }
-                    }
-
-                    HorizontalDivider()
-                    Text("Primer Prueba base (Heat)", style = MaterialTheme.typography.labelMedium)
-                    Text("Toda competencia inicia con una prueba que puede ser en un horario físico (presencial) o una franja límite (Open).", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(
-                            onClick = { showTimePicker = true },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(eventTime)
-                        }
+                        RewardsSection(
+                            prizeDescription = prizeDescription,
+                            onPrizeDescriptionChange = { prizeDescription = it },
+                            xpReward = xpReward,
+                            onXpRewardChange = { if (it.all { c -> c.isDigit() }) xpReward = it }
+                        )
                         
-                        OutlinedTextField(
-                            value = maxCapacity,
-                            onValueChange = { if (it.all { c -> c.isDigit() }) maxCapacity = it },
-                            label = { Text("Atletas (Max)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
+                        Spacer(modifier = Modifier.height(100.dp))
                     }
+                }
 
-                    HorizontalDivider()
-                    Text("Premios", style = MaterialTheme.typography.labelMedium)
-                    
-                    OutlinedTextField(
-                        value = prizeDescription,
-                        onValueChange = { prizeDescription = it },
-                        label = { Text("Premio (Opcional)") }
-                    )
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = xpReward,
-                            onValueChange = { if (it.all { c -> c.isDigit() }) xpReward = it },
-                            label = { Text("XP (Opcional)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
+                // Botón de Acción Fijo
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)),
+                                startY = 0f
+                            )
+                        )
+                        .padding(24.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val capacity = maxCapacity.toIntOrNull() ?: 0
+                            val validation = CompetitionFormValidator.validate(
+                                title = title,
+                                description = description,
+                                startDate = startDate,
+                                endDate = endDate,
+                                maxCapacity = capacity,
+                                criteriaSpecificValue = criteriaFieldValue.ifBlank { null },
+                                criteria = criteria
+                            )
+                            if (!validation.isValid) {
+                                formErrors = validation.errors
+                            } else {
+                                onConfirm(
+                                    title, description, type, criteria, startDate, endDate,
+                                    prizeDescription.ifBlank { null }, xpReward.toIntOrNull(),
+                                    scoreStrategy, validationRule, eventTime, capacity
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = BrandOrange),
+                        shape = RoundedCornerShape(20.dp),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+                    ) {
+                        Text("PUBLICAR COMPETENCIA", fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BasicInfoSection(
+    title: String,
+    onTitleChange: (String) -> Unit,
+    description: String,
+    onDescriptionChange: (String) -> Unit,
+    formErrors: Map<String, String>
+) {
+    GlassCard(shape = RoundedCornerShape(24.dp)) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            OutlinedTextField(
+                value = title,
+                onValueChange = onTitleChange,
+                label = { Text("Título de la Competencia *") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                isError = formErrors.containsKey("title"),
+                supportingText = formErrors["title"]?.let { error ->
+                    { Text(error, color = ErrorRed, style = MaterialTheme.typography.labelSmall) }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    errorBorderColor = ErrorRed
+                )
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = onDescriptionChange,
+                label = { Text("Descripción *") },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 4,
+                isError = formErrors.containsKey("description"),
+                supportingText = formErrors["description"]?.let { error ->
+                    { Text(error, color = ErrorRed, style = MaterialTheme.typography.labelSmall) }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    errorBorderColor = ErrorRed
+                )
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TechnicalConfigSection(
+    type: CompetitionType,
+    onTypeChange: (CompetitionType) -> Unit,
+    criteria: RankingCriteria,
+    onCriteriaChange: (RankingCriteria) -> Unit,
+    criteriaFieldValue: String,
+    onCriteriaFieldValueChange: (String) -> Unit,
+    criteriaFieldConfig: CompetitionFormValidator.CriteriaFieldConfig?,
+    formErrors: Map<String, String>
+) {
+    Text("CONFIGURACIÓN TÉCNICA", style = MaterialTheme.typography.labelLarge, color = BrandOrange, fontWeight = FontWeight.Black)
+    GlassCard(shape = RoundedCornerShape(24.dp)) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Type Selector
+            var expandedType by remember { mutableStateOf(false) }
+            Box {
+                OutlinedTextField(
+                    value = type.value,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Tipo de Evento") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = { IconButton(onClick = { expandedType = true }) { Icon(Icons.Default.ArrowDropDown, "Select", tint = Color.White) } },
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                )
+                DropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
+                    CompetitionType.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.value) },
+                            onClick = { onTypeChange(option); expandedType = false }
                         )
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    onConfirm(
-                        title, 
-                        description, 
-                        type, 
-                        criteria, 
-                        startDate, 
-                        endDate, 
-                        prizeDescription, 
-                        xpReward.toIntOrNull(), 
-                        scoreStrategy,
-                        validationRule,
-                        eventTime,
-                        maxCapacity.toIntOrNull() ?: 50
-                    )
-                },
-                enabled = title.isNotEmpty() && maxCapacity.isNotEmpty()
-            ) {
-                Text("Crear")
+
+            // Criteria Selector
+            var expandedCrit by remember { mutableStateOf(false) }
+            Box {
+                OutlinedTextField(
+                    value = criteria.value,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Ranking por...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = { IconButton(onClick = { expandedCrit = true }) { Icon(Icons.Default.ArrowDropDown, "Select", tint = Color.White) } },
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                )
+                DropdownMenu(expanded = expandedCrit, onDismissRequest = { expandedCrit = false }) {
+                    RankingCriteria.entries.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.value) },
+                            onClick = {
+                                onCriteriaChange(option)
+                                expandedCrit = false
+                            }
+                        )
+                    }
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+
+            // Dynamic Field
+            AnimatedVisibility(visible = criteriaFieldConfig != null) {
+                criteriaFieldConfig?.let { config ->
+                    OutlinedTextField(
+                        value = criteriaFieldValue,
+                        onValueChange = {
+                            if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) {
+                                onCriteriaFieldValueChange(it)
+                            }
+                        },
+                        label = { Text(config.label) },
+                        placeholder = { Text(config.placeholder, color = Color.White.copy(0.4f)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        isError = formErrors.containsKey("criteriaField"),
+                        supportingText = { Text(config.hint, style = MaterialTheme.typography.labelSmall) },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = if (config.inputType == CompetitionFormValidator.InputType.INTEGER)
+                                KeyboardType.Number
+                            else
+                                KeyboardType.Decimal
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            errorBorderColor = ErrorRed
+                        )
+                    )
+                }
             }
         }
-    )
+    }
 }
+
+@Composable
+private fun ScheduleAndCapacitySection(
+    startDate: Date,
+    onShowStartDatePicker: () -> Unit,
+    endDate: Date,
+    onShowEndDatePicker: () -> Unit,
+    eventTime: String,
+    onShowTimePicker: () -> Unit,
+    isEvent: Boolean,
+    maxCapacity: String,
+    onMaxCapacityChange: (String) -> Unit
+) {
+    Text("TIEMPO Y CAPACIDAD", style = MaterialTheme.typography.labelLarge, color = BrandOrange, fontWeight = FontWeight.Black)
+    GlassCard(shape = RoundedCornerShape(24.dp)) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Inicia", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                    OutlinedButton(
+                        onClick = onShowStartDatePicker,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(startDate), color = Color.White)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Finaliza", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                    OutlinedButton(
+                        onClick = onShowEndDatePicker,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(endDate), color = Color.White)
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (isEvent) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Hora de Inicio", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                        OutlinedButton(
+                            onClick = onShowTimePicker,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                        ) {
+                            Text(eventTime, color = Color.White)
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                
+                OutlinedTextField(
+                    value = maxCapacity,
+                    onValueChange = onMaxCapacityChange,
+                    label = { Text("Cupos Max") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RewardsSection(
+    prizeDescription: String,
+    onPrizeDescriptionChange: (String) -> Unit,
+    xpReward: String,
+    onXpRewardChange: (String) -> Unit
+) {
+    Text("RECOMPENSAS Y GAMIFICACIÓN", style = MaterialTheme.typography.labelLarge, color = BrandOrange, fontWeight = FontWeight.Black)
+    GlassCard(shape = RoundedCornerShape(24.dp)) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            OutlinedTextField(
+                value = prizeDescription,
+                onValueChange = onPrizeDescriptionChange,
+                label = { Text("Premio (Ej: Suplemento, 1 Mes Gratis)") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            )
+            
+            OutlinedTextField(
+                value = xpReward,
+                onValueChange = onXpRewardChange,
+                label = { Text("XP Reward") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.EmojiEvents, null, tint = BrandOrange) },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            )
+        }
+    }
+}
+

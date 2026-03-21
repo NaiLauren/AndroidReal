@@ -29,12 +29,24 @@ object GamificationService {
                 return
             }
 
-            // 2. Calculate stuff in memory
-            val earnedDefinitions = checkSmartAchievements(userId, gymId, classDate)
+            // 2. Fetch attendance history once for all checks
+            val historySnapshot = firestore.collection("attendance_history")
+                .whereEqualTo("userId", userId)
+                .whereEqualTo("gym_id", gymId)
+                .get().await()
+
+            val historyDates = historySnapshot.documents.mapNotNull { doc ->
+                doc.getTimestamp("classDate")?.toDate()
+            }
+
+            // 3. Calculate stuff in memory
+            val earnedDefinitions = checkSmartAchievements(userId, gymId, classDate, historyDates)
+            val recurringBonuses = checkRecurringBonuses(classDate, historyDates)
             
-            // Base XP + Bonus XP
+            // Base XP + Achievements + Recurring Bonuses
             var totalXpGained = LevelSystem.XP_ATTENDANCE
             earnedDefinitions.forEach { totalXpGained += it.xpReward }
+            recurringBonuses.forEach { totalXpGained += it.amount }
 
             // 3. Queue Batch Operations
             val batch = firestore.batch()
@@ -53,13 +65,16 @@ object GamificationService {
             )
             batch.set(xpLogRef, attendanceLog)
 
-            // b) Update User (XP) - Increment Atomic
+            // b) Update User (XP and Level) - Increment Atomic
             val userRef = firestore.collection("users").document(userId)
             batch.update(userRef, "xp", FieldValue.increment(totalXpGained.toLong()))
-            // Note: Level update is best done via a Cloud Function trigger or by reading back, 
-            // but for parity with current logic, let's leave level check for UI or separate call if needed.
-            // iOS implementation essentially trusts local calculation or separate read. 
-            // Here we just increment XP.
+            
+            // Sync Level update
+            val userSnap = userRef.get().await()
+            val currentXp = (userSnap.getLong("xp") ?: 0L).toInt()
+            val newTotalXp = currentXp + totalXpGained
+            val newLevel = LevelSystem.getLevelName(newTotalXp)
+            batch.update(userRef, "level", newLevel)
 
             // c) Save Unlocked Achievements
             earnedDefinitions.forEach { def ->
@@ -94,6 +109,23 @@ object GamificationService {
                 batch.set(achLogRef, achLog)
             }
 
+            // d) Save Recurring Bonus Logs
+            recurringBonuses.forEach { bonus ->
+                val bonusLogRef = firestore.collection("xp_logs").document()
+                val bonusLog = hashMapOf(
+                    "userId" to userId,
+                    "gym_id" to gymId,
+                    "amount" to bonus.amount,
+                    "type" to "BONUS",
+                    "title" to bonus.title,
+                    "description" to "Bono extra por: ${bonus.reason}",
+                    "icon" to bonus.icon,
+                    "timestamp" to FieldValue.serverTimestamp(),
+                    "relatedId" to "bonus_${System.currentTimeMillis()}"
+                )
+                batch.set(bonusLogRef, bonusLog)
+            }
+
             // 4. Commit
             batch.commit().await()
 
@@ -102,7 +134,7 @@ object GamificationService {
         }
     }
 
-    private suspend fun checkSmartAchievements(userId: String, gymId: String, classDate: Date): List<AchievementDefinition> {
+    private suspend fun checkSmartAchievements(userId: String, gymId: String, classDate: Date, historyDates: List<Date>): List<AchievementDefinition> {
         val earnedDefinitions = mutableListOf<AchievementDefinition>()
         
         // Fetch existing achievements to avoid duplicates
@@ -152,22 +184,6 @@ object GamificationService {
             AchievementSystem.getById("lunch_crew")?.let { earnedDefinitions.add(it) }
         }
 
-        // --- HISTORY BASED CHECKS ---
-        
-        // Fetch recent attendance history for the user
-        // We query the 'attendance_history' collection if it exists, mirroring iOS pattern.
-        // Assuming 'attendance_history' contains documents with 'classDate' timestamp.
-        val historySnapshot = firestore.collection("attendance_history")
-            .whereEqualTo("userId", userId)
-            .whereEqualTo("gym_id", gymId)
-            // Limit to last 8 days (enough for Week Fire and Hat Trick)
-            // Optimization: In a real app we might want an index on classDate DESC or query by range.
-            // For now, let's just fetch all (or limit 50 if history is huge) and filter in memory as MVP.
-            .get().await()
-
-        val historyDates = historySnapshot.documents.mapNotNull { doc ->
-            doc.getTimestamp("classDate")?.toDate()
-        }
 
         // Helper to check standard matches
         fun isSameDay(d1: Date, d2: Date): Boolean {
@@ -208,6 +224,74 @@ object GamificationService {
 
         return earnedDefinitions
     }
+
+    private fun checkRecurringBonuses(classDate: Date, history: List<Date>): List<BonusEntry> {
+        val bonuses = mutableListOf<BonusEntry>()
+        val cal = Calendar.getInstance().apply { time = classDate }
+        val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+
+        // 1. Weekend Bonus (+75 XP)
+        if (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY) {
+            bonuses.add(BonusEntry("Bono Fin de Semana", 75, "🔥", "Entrenar Sábado o Domingo"))
+        }
+
+        // 2. Strong Start (Monday) (+50 XP)
+        if (dayOfWeek == Calendar.MONDAY) {
+            bonuses.add(BonusEntry("Comienzo Fuerte", 50, "🚀", "Entrenar un Lunes"))
+        }
+
+        // 3. Early Bird Bonus (< 8 AM) (+30 XP)
+        if (hour < 8) {
+            bonuses.add(BonusEntry("Madrugador", 30, "🌅", "Entrenar antes de las 8 AM"))
+        }
+
+        // 4. Night Owl Bonus (>= 20 PM) (+30 XP)
+        if (hour >= 20) {
+            bonuses.add(BonusEntry("Cierre del Día", 30, "🌙", "Entrenar tarde"))
+        }
+
+        // 5. Double Turn (+100 XP)
+        val classesToday = history.count { isSameDay(it, classDate) }
+        if (classesToday >= 1) { // 1 existing + current = 2
+            bonuses.add(BonusEntry("Doble Turno", 100, "💪", "Segunda clase del día"))
+        }
+
+        // 6. Hat-Trick (3 days in a row) (+150 XP)
+        val yesterday = Calendar.getInstance().apply { time = classDate; add(Calendar.DAY_OF_YEAR, -1) }.time
+        val dayBefore = Calendar.getInstance().apply { time = classDate; add(Calendar.DAY_OF_YEAR, -2) }.time
+        val attendedYesterday = history.any { isSameDay(it, yesterday) }
+        val attendedDayBefore = history.any { isSameDay(it, dayBefore) }
+        if (attendedYesterday && attendedDayBefore) {
+            bonuses.add(BonusEntry("Hat-Trick", 150, "🎩", "3 días consecutivos entrenando"))
+        }
+
+        // 7. Perfect Week (Mon-Fri) (+200 XP)
+        if (dayOfWeek == Calendar.FRIDAY) {
+            var allWeekAttended = true
+            for (i in 1..4) {
+                val target = Calendar.getInstance().apply { time = classDate; add(Calendar.DAY_OF_YEAR, -i) }.time
+                if (!history.any { isSameDay(it, target) }) {
+                    allWeekAttended = false
+                    break
+                }
+            }
+            if (allWeekAttended) {
+                bonuses.add(BonusEntry("Semana Perfecta", 200, "🌟", "Asistencia completa Lun-Vie"))
+            }
+        }
+
+        return bonuses
+    }
+
+    data class BonusEntry(val title: String, val amount: Int, val icon: String, val reason: String)
+
+    private fun isSameDay(d1: Date, d2: Date): Boolean {
+        val c1 = Calendar.getInstance().apply { time = d1 }
+        val c2 = Calendar.getInstance().apply { time = d2 }
+        return c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) &&
+               c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
+    }
     
     // Helper to be called from PerformanceViewModel too
     suspend fun addXp(userId: String, gymId: String, amount: Int, type: String, title: String, description: String, relatedId: String? = null) {
@@ -233,24 +317,52 @@ object GamificationService {
     }
     
     // MARK: - Smart Schedule Gamification
-    
+
+    /** XP máximo que un alumno puede ganar mediante el Planificador Pro (14 slots × 10 XP) */
+    const val SCHEDULE_XP_CAP = 140
+
     suspend fun awardSchedulingXP(userId: String, gymId: String, intentId: String): Int {
         val reward = 10
+        // La key de idempotencia incluye el userId + intentId para evitar doble pago por el mismo slot.
+        // IMPORTANTE: El intentId viene del objeto UserTrainingIntention, que tiene un UUID generado
+        // en el momento de la creación. Si el alumno borra y re-agrega el mismo horario, el UUID
+        // cambia → para prevenir esto, también verificamos el CAP GLOBAL antes de otorgar XP.
         val xpLogId = "schedule_intent_${userId}_${intentId}"
         val xpLogRef = firestore.collection("xp_logs").document(xpLogId)
-        
+
         return try {
+            // 1. Verificar idempotencia (mismo intento exacto)
             val logDoc = xpLogRef.get().await()
             if (logDoc.exists()) {
-                return 0 // Already rewarded for this intent
+                return 0
             }
-            
+
+            // 2. Verificar CAP GLOBAL: Sumar todo el XP de tipo SCHEDULE_INTENT del usuario
+            val previousLogsSnap = firestore.collection("xp_logs")
+                .whereEqualTo("userId", userId)
+                .whereEqualTo("type", "SCHEDULE_INTENT")
+                .get()
+                .await()
+
+            val totalScheduleXpEarned = previousLogsSnap.documents.sumOf { doc ->
+                (doc.getLong("amount") ?: 0L).toInt()
+            }
+
+            if (totalScheduleXpEarned >= SCHEDULE_XP_CAP) {
+                // Límite alcanzado — no otorgar más XP
+                return 0
+            }
+
+            // Calcular cuánto podemos otorgar sin superar el cap
+            val xpToGrant = minOf(reward, SCHEDULE_XP_CAP - totalScheduleXpEarned)
+
+            // 3. Registrar log y actualizar usuario
             val batch = firestore.batch()
-            
+
             val logData = hashMapOf(
                 "userId" to userId,
                 "gym_id" to gymId,
-                "amount" to reward,
+                "amount" to xpToGrant,
                 "type" to "SCHEDULE_INTENT",
                 "title" to "Planificador Pro",
                 "description" to "Ganaste XP por avisar tu horario de asistencia",
@@ -259,17 +371,17 @@ object GamificationService {
                 "relatedId" to intentId
             )
             batch.set(xpLogRef, logData)
-            
+
             val userRef = firestore.collection("users").document(userId)
-            batch.update(userRef, "xp", FieldValue.increment(reward.toLong()))
-            
-            // Level resolution can be triggered later, just return reward
+            batch.update(userRef, "xp", FieldValue.increment(xpToGrant.toLong()))
+
             batch.commit().await()
-            reward
-            
+            xpToGrant
+
         } catch (e: Exception) {
             e.printStackTrace()
             0
         }
     }
 }
+

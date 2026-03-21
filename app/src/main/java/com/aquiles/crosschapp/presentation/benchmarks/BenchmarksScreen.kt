@@ -16,7 +16,9 @@ import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Search
 
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
@@ -49,10 +51,11 @@ fun BenchmarksScreen(
     performanceViewModel: PerformanceViewModel,
     onBack: () -> Unit
 ) {
-    val benchmarkWodsState by adminViewModel.benchmarkWodsState.collectAsState()
+    val benchmarkWodsState by adminViewModel.benchmarksState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedWod by remember { mutableStateOf<BenchmarkWod?>(null) }
-    
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Benchmarks, 1: Desafíos
+
     // Effects
     LaunchedEffect(Unit) {
         adminViewModel.loadBenchmarkWods()
@@ -97,9 +100,33 @@ fun BenchmarksScreen(
                         focusedBorderColor = ColorPrimaryAction,
                         unfocusedBorderColor = ColorBorder,
                         focusedTextColor = Color.White,
-                        cursorColor = ColorPrimaryAction
                     )
                 )
+
+                // Tabs: BENCHMARKS vs DESAFÍOS
+                SecondaryTabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.Transparent,
+                    contentColor = ColorPrimaryAction,
+                    indicator = {
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(selectedTab),
+                            color = ColorPrimaryAction
+                        )
+                    },
+                    divider = { HorizontalDivider(color = ColorBorder) }
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("BENCHMARKS", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("DESAFÍOS", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) }
+                    )
+                }
 
                 // List
                 if (benchmarkWodsState is BenchmarkWodsState.Loading) {
@@ -107,21 +134,25 @@ fun BenchmarksScreen(
                         CircularProgressIndicator(color = ColorPrimaryAction)
                     }
                 } else if (benchmarkWodsState is BenchmarkWodsState.Success) {
-                    val wods = (benchmarkWodsState as BenchmarkWodsState.Success).wods.filter {
-                        it.name.contains(searchQuery, ignoreCase = true)
+                    val allWods = (benchmarkWodsState as BenchmarkWodsState.Success).wods
+                    val filteredWods = allWods.filter {
+                        val matchesSearch = it.name.contains(searchQuery, ignoreCase = true)
+                        val isDes = it.isDesafio == true
+                        val matchesTab = if (selectedTab == 1) isDes else !isDes
+                        matchesSearch && matchesTab
                     }
-                    
+
                     LazyColumn(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        items(wods) { wod ->
-                             BenchmarkCard(wod = wod, onClick = { selectedWod = wod })
+                        items(filteredWods) { wod ->
+                            BenchmarkCard(wod = wod, onClick = { selectedWod = wod })
                         }
                     }
                 }
             }
-            
+
             // Register Sheet
             if (selectedWod != null) {
                 ModalBottomSheet(
@@ -131,7 +162,7 @@ fun BenchmarksScreen(
                     dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha=0.3f)) }
                 ) {
                     BenchmarkRegisterContent(
-                        wod = selectedWod!!, 
+                        wod = selectedWod!!,
                         performanceViewModel = performanceViewModel,
                         onSuccess = { selectedWod = null }
                     )
@@ -161,11 +192,24 @@ fun BenchmarkCard(wod: BenchmarkWod, onClick: () -> Unit) {
                         fontWeight = FontWeight.Black,
                         color = Color.White
                     )
-                    
+
                     Spacer(modifier = Modifier.width(8.dp))
-                    
-                    // 🆕 BADGE: GLOBAL o LOCAL
-                    if (wod.gym_id.isEmpty()) {
+
+                    // 🆕 BADGE: DESAFÍO, GLOBAL o LOCAL
+                    if (wod.isDesafio == true) {
+                        Text(
+                            text = "DESAFÍO",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorPrimaryAction,
+                            modifier = Modifier
+                                .background(
+                                    ColorPrimaryAction.copy(alpha = 0.2f),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    } else if (wod.gym_id.isEmpty()) {
                         // Benchmark Global
                         Text(
                             text = "GLOBAL",
@@ -195,7 +239,21 @@ fun BenchmarkCard(wod: BenchmarkWod, onClick: () -> Unit) {
                         )
                     }
                 }
-                
+
+                // Mostrar fechas si es Desafío
+                if (wod.isDesafio == true && (wod.startDate != null || wod.endDate != null)) {
+                    val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                    val start = wod.startDate?.let { sdf.format(it) } ?: "?"
+                    val end = wod.endDate?.let { sdf.format(it) } ?: "?"
+
+                    Text(
+                        text = "$start - $end",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ColorTextSecondary,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = wod.measurementUnit,
@@ -217,11 +275,12 @@ fun BenchmarkRegisterContent(
 ) {
     var score by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+    var videoUrl by remember { mutableStateOf("") } // NUEVO
     var isRx by remember { mutableStateOf(true) }
     var isPublic by remember { mutableStateOf(true) }
     val currentUser by UserSession.currentUser.collectAsState()
     val saveState by performanceViewModel.saveBenchmarkState.collectAsState()
-    
+
     // Reset state on success
     LaunchedEffect(saveState) {
         if (saveState is BenchmarkSaveState.Success) {
@@ -240,14 +299,14 @@ fun BenchmarkRegisterContent(
             Spacer(modifier = Modifier.width(12.dp))
             Text(text = wod.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = Color.White)
         }
-        
+
         Text(text = wod.description, style = MaterialTheme.typography.bodyMedium, color = ColorTextSecondary)
 
         HorizontalDivider(color = ColorBorder, thickness = 1.dp)
 
         // Inputs
         SmartScoreInput(measurementUnit = wod.measurementUnit, score = score, onScoreChange = { score = it })
-        
+
         OutlinedTextField(
             value = notes,
             onValueChange = { notes = it },
@@ -265,6 +324,25 @@ fun BenchmarkRegisterContent(
             shape = RoundedCornerShape(12.dp)
         )
 
+        // --- NUEVO: CAMPO DE VIDEO ---
+        OutlinedTextField(
+            value = videoUrl,
+            onValueChange = { videoUrl = it },
+            label = { Text("Link de Video (Youtube/Drive) para validar", color = ColorTextSecondary) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = ColorGlassSurface,
+                unfocusedContainerColor = ColorGlassSurface,
+                focusedBorderColor = Color.White.copy(alpha = 0.5f),
+                unfocusedBorderColor = ColorBorder,
+                focusedTextColor = ColorTextPrimary,
+                unfocusedTextColor = ColorTextPrimary,
+                cursorColor = ColorPrimaryAction
+            ),
+            shape = RoundedCornerShape(12.dp),
+            singleLine = true
+        )
+
         // Toggles
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -275,7 +353,7 @@ fun BenchmarkRegisterContent(
                 Checkbox(checked = isRx, onCheckedChange = { isRx = it }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction))
                 Text("RX", color = Color.White, fontWeight = FontWeight.Bold)
             }
-            
+
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { isPublic = !isPublic }) {
                 Checkbox(checked = isPublic, onCheckedChange = { isPublic = it }, colors = CheckboxDefaults.colors(checkedColor = ColorPrimaryAction))
                 Text("Publicar", color = Color.White)
@@ -285,16 +363,17 @@ fun BenchmarkRegisterContent(
         // Action Button
         Button(
             onClick = {
-                  currentUser?.let { user ->
-                      performanceViewModel.saveBenchmarkResult(
-                          benchmark = wod,
-                          score = score,
-                          isRx = isRx,
-                          notes = notes,
-                          date = Date(),
-                          isPublic = isPublic
-                      )
-                  }
+                currentUser?.let { user ->
+                    performanceViewModel.saveBenchmarkResult(
+                        benchmark = wod,
+                        score = score,
+                        isRx = isRx,
+                        notes = notes,
+                        date = Date(),
+                        isPublic = isPublic,
+                        videoUrl = videoUrl.takeIf { it.isNotBlank() } // Aquí pasamos el videoUrl
+                    )
+                }
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(12.dp),

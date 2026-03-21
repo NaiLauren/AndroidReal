@@ -7,5 +7,9 @@ data class RankingEntry(
     val userLevel: String?,
     val score: Double, // Valor numérico para ordenamiento
     val scoreDisplay: String, // String formateado (ej: "12:30", "150 reps")
-    val rank: Int
+    val rank: Int,
+    // --- Campos Sociales / Validación ---
+    val resultId: String = "",
+    val validationStatus: String? = null,
+    val reactions: Map<String, String>? = null
 )

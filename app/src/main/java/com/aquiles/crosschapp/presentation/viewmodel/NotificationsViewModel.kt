@@ -5,12 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.aquiles.crosschapp.data.model.Notification
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
-// El Sealed Class 'AllNotificationsState' se mantiene igual, está perfecto.
 sealed class AllNotificationsState {
     data object Loading : AllNotificationsState()
     data class Success(val notifications: List<Notification>) : AllNotificationsState()
@@ -32,7 +31,6 @@ class NotificationsViewModel : ViewModel() {
     }
 
     private fun loadAllNotifications() {
-        // --- CAMBIO 1: Obtener datos de la fuente de la verdad: UserSession ---
         val userId = UserSession.getCurrentUserId()
         val gymId = UserSession.currentUserGymId.value
 
@@ -44,21 +42,22 @@ class NotificationsViewModel : ViewModel() {
         notificationsListener?.remove()
         _notificationsState.value = AllNotificationsState.Loading
 
-        // --- CAMBIO 2: Consulta corregida para la arquitectura multi-gimnasio ---
-        // Escuchamos en la colección de nivel superior 'notifications'
+        // Sin orderBy para evitar índice compuesto — ordenamos client-side
         notificationsListener = firestore.collection("notifications")
-            .whereEqualTo("gym_id", gymId) // Filtro por gimnasio
-            .whereEqualTo("userId", userId) // Filtro por usuario
-            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .whereEqualTo("gym_id", gymId)
+            .whereEqualTo("userId", userId)
             .limit(100)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    _notificationsState.value = AllNotificationsState.Error(error.localizedMessage ?: "Error al cargar notificaciones.")
+                    _notificationsState.value = AllNotificationsState.Error(
+                        error.localizedMessage ?: "Error al cargar notificaciones."
+                    )
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null) {
                     val notifications = snapshot.toObjects(Notification::class.java)
+                        .sortedByDescending { it.timestamp }
                     if (notifications.isEmpty()) {
                         _notificationsState.value = AllNotificationsState.Empty
                     } else {
@@ -71,14 +70,25 @@ class NotificationsViewModel : ViewModel() {
     fun markNotificationAsRead(notificationId: String) {
         if (notificationId.isBlank()) return
 
+        // Optimistic update: actualizar estado local inmediatamente sin esperar a Firestore
+        val currentState = _notificationsState.value
+        if (currentState is AllNotificationsState.Success) {
+            val updated = currentState.notifications.map { notification ->
+                if (notification.id == notificationId) notification.copy(isRead = true)
+                else notification
+            }
+            _notificationsState.value = AllNotificationsState.Success(updated)
+        }
+
+        // Persistir en Firestore de fondo
         viewModelScope.launch {
             try {
-                // --- CAMBIO 3: Ruta de actualización corregida ---
-                // Apuntamos directamente al documento en la colección principal
                 firestore.collection("notifications").document(notificationId)
                     .update("isRead", true)
+                    .await()
             } catch (e: Exception) {
-                // Manejar el error si es necesario
+                // Si falla, el snapshot listener va a restaurar el estado real
+                android.util.Log.e("NotificationsVM", "Error marcando leída: ${e.message}")
             }
         }
     }

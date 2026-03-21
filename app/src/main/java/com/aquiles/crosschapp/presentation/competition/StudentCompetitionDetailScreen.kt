@@ -17,7 +17,17 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material3.*
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,38 +38,41 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.aquiles.crosschapp.data.model.Competition
 import com.aquiles.crosschapp.data.model.RankingEntry
 import com.aquiles.crosschapp.presentation.components.GlassCard
+import com.aquiles.crosschapp.presentation.components.CompetitionSegmentedControl
 import com.aquiles.crosschapp.presentation.viewmodel.StudentCompetitionViewModel
+import com.aquiles.crosschapp.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Locale
 import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.filled.Person
 
 // --- UI Constants ---
-private val ColorGold = Color(0xFFFFD700)
-private val ColorSilver = Color(0xFFC0C0C0)
-private val ColorBronze = Color(0xFFCD7F32)
+// Replaced by global tokens in Color.kt
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun StudentCompetitionDetailScreen(
     competitionId: String,
     navController: NavController,
-    viewModel: StudentCompetitionViewModel = viewModel()
+    vm: StudentCompetitionViewModel = viewModel()
 ) {
-    val competition by viewModel.competition.collectAsState()
-    val ranking by viewModel.ranking.collectAsState()
-    val myEntry by viewModel.myEntry.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+    val competition by vm.competition.collectAsState()
+    val ranking by vm.ranking.collectAsState()
+    val myEntry by vm.myEntry.collectAsState()
+    val enrolledUsers by vm.enrolledUsers.collectAsState()
+    val isLoading by vm.isLoading.collectAsState()
     
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Ranking, 1 = Info
 
     LaunchedEffect(competitionId) {
-        viewModel.loadCompetition(competitionId)
+        vm.loadCompetition(competitionId)
     }
 
     Scaffold(
@@ -124,7 +137,14 @@ fun StudentCompetitionDetailScreen(
                     // --- CONTENT ---
                     Box(modifier = Modifier.weight(1f)) {
                         when (selectedTab) {
-                            0 -> RankingTab(ranking = ranking, myEntry = myEntry)
+                            0 -> RankingTab(
+                                ranking = ranking,
+                                myEntry = myEntry,
+                                enrolledUsers = enrolledUsers,
+                                onReactionClick = { resultId, emotion ->
+                                    vm.toggleReaction(resultId, emotion)
+                                }
+                            )
                             1 -> InfoTab(competition = comp)
                         }
                     }
@@ -186,12 +206,12 @@ fun CompetitionHeader(competition: Competition) {
                 // Status
                 val isActive = competition.isActive
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(modifier = Modifier.size(6.dp).background(if(isActive) Color.Green else Color.Red, CircleShape))
+                    Box(modifier = Modifier.size(6.dp).background(if(isActive) SuccessGreen else ErrorRed, CircleShape))
                     Text(
                         text = if(isActive) "ACTIVO" else "FINALIZADO", 
                         style = MaterialTheme.typography.labelSmall, 
                         fontWeight = FontWeight.Bold,
-                        color = if(isActive) Color.Green else Color.Red
+                        color = if(isActive) SuccessGreen else ErrorRed
                     )
                 }
             }
@@ -212,57 +232,19 @@ fun CompetitionHeader(competition: Competition) {
     }
 }
 
+// CompetitionSegmentedControl moved to shared components
+
 @Composable
-fun CompetitionSegmentedControl(
-    selectedIndex: Int,
-    items: List<String>,
-    onIndexChanged: (Int) -> Unit
+fun RankingTab(
+    ranking: List<RankingEntry>, 
+    myEntry: RankingEntry?,
+    enrolledUsers: List<com.aquiles.crosschapp.data.model.User>,
+    onReactionClick: (String, String) -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(50.dp)
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.1f))
-            .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape)
-            .padding(4.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            items.forEachIndexed { index, label ->
-                val isSelected = selectedIndex == index
-                val animatedColor by animateColorAsState(
-                    targetValue = if (isSelected) Color(0xFFFC5200) else Color.Transparent,
-                    label = "tabColor"
-                )
-                val textColor by animateColorAsState(
-                    targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
-                    label = "tabText"
-                )
+    val resultsByUser = ranking.associateBy { it.userId }
+    val usersWithoutResult = enrolledUsers.filter { user -> !resultsByUser.containsKey(user.id) }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(CircleShape)
-                        .background(animatedColor)
-                        .clickable { onIndexChanged(index) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        color = textColor,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun RankingTab(ranking: List<RankingEntry>, myEntry: RankingEntry?) {
-    if (ranking.isEmpty()) {
+    if (ranking.isEmpty() && usersWithoutResult.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.Leaderboard, null, tint = Color.Gray.copy(0.5f), modifier = Modifier.size(64.dp))
@@ -300,14 +282,86 @@ fun RankingTab(ranking: List<RankingEntry>, myEntry: RankingEntry?) {
 
             // General List
             itemsIndexed(ranking) { _, entry ->
-                RankingItemCard(entry = entry, isMe = entry.userId == myEntry?.userId)
+                RankingItemCard(
+                    entry = entry, 
+                    isMe = entry.userId == myEntry?.userId,
+                    onReactionClick = { emotion ->
+                        onReactionClick(entry.resultId, emotion)
+                    },
+                    currentUserId = myEntry?.userId
+                )
+            }
+
+            // Participantes sin resultado
+            if (usersWithoutResult.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "AÚN NO CARGARON RESULTADO",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                    )
+                }
+                
+                itemsIndexed(usersWithoutResult) { _, user ->
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(Color.White.copy(0.1f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (!user.profileImageUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = user.profileImageUrl,
+                                        contentDescription = "Avatar",
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Person, null, tint = Color.White)
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.width(12.dp))
+                            
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${user.name} ${user.lastName}",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Sin resultado",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun RankingItemCard(entry: RankingEntry, isMe: Boolean = false) {
+fun RankingItemCard(
+    entry: RankingEntry,
+    isMe: Boolean = false,
+    onReactionClick: ((String) -> Unit)? = null,
+    currentUserId: String? = null
+) {
     val rankColor = when (entry.rank) {
         1 -> ColorGold
         2 -> ColorSilver
@@ -316,61 +370,212 @@ fun RankingItemCard(entry: RankingEntry, isMe: Boolean = false) {
     }
     
     val borderColor = if (isMe) Color(0xFFFC5200).copy(0.5f) else Color.Transparent
-    val bgModifier = if (isMe) Modifier.background(Color(0xFFFC5200).copy(0.1f), RoundedCornerShape(16.dp)) else Modifier
+    val bgModifier = if (isMe) Modifier.background(Color(0xFFFC5200).copy(0.1f), RoundedCornerShape(24.dp)) else Modifier
 
     GlassCard(
         modifier = Modifier.fillMaxWidth().then(bgModifier),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(24.dp)
     ) {
-        // Overlay for Border if Me
         if (isMe) {
-            Box(modifier = Modifier.matchParentSize().border(1.dp, borderColor, RoundedCornerShape(16.dp)))
+            Box(modifier = Modifier.matchParentSize().border(1.dp, borderColor, RoundedCornerShape(24.dp)))
         }
 
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Rank Badge
+        Column {
+            // --- HEADER ---
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Rank / Avatar Badge
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(if(entry.rank <= 3) rankColor.copy(alpha = 0.2f) else Color.White.copy(0.1f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!entry.userProfileImageUrl.isNullOrBlank()) {
+                         AsyncImage(
+                             model = entry.userProfileImageUrl,
+                             contentDescription = "Avatar",
+                             modifier = Modifier.fillMaxSize().clip(CircleShape),
+                             contentScale = ContentScale.Crop
+                         )
+                    } else {
+                         Text(
+                             text = "${entry.rank}",
+                             fontWeight = FontWeight.Bold,
+                             color = if (entry.rank <= 3) rankColor else Color.White
+                         )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                // Name & Badge
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                         Text(
+                             text = entry.userName,
+                             fontWeight = FontWeight.SemiBold,
+                             fontSize = 15.sp,
+                             color = if(isMe) Color(0xFFFC5200) else Color.White,
+                             maxLines = 1
+                         )
+                         if (entry.validationStatus == "approved") {
+                             Spacer(modifier = Modifier.width(4.dp))
+                             VerifiedBadge()
+                         }
+                    }
+                     entry.userLevel?.let {
+                         if (it.isNotBlank()) Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                     }
+                }
+                
+                // Score
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = entry.scoreDisplay,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 32.sp,
+                        color = Color.White
+                    )
+                }
+            }
+            
+            // --- BOTTOM GRADIENT & EMOJIS ---
+            // Simulating image background to match design, or just keeping the bar
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .background(if(entry.rank <= 3) rankColor.copy(alpha = 0.2f) else Color.White.copy(0.1f), CircleShape)
-                    .clip(CircleShape),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.6f))))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                Text(
-                    text = "${entry.rank}",
-                    fontWeight = FontWeight.Bold,
-                    color = if (entry.rank <= 3) rankColor else Color.White
-                )
+                 EmojiReactionBar(reactions = entry.reactions ?: emptyMap(), currentUserId = currentUserId, onReactionClick = onReactionClick)
             }
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            // Name
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = entry.userName,
-                    fontWeight = if(isMe) FontWeight.Bold else FontWeight.Medium,
-                    color = if(isMe) Color(0xFFFC5200) else Color.White,
-                    maxLines = 1
-                )
-                 entry.userLevel?.let {
-                     if (it.isNotBlank()) Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+        }
+    }
+}
+
+@Composable
+fun VerifiedBadge() {
+    // Escudo destellante
+    val infiniteTransition = rememberInfiniteTransition()
+    val shineOffset by infiniteTransition.animateFloat(
+        initialValue = -1f,
+        targetValue = 2f,
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing), RepeatMode.Restart)
+    )
+    
+    Box(
+        modifier = Modifier
+            .background(Color(0xFF00E5FF).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .graphicsLayer {
+                 shadowElevation = 8f
+                 spotShadowColor = Color(0xFF00E5FF)
+                 ambientShadowColor = Color(0xFF00E5FF)
+            }
+    ) {
+         Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(Icons.Default.Bolt, contentDescription = "Validado", tint = Color(0xFF00E5FF), modifier = Modifier.size(10.dp))
+              Text("Validado", color = Color(0xFF00E5FF), fontWeight = FontWeight.Black, fontSize = 9.sp)
+         }
+         // Shine Overlay
+         Spacer(
+             modifier = Modifier
+                 .matchParentSize()
+                 .background(
+                     Brush.linearGradient(
+                         colors = listOf(Color.Transparent, Color.White.copy(0.8f), Color.Transparent),
+                         start = androidx.compose.ui.geometry.Offset(shineOffset * 100f, 0f),
+                         end = androidx.compose.ui.geometry.Offset((shineOffset + 1f) * 100f, 100f)
+                     )
+                 )
+         )
+    }
+}
+
+@Composable
+private fun EmojiReactionBar(
+    reactions: Map<String, String>,
+    currentUserId: String?,
+    onReactionClick: ((String) -> Unit)?
+) {
+    val fireCount = reactions.values.count { it == "fire" }
+    val flexCount = reactions.values.count { it == "flex" }
+    val clapCount = reactions.values.count { it == "clap" }
+    
+    val myReaction = currentUserId?.let { reactions[it] }
+    
+    // Glassmorphic pill
+    Row(
+        modifier = Modifier
+            .background(Color.White.copy(0.1f), RoundedCornerShape(50))
+            .border(1.dp, Color.White.copy(0.15f), RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        EmojiButton("🔥", fireCount, myReaction == "fire") { onReactionClick?.invoke("fire") }
+        EmojiButton("💪", flexCount, myReaction == "flex") { onReactionClick?.invoke("flex") }
+        EmojiButton("👏", clapCount, myReaction == "clap") { onReactionClick?.invoke("clap") }
+    }
+}
+
+@OptIn(androidx.compose.animation.ExperimentalAnimationApi::class)
+@Composable
+private fun EmojiButton(emoji: String, count: Int, isSelected: Boolean, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    
+    // Debounce state to prevent rapid clicks
+    var lastClickTime by remember { mutableStateOf(0L) }
+    
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 1.3f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+    )
+    
+    val bgColor = if (isSelected) Color(0xFFFC5200).copy(alpha = 0.3f) else Color.Transparent
+    
+    Row(
+        modifier = Modifier
+            .scale(scale)
+            .background(bgColor, CircleShape)
+            .clickable(
+                 interactionSource = interactionSource,
+                 indication = null,
+                 onClick = {
+                     val now = System.currentTimeMillis()
+                     if (now - lastClickTime > 500) { // 500ms debounce
+                         lastClickTime = now
+                         haptic.performHapticFeedback(HapticFeedbackType.LongPress) // Medium feeling
+                         onClick()
+                     }
                  }
-            }
-            
-            // Score
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = entry.scoreDisplay,
-                    fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
-                )
-                // Assuming RX/Scaled isn't directly in RankingEntry yet, but if it were:
-                // if (entry.isRx) Badge("RX")
+            )
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(emoji, fontSize = 24.sp) // Big 44px approx bounding box via padding
+        if (count > 0) {
+            Spacer(modifier = Modifier.width(4.dp))
+            AnimatedContent(
+                targetState = count,
+                label = "count",
+                transitionSpec = {
+                    (slideInVertically { it } + fadeIn()).togetherWith(slideOutVertically { -it } + fadeOut())
+                }
+            ) { targetCount ->
+                 Text(
+                     text = targetCount.toString(),
+                     color = if (isSelected) Color(0xFFFC5200) else Color.White.copy(0.8f),
+                     fontWeight = FontWeight.Bold,
+                     fontSize = 14.sp
+                 )
             }
         }
     }

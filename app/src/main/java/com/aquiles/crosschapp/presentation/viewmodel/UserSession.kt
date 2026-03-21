@@ -15,6 +15,7 @@ import com.aquiles.crosschapp.data.model.Gym
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
+@OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 object UserSession {
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser = _currentUser.asStateFlow()
@@ -30,12 +31,16 @@ object UserSession {
     val isAdmin: StateFlow<Boolean> = currentUser.map { it?.role == "owner" || it?.role == "coach" }
         .stateIn(GlobalScope, SharingStarted.Eagerly, false)
 
+    val isSuperAdmin: StateFlow<Boolean> = currentUser.map { 
+        it?.isSuperAdmin ?: false
+    }.stateIn(GlobalScope, SharingStarted.Eagerly, false)
+
     /**
      * Inicia la sesión. Se llama explícitamente desde los ViewModels.
      */
     fun startSession(user: User) {
-        val hasAdminPermissions = user.role == "owner" || user.role == "coach"
-        _currentUser.value = user.copy(isAdmin = hasAdminPermissions)
+        user.isAdmin = user.role == "owner" || user.role == "coach"
+        _currentUser.value = user
         
         // Iniciar escucha del Gym para Theming
         listenToGym(user.gym_id)

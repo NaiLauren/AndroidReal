@@ -31,6 +31,14 @@ import com.aquiles.crosschapp.presentation.viewmodel.BenchmarkOperationState
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.BenchmarkWodsState
 import androidx.compose.foundation.layout.height
+import com.aquiles.crosschapp.presentation.viewmodel.UserSession
+import android.app.DatePickerDialog
+import com.google.firebase.Timestamp
+import androidx.compose.ui.platform.LocalContext
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.text.SimpleDateFormat
 
 // --- DESIGN SYSTEM CONSTANTS ---
 private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
@@ -48,16 +56,17 @@ private val ColorError = Color(0xFFEF5350)
 fun AdminManageBenchmarksScreen(
     innerPadding: PaddingValues,
     navController: NavController,
-    adminViewModel: AdminViewModel = viewModel()
+    adminViewModel: AdminViewModel = viewModel(),
+    onlyGlobal: Boolean = false
 ) {
-    val benchmarkWodsState by adminViewModel.benchmarkWodsState.collectAsState()
+    val benchmarksState by adminViewModel.benchmarksState.collectAsState()
     val operationState by adminViewModel.benchmarkOperationState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showDialog by remember { mutableStateOf(false) }
     var selectedBenchmark by remember { mutableStateOf<BenchmarkWod?>(null) }
 
-    LaunchedEffect(Unit) { adminViewModel.loadBenchmarkWods() }
+    LaunchedEffect(Unit) { adminViewModel.loadBenchmarks() }
 
     LaunchedEffect(operationState) {
         when (val current = operationState) {
@@ -83,7 +92,13 @@ fun AdminManageBenchmarksScreen(
             topBar = {
                 CenterAlignedTopAppBar(
                     modifier = Modifier.height(72.dp),
-                    title = { Text("Benchmarks", fontWeight = FontWeight.Bold, color = ColorTextPrimary) },
+                    title = { 
+                        Text(
+                            if (onlyGlobal) "Desafíos Globales" else "Benchmarks Locales", 
+                            fontWeight = FontWeight.Bold, 
+                            color = ColorTextPrimary
+                        ) 
+                    },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver", tint = ColorTextPrimary)
@@ -113,7 +128,7 @@ fun AdminManageBenchmarksScreen(
                     .padding(top = localScaffoldPadding.calculateTopPadding())
                     .padding(bottom = innerPadding.calculateBottomPadding())
             ) {
-                when (val state = benchmarkWodsState) {
+                when (val state = benchmarksState) {
                     is BenchmarkWodsState.Loading -> {
                         CircularProgressIndicator(color = ColorPrimaryAction, modifier = Modifier.align(Alignment.Center))
                     }
@@ -128,30 +143,46 @@ fun AdminManageBenchmarksScreen(
                                 }
                             }
                         } else {
-                            LazyColumn(
-                                contentPadding = PaddingValues(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 16.dp,
-                                    bottom = 80.dp // Espacio para FAB
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                items(state.wods) { benchmark ->
-                                    GlassBenchmarkCard(
-                                        benchmark = benchmark,
-                                        onEdit = {
-                                            selectedBenchmark = it
-                                            showDialog = true
-                                        },
-                                        onDelete = { adminViewModel.deleteBenchmark(it.id) }
-                                    )
+                            val filteredWods = state.wods.filter { it.isGlobal == onlyGlobal }
+                            
+                            if (filteredWods.isEmpty()) {
+                                GlassCard(modifier = Modifier.align(Alignment.Center).padding(32.dp)) {
+                                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                        Text(
+                                            if (onlyGlobal) "No hay Desafíos Globales." else "No hay Benchmarks locales.",
+                                            color = ColorTextSecondary
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(
+                                    contentPadding = PaddingValues(
+                                        start = 16.dp,
+                                        end = 16.dp,
+                                        top = 16.dp,
+                                        bottom = 80.dp // Espacio para FAB
+                                    ),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(filteredWods) { benchmark ->
+                                        GlassBenchmarkCard(
+                                            benchmark = benchmark,
+                                            onEdit = { benchmarkToEdit ->
+                                                selectedBenchmark = benchmarkToEdit
+                                                showDialog = true
+                                            },
+                                            onDelete = { benchmarkToDelete -> adminViewModel.deleteBenchmark(benchmarkToDelete.id) }
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                     is BenchmarkWodsState.Error -> {
                         Text("Error: ${state.message}", color = ColorError, modifier = Modifier.align(Alignment.Center))
+                    }
+                    is BenchmarkWodsState.Idle -> {
+                        // Estado inicial
                     }
                 }
             }
@@ -161,6 +192,7 @@ fun AdminManageBenchmarksScreen(
     if (showDialog) {
         GlassBenchmarkDialog(
             benchmark = selectedBenchmark,
+            onlyGlobal = onlyGlobal,
             onDismiss = { showDialog = false },
             onSave = { benchmarkToSave ->
                 adminViewModel.saveBenchmark(benchmarkToSave)
@@ -192,12 +224,57 @@ private fun GlassBenchmarkCard(
                     color = ColorTextPrimary
                 )
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Score: ${benchmark.scoreType}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ColorPrimaryAction,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Score: ${benchmark.scoreType}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ColorPrimaryAction,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    
+                    if (benchmark.isDesafio == true) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = ColorPrimaryAction.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "DESAFÍO",
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ColorPrimaryAction,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else if (benchmark.isGlobal) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = Color(0xFFFFD700).copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "GLOBAL",
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFD700),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+                
+                if (benchmark.isDesafio == true && (benchmark.startDate != null || benchmark.endDate != null)) {
+                    val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                    val start = benchmark.startDate?.toDate()?.let { sdf.format(it) } ?: "?"
+                    val end = benchmark.endDate?.toDate()?.let { sdf.format(it) } ?: "?"
+                    
+                    Text(
+                        text = "$start - $end",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ColorTextSecondary,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
                 if (benchmark.description.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -224,6 +301,7 @@ private fun GlassBenchmarkCard(
 @Composable
 private fun GlassBenchmarkDialog(
     benchmark: BenchmarkWod?,
+    onlyGlobal: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (BenchmarkWod) -> Unit
 ) {
@@ -249,6 +327,20 @@ private fun GlassBenchmarkDialog(
         }
     }
 
+    val isSuperAdmin by UserSession.isSuperAdmin.collectAsState()
+    var isGlobal by remember { mutableStateOf(benchmark?.isGlobal ?: onlyGlobal) }
+    var isDesafio by remember { mutableStateOf(benchmark?.isDesafio ?: onlyGlobal) }
+    
+    var useDates by remember { mutableStateOf(benchmark?.startDate != null || benchmark?.endDate != null) }
+    var startDate by remember { mutableStateOf(benchmark?.startDate?.toDate() ?: Date()) }
+    var endDate by remember { 
+        mutableStateOf(benchmark?.endDate?.toDate() ?: Date(System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000)) 
+    }
+    
+    val context = LocalContext.current
+    val calendar = Calendar.getInstance()
+    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+
     var isNameError by remember { mutableStateOf(false) }
     var scoreTypeExpanded by remember { mutableStateOf(false) }
     val scoreTypes = remember { listOf("TIME", "REPS", "WEIGHT", "ROUNDS", "AMRAP") }
@@ -258,7 +350,16 @@ private fun GlassBenchmarkDialog(
         containerColor = ColorDialogSurface,
         titleContentColor = ColorTextPrimary,
         textContentColor = ColorTextSecondary,
-        title = { Text(if (benchmark == null) "Nuevo Benchmark" else "Editar Benchmark", fontWeight = FontWeight.Bold) },
+        title = { 
+            Text(
+                if (benchmark == null) {
+                    if (onlyGlobal) "Nuevo Desafío" else "Nuevo Benchmark"
+                } else {
+                    if (onlyGlobal) "Editar Desafío" else "Editar Benchmark"
+                }, 
+                fontWeight = FontWeight.Bold
+            ) 
+        },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -369,6 +470,151 @@ private fun GlassBenchmarkDialog(
                         )
                     }
                 }
+
+                // 6. SELECTOR GLOBAL (SOLO EN MODO LOCAL Y SI ES SUPER ADMIN)
+                
+                if (isSuperAdmin && !onlyGlobal) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Convertir a Global",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ColorTextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Hacer este benchmark visible para todos",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ColorTextSecondary
+                            )
+                        }
+                        Switch(
+                            checked = isGlobal,
+                            onCheckedChange = { isGlobal = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = ColorPrimaryAction,
+                                checkedTrackColor = ColorPrimaryAction.copy(alpha = 0.5f)
+                            )
+                        )
+                    }
+                } else if (onlyGlobal) {
+                    // En modo global, forzamos que sea global siempre
+                    LaunchedEffect(Unit) { isGlobal = true }
+                    
+                    Text(
+                        "Tipo: Desafío de Comunidad (Global)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFFFD700), // Dorado
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                // --- 7. CONFIGURACIÓN DEL DESAFÍO (isDesafio + FECHAS) ---
+                Divider(color = ColorBorder, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Activar como Desafío",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ColorTextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Tendrá un periodo de validez y aparecerá en el carrusel de Hoy",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ColorTextSecondary
+                        )
+                    }
+                    Switch(
+                        checked = isDesafio,
+                        onCheckedChange = { isDesafio = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = ColorPrimaryAction,
+                            checkedTrackColor = ColorPrimaryAction.copy(alpha = 0.5f)
+                        )
+                    )
+                }
+
+                if (isDesafio) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Definir fechas de vigencia",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ColorTextSecondary
+                        )
+                        Checkbox(
+                            checked = useDates,
+                            onCheckedChange = { useDates = it },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = ColorPrimaryAction,
+                                uncheckedColor = ColorBorder
+                            )
+                        )
+                    }
+                }
+
+                if (isDesafio && useDates) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Fecha Inicio
+                        OutlinedCard(
+                            onClick = {
+                                calendar.time = startDate
+                                DatePickerDialog(context, { _, y, m, d ->
+                                    calendar.set(y, m, d)
+                                    startDate = calendar.time
+                                }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.outlinedCardColors(containerColor = Color.Transparent),
+                            border = BorderStroke(1.dp, ColorBorder),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Inicia", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+                                Text(sdf.format(startDate), style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary)
+                            }
+                        }
+
+                        // Fecha Fin
+                        OutlinedCard(
+                            onClick = {
+                                calendar.time = endDate
+                                DatePickerDialog(context, { _, y, m, d ->
+                                    calendar.set(y, m, d)
+                                    endDate = calendar.time
+                                }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.outlinedCardColors(containerColor = Color.Transparent),
+                            border = BorderStroke(1.dp, ColorBorder),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Finaliza", style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary)
+                                Text(sdf.format(endDate), style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary)
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -381,14 +627,22 @@ private fun GlassBenchmarkDialog(
                             scoreType = scoreType, // Lo mantenemos por legacy
                             measurementUnit = scoreType, // Nuevo campo
                             sortOrder = sortOrder,
-                            strategy = strategy.trim()
+                            strategy = strategy.trim(),
+                            isGlobal = isGlobal,
+                            isDesafio = isDesafio,
+                            startDate = if (isDesafio && useDates) Timestamp(startDate) else null,
+                            endDate = if (isDesafio && useDates) Timestamp(endDate) else null
                         ) ?: BenchmarkWod(
                             name = name,
                             description = description,
                             scoreType = scoreType,
                             measurementUnit = scoreType,
                             sortOrder = sortOrder,
-                            strategy = strategy.trim()
+                            strategy = strategy.trim(),
+                            isGlobal = isGlobal,
+                            isDesafio = isDesafio,
+                            startDate = if (isDesafio && useDates) Timestamp(startDate) else null,
+                            endDate = if (isDesafio && useDates) Timestamp(endDate) else null
                         )
                         onSave(newOrUpdatedBenchmark)
                     } else { isNameError = true }

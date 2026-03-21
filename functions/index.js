@@ -171,6 +171,57 @@ exports.onNewCreditRequest = onDocumentCreated({
 });
 
 /**
+ * Se activa cuando un alumno registra un resultado en un desafío.
+ * Notifica a los administradores de SU gimnasio para que lo validen (legalicen).
+ */
+exports.onNewChallengeResult = onDocumentCreated({
+    document: "challenge_results/{resultId}",
+    region: "southamerica-east1"
+}, async (event) => {
+    const newResult = event.data.data();
+    if (!newResult) return null;
+
+    const gymId = newResult.gym_id;
+    const studentName = newResult.userName || "Un alumno";
+    const challengeName = newResult.challengeName || "desafío";
+    
+    const title = "Nuevo Desafío por Validar 🏆";
+    const body = `${studentName} ha subido su resultado para: ${challengeName}.`;
+    const type = "NEW_CHALLENGE_RESULT";
+
+    // Buscar administradores del gimnasio
+    const adminQuery = await db.collection("users")
+        .where("gym_id", "==", gymId)
+        .where("role", "in", ["owner", "coach", "ADMIN"])
+        .get();
+
+    if (adminQuery.empty) return null;
+
+    const allAdminTokens = [];
+    const notificationPromises = [];
+
+    adminQuery.forEach((doc) => {
+        const adminTokens = doc.data().fcmTokens;
+        if (adminTokens && Array.isArray(adminTokens) && adminTokens.length > 0) {
+            allAdminTokens.push(...adminTokens);
+        }
+        // Crear notificación persistente en la app
+        notificationPromises.push(createInAppNotification(doc.id, gymId, title, body, type));
+    });
+
+    await Promise.all(notificationPromises);
+
+    if (allAdminTokens.length > 0) {
+        await sendMulticastAndCleanup(allAdminTokens, title, body, { 
+            type: type,
+            resultId: event.params.resultId,
+            gym_id: gymId
+        }, null);
+    }
+    return null;
+});
+
+/**
  * Se activa cuando se crea un nuevo mensaje personal para notificar al destinatario.
  */
 exports.sendNewMessageNotification = onDocumentCreated({

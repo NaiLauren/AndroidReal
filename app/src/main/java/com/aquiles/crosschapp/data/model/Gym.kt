@@ -27,6 +27,9 @@ data class Gym(
     val adminEmail: String? = null,
     val splashVideoUrl: String? = null,
     
+    @PropertyName("backgroundUrl")
+    val backgroundUrl: String? = null,
+    
     @get:PropertyName("setupProgress")
     @set:PropertyName("setupProgress")
     @PropertyName("setupProgress")

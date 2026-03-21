@@ -74,13 +74,13 @@ fun AdminSchedulePlannerScreen(
     )
 
     // Sync DatePicker with ViewModel
-    // Sync DatePicker with ViewModel
     LaunchedEffect(datePickerState.selectedDateMillis) {
-        datePickerState.selectedDateMillis?.let {
-            val date = Date(it)
-            selectedDate = date
-            viewModel.fetchClasses(date)
-            viewModel.fetchScheduleTemplate(date) // Fetch specific template for this day
+        datePickerState.selectedDateMillis?.let { utcMidnight ->
+            val offset = TimeZone.getDefault().getOffset(utcMidnight)
+            val localDate = Date(utcMidnight - offset)
+            selectedDate = localDate
+            viewModel.fetchClasses(localDate)
+            viewModel.fetchScheduleTemplate(localDate) // Fetch specific template for this day
         }
     }
 
@@ -243,12 +243,7 @@ fun AdminSchedulePlannerScreen(
                                 isSelected = selectedClassIds.contains(gymClass.id),
                                 onToggle = { 
                                      if(isSelectionMode) viewModel.toggleSelection(gymClass.id)
-                                     else {
-                                         // En modo normal, al tocar abre editar para UNA sola
-                                         viewModel.clearSelection()
-                                         viewModel.toggleSelection(gymClass.id) // Seleccionamos temporalmente esta
-                                         showCreateSheet = true // Abrimos sheet en modo edición
-                                     } 
+                                     else navController.navigate("create_edit_class_screen?classId=${gymClass.id}")
                                 },
                                 isSelectionMode = isSelectionMode
                             )
