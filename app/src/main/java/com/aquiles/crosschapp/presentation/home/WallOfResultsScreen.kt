@@ -77,7 +77,7 @@ fun WallOfResultsScreen(
     }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = Color(0xFF0A0A0A),
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -114,7 +114,8 @@ fun WallOfResultsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingVals),
+                .padding(paddingVals)
+                .background(Color(0xFF0A0A0A)),
             contentPadding = PaddingValues(bottom = 100.dp, top = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
