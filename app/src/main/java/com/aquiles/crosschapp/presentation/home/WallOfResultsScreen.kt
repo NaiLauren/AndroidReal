@@ -286,7 +286,11 @@ fun WallOfResultsScreen(
             // CONTENIDO
             // ======================================================
             if (currentTab == FeedTab.EVENTS) {
-                if (activeCompetitions.isEmpty()) {
+                // Separar competencias activas vs finalizadas
+                val activeComps = activeCompetitions.filter { it.resolveStatus() == com.aquiles.crosschapp.data.model.CompetitionStatus.ONGOING }
+                val finishedComps = activeCompetitions.filter { it.resolveStatus() == com.aquiles.crosschapp.data.model.CompetitionStatus.FINISHED }.sortedByDescending { it.endDate }
+                
+                if (activeComps.isEmpty() && finishedComps.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 60.dp),
@@ -298,7 +302,7 @@ fun WallOfResultsScreen(
                             ) {
                                 Text("🏁", fontSize = 56.sp)
                                 Text(
-                                    "Sin eventos activos",
+                                    "Sin eventos",
                                     color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp
                                 )
                                 Text(
@@ -309,7 +313,18 @@ fun WallOfResultsScreen(
                         }
                     }
                 } else {
-                    items(activeCompetitions) { competition ->
+                    // SECCIÓN: ACTIVAS
+                    if (activeComps.isNotEmpty()) {
+                        item {
+                            Text(
+                                "🔥 ACTIVAS AHORA",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)
+                            )
+                        }
+                        items(activeComps) { competition ->
                         GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -373,6 +388,50 @@ fun WallOfResultsScreen(
                                             fontWeight = FontWeight.SemiBold
                                         )
                                     }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // SECCIÓN: FINALIZADAS
+                    if (finishedComps.isNotEmpty()) {
+                        item {
+                            Text(
+                                "📜 HISTORIAL",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                            )
+                        }
+                        items(finishedComps) { competition ->
+                            GlassCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        competition.title,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp
+                                    )
+                                    Text(
+                                        "${competition.type} • Finalizada",
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        "🏆 Ver resultados finales",
+                                        color = primaryColor,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
                             }
                         }
