@@ -2179,4 +2179,55 @@ class AdminViewModel : ViewModel() {
         }
     }
 
+    // ========== CREATE COMPETITION (OWNER) ==========
+
+    suspend fun createCompetition(
+        title: String,
+        description: String,
+        type: String,
+        criteria: String,
+        startDate: java.util.Date,
+        endDate: java.util.Date,
+        imageUri: android.net.Uri? = null
+    ) {
+        try {
+            val gymId = currentUserGymId ?: return
+            var imageUrl: String? = null
+
+            // Upload image if provided
+            if (imageUri != null) {
+                val timestamp = System.currentTimeMillis()
+                val filename = "competitions/$gymId/$timestamp.jpg"
+                val storageRef = com.google.firebase.storage.FirebaseStorage.getInstance()
+                    .reference.child(filename)
+
+                storageRef.putFile(imageUri).await()
+                imageUrl = storageRef.downloadUrl.await().toString()
+            }
+
+            // Create competition document
+            val competitionData = hashMapOf(
+                "gym_id" to gymId,
+                "title" to title,
+                "description" to description,
+                "type" to type,
+                "criteria" to criteria,
+                "startDate" to com.google.firebase.Timestamp(startDate),
+                "endDate" to com.google.firebase.Timestamp(endDate),
+                "imageUrl" to imageUrl,
+                "isActive" to true,
+                "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+            )
+
+            firestore.collection("competitions")
+                .add(competitionData)
+                .await()
+
+            Log.i("AdminViewModel", "Competition created successfully: $title")
+
+        } catch (e: Exception) {
+            Log.e("AdminViewModel", "Error creating competition", e)
+        }
+    }
+
 }
