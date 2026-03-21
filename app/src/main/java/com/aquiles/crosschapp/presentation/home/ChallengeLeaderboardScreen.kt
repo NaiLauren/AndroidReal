@@ -93,28 +93,31 @@ fun ChallengeLeaderboardScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            // Segmented Button para Sort
-            SegmentedButtonRow(
+            // Sort Buttons
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp)
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                SegmentedButton(
+                FilterChip(
                     selected = sortBy == "score",
                     onClick = { sortBy = "score" },
+                    label = { Text("Por Score", fontSize = 12.sp) },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Por Score", fontSize = 12.sp)
-                }
-                SegmentedButton(
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFFC5200)
+                    )
+                )
+                FilterChip(
                     selected = sortBy == "date",
                     onClick = { sortBy = "date" },
+                    label = { Text("Más Reciente", fontSize = 12.sp) },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Más Reciente", fontSize = 12.sp)
-                }
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFFFC5200)
+                    )
+                )
             }
 
             if (sortedResults.isEmpty()) {
