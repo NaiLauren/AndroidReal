@@ -29,10 +29,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 // Colors mimicking iOS "Ultra Thin Material" Dark Mode sin auto-blur
-private val GlassSurfaceStart = Color.White.copy(alpha = 0.12f)
-private val GlassSurfaceEnd = Color.White.copy(alpha = 0.04f)
-private val GlassBorderStart = Color.White.copy(alpha = 0.45f)
-private val GlassBorderEnd = Color.White.copy(alpha = 0.03f)
+// Aumentada solidez: era muy transparente
+private val GlassSurfaceStart = Color.White.copy(alpha = 0.18f)
+private val GlassSurfaceEnd = Color.White.copy(alpha = 0.10f)
+private val GlassBorderStart = Color.White.copy(alpha = 0.55f)
+private val GlassBorderEnd = Color.White.copy(alpha = 0.08f)
 
 @Composable
 fun GlassCard(

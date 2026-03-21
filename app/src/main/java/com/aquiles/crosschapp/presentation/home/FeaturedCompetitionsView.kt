@@ -289,17 +289,22 @@ fun ProCompetitionCard(
 
                     competition.endDate?.let { date ->
                         val dateFormat = SimpleDateFormat("dd MMM", Locale.forLanguageTag("es-ES"))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Icon(
                                 Icons.Default.CalendarMonth, null,
                                 tint = Color.White.copy(alpha = 0.5f),
                                 modifier = Modifier.size(12.dp)
                             )
-                            Spacer(Modifier.width(3.dp))
+                            Spacer(Modifier.width(4.dp))
                             Text(
                                 text = "Hasta ${dateFormat.format(date)}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.5f)
+                                color = Color.White.copy(alpha = 0.5f),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
                     }
