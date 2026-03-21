@@ -1,6 +1,7 @@
 package com.aquiles.crosschapp.presentation.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -93,23 +94,24 @@ fun ChallengeLeaderboardScreen(
                 .padding(horizontal = 16.dp)
         ) {
             // Segmented Button para Sort
-            Row(
+            SegmentedButtonRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(vertical = 12.dp)
             ) {
                 SegmentedButton(
                     selected = sortBy == "score",
                     onClick = { sortBy = "score" },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Por Score", fontSize = 12.sp)
                 }
                 SegmentedButton(
                     selected = sortBy == "date",
                     onClick = { sortBy = "date" },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Más Reciente", fontSize = 12.sp)
                 }
@@ -176,13 +178,19 @@ fun LeaderboardCard(
         else -> Color.White.copy(alpha = 0.1f)
     }
 
-    GlassCard(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(100.dp),
-        shape = RoundedCornerShape(16.dp),
-        borderColor = borderColor,
-        backgroundColor = backgroundColor
+            .height(100.dp)
+            .background(
+                color = backgroundColor,
+                shape = RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(16.dp)
+            )
     ) {
         Row(
             modifier = Modifier

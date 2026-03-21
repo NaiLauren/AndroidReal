@@ -202,38 +202,45 @@ fun OwnerCreateCompetitionScreen(
                 color = Color.White,
                 fontSize = 14.sp
             )
-            SegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CompetitionType.values().forEach { type ->
-                    SegmentedButton(
+                    FilterChip(
                         selected = selectedType == type,
                         onClick = { selectedType = type },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(type.value, fontSize = 11.sp)
-                    }
+                        label = { Text(type.value, fontSize = 11.sp) },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFFC5200)
+                        )
+                    )
                 }
             }
 
             // Criterio de Ranking
+            Spacer(Modifier.height(8.dp))
             Text(
                 "Criterio de Ranking",
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 fontSize = 14.sp
             )
-            SegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 RankingCriteria.values().forEach { criteria ->
-                    SegmentedButton(
+                    FilterChip(
                         selected = selectedCriteria == criteria,
                         onClick = { selectedCriteria = criteria },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(criteria.value.split("(")[0].trim(), fontSize = 10.sp)
-                    }
+                        label = { Text(criteria.value.split("(")[0].trim(), fontSize = 10.sp) },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFFC5200)
+                        )
+                    )
                 }
             }
 

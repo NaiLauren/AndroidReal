@@ -1,6 +1,7 @@
 package com.aquiles.crosschapp.presentation.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -226,12 +227,18 @@ fun PodiumPosition(
         else -> Color(0xFFCD7F32)
     }
 
-    GlassCard(
+    Box(
         modifier = modifier
             .fillMaxHeight(1f)
-            .background(backgroundColor),
-        borderColor = borderColor,
-        backgroundColor = backgroundColor
+            .background(
+                color = backgroundColor,
+                shape = RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(16.dp)
+            )
     ) {
         Column(
             modifier = Modifier
