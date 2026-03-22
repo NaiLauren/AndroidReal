@@ -232,7 +232,8 @@ class WodsViewModel : ViewModel() {
         score: String,
         isRx: Boolean,
         notes: String,
-        scoreType: String = "reps"
+        scoreType: String = "reps",
+        videoUrl: String? = null
     ) {
         val user = UserSession.currentUser.value ?: run {
             _saveChallengeResultState.value = ChallengeSaveState.Error("Usuario no autenticado")
@@ -265,7 +266,8 @@ class WodsViewModel : ViewModel() {
                     "gym_id" to gymId,
                     "date" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
                     "validationStatus" to "pending",
-                    "facilityName" to (user.facilityName ?: "")
+                    "facilityName" to (user.facilityName ?: ""),
+                    "videoUrl" to (videoUrl ?: "")
                 )
 
                 firestore.collection("challenge_results")

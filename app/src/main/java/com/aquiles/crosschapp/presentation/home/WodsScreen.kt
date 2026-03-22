@@ -224,13 +224,14 @@ fun WodsScreen(
         ChallengeLogDialog(
             challenge = selectedChallengeToLog!!,
             onDismiss = { selectedChallengeToLog = null },
-            onSave = { score, isRx, notes ->
+            onSave = { score, isRx, notes, videoUrl ->
                 wodsViewModel.logChallengeResult(
                     challengeId = selectedChallengeToLog!!.id,
                     challengeName = selectedChallengeToLog!!.name,
                     score = score,
                     isRx = isRx,
-                    notes = notes
+                    notes = notes,
+                    videoUrl = videoUrl.ifBlank { null }
                 )
                 selectedChallengeToLog = null
             },
@@ -1000,24 +1001,6 @@ fun GlobalChallengeCard(
                         )
                     }
 
-                    Button(
-                        onClick = onLogClick,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFFD700),
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = if (userRecord != null) "NUEVO" else "REGISTRAR",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
                     Text(
                         text = "Desafío de Comunidad 🌎",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium),
@@ -1079,11 +1062,12 @@ fun GlobalChallengeCard(
 fun ChallengeLogDialog(
     challenge: GlobalChallenge,
     onDismiss: () -> Unit,
-    onSave: (String, Boolean, String) -> Unit,
+    onSave: (String, Boolean, String, String) -> Unit,
     isSaving: Boolean
 ) {
     var score by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+    var videoUrl by remember { mutableStateOf("") }
     var isRx by remember { mutableStateOf(true) }
 
     androidx.compose.ui.window.Dialog(
@@ -1129,6 +1113,13 @@ fun ChallengeLogDialog(
                         label = "Notas (Opcional)"
                     )
 
+                    GlassTextField(
+                        value = videoUrl,
+                        onValueChange = { videoUrl = it },
+                        label = "Enlace de video (YouTube, Drive, etc.)",
+                        keyboardType = KeyboardType.Uri
+                    )
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1158,7 +1149,7 @@ fun ChallengeLogDialog(
                             Text("CANCELAR", color = Color.White.copy(alpha = 0.6f))
                         }
                         Button(
-                            onClick = { onSave(score, isRx, notes) },
+                            onClick = { onSave(score, isRx, notes, videoUrl) },
                             enabled = score.isNotBlank() && !isSaving,
                             modifier = Modifier.weight(1f).height(45.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
