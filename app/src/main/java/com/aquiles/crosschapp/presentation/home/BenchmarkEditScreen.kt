@@ -38,10 +38,10 @@ fun BenchmarkEditScreen(
     var isGlobal by remember { mutableStateOf((benchmarkToEdit?.gym_id ?: "LOCAL") == "" || (benchmarkToEdit?.isGlobal ?: false)) }
     var isDesafio by remember { mutableStateOf(benchmarkToEdit?.isDesafio ?: false) }
     var useDates by remember { mutableStateOf(benchmarkToEdit?.startDate != null || benchmarkToEdit?.endDate != null) }
-    var startDate by remember { mutableStateOf(benchmarkToEdit?.startDate ?: Date()) }
+    var startDate by remember { mutableStateOf(benchmarkToEdit?.startDate?.toDate() ?: Date()) }
     var endDate by remember {
         mutableStateOf(
-            benchmarkToEdit?.endDate ?: Calendar.getInstance().apply {
+            benchmarkToEdit?.endDate?.toDate() ?: Calendar.getInstance().apply {
                 add(Calendar.DAY_OF_YEAR, 7)
             }.time
         )
@@ -283,19 +283,19 @@ fun BenchmarkEditScreen(
             Button(
                 onClick = {
                     val benchmarkData = BenchmarkWod(
-                        id = benchmarkToEdit?.id,
+                        id = benchmarkToEdit?.id ?: "",
                         name = name,
                         description = description,
                         strategy = strategy,
                         scoreType = scoreType,
                         gym_id = "", // Handled by AdminViewModel
                         isDesafio = isDesafio,
-                        startDate = if (isDesafio && useDates) startDate else null,
-                        endDate = if (isDesafio && useDates) endDate else null,
+                        startDate = if (isDesafio && useDates) com.google.firebase.Timestamp(startDate) else null,
+                        endDate = if (isDesafio && useDates) com.google.firebase.Timestamp(endDate) else null,
                         isGlobal = isGlobal
                     )
 
-                    adminViewModel.saveBenchmark(benchmarkData, isGlobal)
+                    adminViewModel.saveBenchmark(benchmarkData)
                     navController.popBackStack()
                 },
                 modifier = Modifier

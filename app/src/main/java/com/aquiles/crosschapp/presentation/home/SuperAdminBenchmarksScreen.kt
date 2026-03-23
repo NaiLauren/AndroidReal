@@ -206,22 +206,22 @@ private fun GlobalBenchmarkCard(
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 when {
-                                    benchmark.startDate != null && benchmark.startDate!! > Date() -> "PRÓXIMAMENTE"
-                                    benchmark.endDate != null && benchmark.endDate!! < Date() -> "FINALIZADA"
+                                    benchmark.startDate != null && benchmark.startDate!!.toDate() > Date() -> "PRÓXIMAMENTE"
+                                    benchmark.endDate != null && benchmark.endDate!!.toDate() < Date() -> "FINALIZADA"
                                     else -> "ACTIVA"
                                 },
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = when {
-                                    benchmark.startDate != null && benchmark.startDate!! > Date() -> Color.Yellow
-                                    benchmark.endDate != null && benchmark.endDate!! < Date() -> Color.Gray
+                                    benchmark.startDate != null && benchmark.startDate!!.toDate() > Date() -> Color.Yellow
+                                    benchmark.endDate != null && benchmark.endDate!!.toDate() < Date() -> Color.Gray
                                     else -> Color.Green
                                 },
                                 modifier = Modifier
                                     .background(
                                         when {
-                                            benchmark.startDate != null && benchmark.startDate!! > Date() -> Color.Yellow.copy(alpha = 0.2f)
-                                            benchmark.endDate != null && benchmark.endDate!! < Date() -> Color.Gray.copy(alpha = 0.2f)
+                                            benchmark.startDate != null && benchmark.startDate!!.toDate() > Date() -> Color.Yellow.copy(alpha = 0.2f)
+                                            benchmark.endDate != null && benchmark.endDate!!.toDate() < Date() -> Color.Gray.copy(alpha = 0.2f)
                                             else -> Color.Green.copy(alpha = 0.2f)
                                         },
                                         RoundedCornerShape(4.dp)
@@ -397,6 +397,7 @@ private fun GlobalBenchmarkCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BenchmarkFormDialog(
     viewModel: SuperAdminBenchmarksViewModel,
@@ -410,8 +411,8 @@ private fun BenchmarkFormDialog(
     var strategy by remember { mutableStateOf(benchmark?.strategy ?: "") }
     var isDesafio by remember { mutableStateOf(benchmark?.isDesafio ?: false) }
     var useDates by remember { mutableStateOf(benchmark?.startDate != null || benchmark?.endDate != null) }
-    var startDate by remember { mutableStateOf(benchmark?.startDate ?: Date()) }
-    var endDate by remember { mutableStateOf(benchmark?.endDate ?: Date()) }
+    var startDate by remember { mutableStateOf(benchmark?.startDate?.toDate() ?: Date()) }
+    var endDate by remember { mutableStateOf(benchmark?.endDate?.toDate() ?: Date()) }
     var allGymsSelected by remember { mutableStateOf(benchmark?.allowedGymIds.isNullOrEmpty()) }
     var selectedGymIds by remember { mutableStateOf(benchmark?.allowedGymIds?.toSet() ?: emptySet()) }
 
@@ -521,8 +522,8 @@ private fun BenchmarkFormDialog(
                         scoreType = scoreType,
                         strategy = strategy,
                         isDesafio = isDesafio,
-                        startDate = if (isDesafio && useDates) startDate else null,
-                        endDate = if (isDesafio && useDates) endDate else null,
+                        startDate = if (isDesafio && useDates) com.google.firebase.Timestamp(startDate) else null,
+                        endDate = if (isDesafio && useDates) com.google.firebase.Timestamp(endDate) else null,
                         selectedGymIds = if (allGymsSelected) emptyList() else selectedGymIds.toList()
                     )
                     onDismiss()

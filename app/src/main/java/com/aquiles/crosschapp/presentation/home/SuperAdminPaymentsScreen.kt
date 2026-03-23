@@ -112,7 +112,7 @@ fun SuperAdminPaymentsScreen(
                     modifier = Modifier
                         .padding(top = 8.dp)
                         .background(
-                            Color.White.opacity(0.1f),
+                            Color.White.copy(alpha = 0.1f),
                             RoundedCornerShape(20.dp)
                         )
                         .padding(8.dp),
@@ -228,7 +228,7 @@ fun SuperAdminPaymentsScreen(
 private fun GymDashboardCard(
     item: GymPaymentDashboardItem,
     onProofClick: () -> Unit,
-    onActionClick: () -> Void
+    onActionClick: () -> Unit
 ) {
     val statusColor = when (item.status) {
         PaymentStatus.PAID -> Color.Green
@@ -275,7 +275,7 @@ private fun GymDashboardCard(
                             color = Color.Gray,
                             modifier = Modifier
                                 .background(
-                                    Color.White.opacity(0.05f),
+                                    Color.White.copy(alpha = 0.05f),
                                     RoundedCornerShape(4.dp)
                                 )
                                 .padding(4.dp)

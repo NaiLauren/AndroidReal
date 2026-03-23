@@ -95,12 +95,12 @@ fun HallOfFameScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp)
                     .background(
-                        color = Color.White.opacity(0.07f),
+                        color = Color.White.copy(alpha = 0.07f),
                         shape = RoundedCornerShape(50)
                     )
                     .border(
                         width = 1.dp,
-                        color = Color.White.opacity(0.1f),
+                        color = Color.White.copy(alpha = 0.1f),
                         shape = RoundedCornerShape(50)
                     )
                     .padding(4.dp),
@@ -139,7 +139,7 @@ fun HallOfFameScreen(
 private fun TabButton(
     text: String,
     isSelected: Boolean,
-    onClick: () -> Void,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Button(
@@ -449,7 +449,7 @@ private fun PodiumCard(podium: CompetitionPodium) {
                 }
             }
 
-            Divider(color = Color.White.opacity(0.08f))
+            Divider(color = Color.White.copy(alpha = 0.08f))
 
             // Podium visual
             Row(

@@ -8,6 +8,7 @@ plugins {
 android {
     namespace = "com.aquiles.crosschapp"
     compileSdk = 36
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.aquiles.crosschapp"

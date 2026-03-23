@@ -392,6 +392,7 @@ fun WallOfResultsScreen(
                             }
                         }
                     }
+                    }
                     
                     // SECCIÓN: FINALIZADAS
                     if (finishedComps.isNotEmpty()) {
