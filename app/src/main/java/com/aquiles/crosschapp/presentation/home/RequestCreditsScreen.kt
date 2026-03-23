@@ -47,7 +47,7 @@ import java.util.*
 import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS (PRO) ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.65f)
 private val ColorDialogSurface = Color(0xFF121212)
 // LocalPrimaryColor.current ahora usa LocalPrimaryColor.current (dinámico por gym)
 private val ColorTextPrimary = Color.White

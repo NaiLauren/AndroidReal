@@ -43,7 +43,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.layout.height
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.65f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)

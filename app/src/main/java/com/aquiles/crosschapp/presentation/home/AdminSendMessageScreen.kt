@@ -39,7 +39,7 @@ private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.1f)
 private val ColorBackgroundGradientStart = Color(0xFF000000)
 private val ColorBackgroundGradientEnd = Color(0xFF121212)
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.65f)
 private val ColorError = Color(0xFFEF5350)
 
 @OptIn(ExperimentalMaterial3Api::class)

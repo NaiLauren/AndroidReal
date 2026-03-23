@@ -23,7 +23,7 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 
 // --- CONSTANTS COPY ---
-private val ColorGlassInput = Color(0xFFFFFFFF).copy(alpha = 0.07f)
+private val ColorGlassInput = Color(0xFFFFFFFF).copy(alpha = 0.10f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)

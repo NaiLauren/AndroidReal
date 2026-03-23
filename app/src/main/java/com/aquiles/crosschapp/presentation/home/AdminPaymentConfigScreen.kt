@@ -29,7 +29,7 @@ private val ColorBackground = Color(0xFF121212)
 private val ColorSurface = Color(0xFF1E1E1E)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color.Gray
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.65f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

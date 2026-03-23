@@ -67,8 +67,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.KeyboardType
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
-private val ColorGlassInput = Color(0xFFFFFFFF).copy(alpha = 0.07f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.65f)
+private val ColorGlassInput = Color(0xFFFFFFFF).copy(alpha = 0.10f)
 private val ColorTextPrimary = Color.White
 private val ColorTextSecondary = Color(0xFFAAAAAA)
 private val ColorBorder = Color.White.copy(alpha = 0.15f)
@@ -86,7 +86,8 @@ fun WodsScreen(
     onNavigateToScheduleAtDate: (LocalDate) -> Unit,
     onNavigateToWodHistory: () -> Unit,
     onNavigateToRequestCredits: () -> Unit,
-    onNavigateToBenchmarks: () -> Unit
+    onNavigateToBenchmarks: () -> Unit,
+    onNavigateToChallengeRanking: (String) -> Unit = {}
 ) {
     val currentUser by UserSession.currentUser.collectAsState()
     val currentUserGymId by UserSession.currentUserGymId.collectAsState()
@@ -412,7 +413,7 @@ fun WodsScreen(
                     if (globalChallenges.isNotEmpty()) {
                         GlobalChallengePager(
                             challenges = globalChallenges, 
-                            onNavigateToBenchmarks = onNavigateToBenchmarks,
+                            onNavigateToChallengeRanking = onNavigateToChallengeRanking,
                             onLogClick = { selectedChallengeToLog = it }
                         )
                     }
@@ -862,7 +863,7 @@ fun NextBookingInnerColumn(gymClass: GymClass, onClick: () -> Unit) {
 @Composable
 fun GlobalChallengePager(
     challenges: List<GlobalChallenge>, 
-    onNavigateToBenchmarks: () -> Unit,
+    onNavigateToChallengeRanking: (String) -> Unit,
     onLogClick: (GlobalChallenge) -> Unit
 ) {
     val pagerState = rememberPagerState(pageCount = { challenges.size })
@@ -879,7 +880,7 @@ fun GlobalChallengePager(
             GlobalChallengeCard(
                 challenge = challenge, 
                 userRecord = null, // TODO: Cargar el récord real del usuario de WodsViewModel
-                onClick = onNavigateToBenchmarks, // O donde quieras navegar
+                onClick = { onNavigateToChallengeRanking(challenge.id) },
                 onLogClick = { onLogClick(challenge) }
             )
         }

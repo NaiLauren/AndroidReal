@@ -63,7 +63,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.res.painterResource
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.65f)
 private val ColorPrimaryAction = Color(0xFFFC5200) // Tu naranja
 private val ColorAdminAction = Color(0xFF673AB7)
 private val ColorTextPrimary = Color.White

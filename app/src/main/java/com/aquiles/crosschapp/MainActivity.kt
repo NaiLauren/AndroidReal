@@ -364,7 +364,8 @@ fun NavGraphBuilder.mainGraph(
                 onNavigateToScheduleAtDate = { date: LocalDate -> navController.navigate(BottomNavItem.Schedule.route + "?date=" + date.toString()) },
                 onNavigateToWodHistory = { /* A implementar */ },
                 onNavigateToRequestCredits = { navController.navigate("request_credits_screen") },
-                onNavigateToBenchmarks = { navController.navigate("benchmarks_screen") }
+                onNavigateToBenchmarks = { navController.navigate("benchmarks_screen") },
+                onNavigateToChallengeRanking = { challengeId -> navController.navigate("challenge_ranking/$challengeId") }
             )
         }
         composable(BottomNavItem.Performance.route) {
@@ -476,6 +477,16 @@ fun NavGraphBuilder.mainGraph(
             )
         }
         
+        composable(
+            route = "challenge_ranking/{challengeId}",
+            arguments = listOf(navArgument("challengeId") { type = NavType.StringType })
+        ) {
+            GlobalChallengeRankingScreen(
+                innerPadding = innerPadding,
+                navController = navController,
+                adminViewModel = viewModel()
+            )
+        }
         composable("benchmarks_screen") {
             com.aquiles.crosschapp.presentation.benchmarks.BenchmarksScreen(
                 adminViewModel = viewModel(),

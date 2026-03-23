@@ -58,7 +58,7 @@ import com.aquiles.crosschapp.presentation.components.GlassAlertDialog
 import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 
 // --- DESIGN SYSTEM CONSTANTS ---
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.65f)
 private val ColorDialogSurface = Color(0xFF1C1C1E).copy(alpha = 0.70f)
 private val ColorPrimaryAction = Color(0xFFFC5200)
 private val ColorTextPrimary = Color.White

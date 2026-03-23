@@ -44,7 +44,7 @@ import com.aquiles.crosschapp.presentation.viewmodel.PasswordResetState
 
 // --- CONSTANTES DE DISEÑO (Igual que en Perfil) ---
 private val ColorPrimaryAction = Color(0xFFFC5200) // Naranja
-private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.45f)
+private val ColorGlassSurface = Color(0xFF1C1C1E).copy(alpha = 0.65f)
 private val ColorTextWhite = Color(0xFFFFFFFF)
 private val ColorTextSecondary = Color.White.copy(alpha = 0.7f)
 private val ColorBorder = Color.White.copy(alpha = 0.2f) // Borde fino
