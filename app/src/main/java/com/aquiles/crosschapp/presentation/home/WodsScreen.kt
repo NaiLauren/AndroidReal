@@ -524,6 +524,14 @@ fun WodPagerCard(
         animationSpec = infiniteRepeatable(tween(3000, easing = LinearEasing), RepeatMode.Restart)
     )
 
+    val classColor = remember(gymClass.hexColor) {
+        try {
+            Color(android.graphics.Color.parseColor(gymClass.hexColor))
+        } catch (e: Exception) {
+            Color(0xFFFC5200) // Fallback al naranja original
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -542,19 +550,24 @@ fun WodPagerCard(
                      .matchParentSize()
                      .background(
                          Brush.sweepGradient(
-                             colors = listOf(Color(0xFFFFD700), Color(0xFFFF5A00), Color(0xFFFFD700)),
+                             colors = listOf(Color(0xFFD4AF37), Color(0xFFCC4800), Color(0xFFD4AF37)),
                              center = androidx.compose.ui.geometry.Offset(Float.NaN, Float.NaN) // Just to bypass errors, graphicsLayer takes care of rotation natively below
                          ),
                          shape = RoundedCornerShape(24.dp)
                      )
                      .graphicsLayer { rotationZ = rotationAnimation }
-                     .border(2.dp, Brush.sweepGradient(listOf(Color(0xFFFFD700), Color(0xFFFF5A00), Color(0xFFFFD700))), RoundedCornerShape(24.dp))
+                     .border(2.dp, Brush.sweepGradient(listOf(Color(0xFFD4AF37), Color(0xFFCC4800), Color(0xFFD4AF37))), RoundedCornerShape(24.dp))
                      // Applying blur is tricky in standard modifier, we just use a border to simulate glow.
              )
         }
 
         com.aquiles.crosschapp.presentation.components.GlassCard(
-            modifier = Modifier.fillMaxWidth().then(if (isPremium) Modifier.background(Color.White.copy(alpha=0.15f), RoundedCornerShape(24.dp)) else Modifier),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    color = if (isPremium) Color(0xFFD4AF37).copy(alpha = 0.15f) else classColor.copy(alpha = 0.20f),
+                    shape = RoundedCornerShape(24.dp)
+                ),
             shape = RoundedCornerShape(24.dp)
         ) {
             Column {
@@ -751,7 +764,11 @@ fun WodPagerCard(
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(vertical = 14.dp)
                 ) {
-                    if (isSavingResult) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                    if (isSavingResult) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                    } else {
+                        Text(if (hasResult) "ACTUALIZAR RESULTADO" else "GUARDAR RESULTADO", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
             }
         }

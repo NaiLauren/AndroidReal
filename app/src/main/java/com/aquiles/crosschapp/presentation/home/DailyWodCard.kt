@@ -47,13 +47,22 @@ fun DailyWodCard(
     val fallbackImageUrl = "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=2070"
     val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
+    val classColor = remember(gymClass.hexColor) {
+        try {
+            Color(android.graphics.Color.parseColor(gymClass.hexColor))
+        } catch (e: Exception) {
+            Color(0xFFFC5200)
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .background(classColor.copy(alpha = 0.20f), RoundedCornerShape(24.dp))
             .clickable { isExpanded = !isExpanded }, // Expandible
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, ColorBorder),
-        colors = CardDefaults.cardColors(containerColor = ColorGlassSurface)
+        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.5f))
     ) {
         Column {
             // Header Image Section
