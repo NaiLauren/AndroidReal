@@ -405,11 +405,64 @@ fun WodsScreen(
                 }
                 }
 
-                // --- NUEVO: CARRUSEL DE DESAFÍOS GLOBALES (DEBAJO DEL WOD) ---
+                // --- PRÓXIMA CLASE (PEQUEÑA, COMPACTA) ---
+                when (val booking = nextBookingState) {
+                    is NextBookingState.Success -> {
+                        booking.nextClass?.let {
+                            com.aquiles.crosschapp.presentation.components.GlassCard(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                    NextBookingInnerColumn(gymClass = it, onClick = { onNavigateToClassDetail(it.id) })
+                                }
+                            }
+                        }
+                    }
+                    else -> Spacer(Modifier.height(0.dp))
+                }
+
+                // --- DESAFÍOS GLOBALES (TARJETA GRANDE - JERARQUÍA 1) ---
                 if (hasValidAccess && globalChallenges.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    SectionTitle("Desafíos Globales")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SectionTitle("🌎 Desafíos Globales")
                     Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Card explicativa
+                    com.aquiles.crosschapp.presentation.components.GlassCard(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    "COMPETENCIA INTER-GYMS",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFFFD700),
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    "Compite con otros gymnasios",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            
+                            Text(
+                                "Compara tu marca con otros gyms • Ve el ranking global",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ColorTextSecondary,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                    
+                    // Carrusel de desafíos
                     if (globalChallenges.isNotEmpty()) {
                         GlobalChallengePager(
                             challenges = globalChallenges, 
@@ -419,26 +472,55 @@ fun WodsScreen(
                     }
                 }
 
-                // --- PRÓXIMA CLASE ---
-                when (val booking = nextBookingState) {
-                    is NextBookingState.Success -> {
-                        booking.nextClass?.let {
-                            com.aquiles.crosschapp.presentation.components.GlassCard(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                                shape = RoundedCornerShape(24.dp)
-                            ) {
-                                Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    NextBookingInnerColumn(gymClass = it, onClick = { onNavigateToClassDetail(it.id) })
-                                }
-                            }
+                // --- BENCHMARKS (TARJETA GRANDE SEPARADA - JERARQUÍA 1) ---
+                Spacer(modifier = Modifier.height(20.dp))
+                SectionTitle("💪 Benchmarks del Profesor")
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                com.aquiles.crosschapp.presentation.components.GlassCard(
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onNavigateToBenchmarks),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                "EJERCICIOS PROGRAMADOS",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LocalPrimaryColor.current,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                "Benchmarks de tu gym",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        
+                        Text(
+                            "Carga tus resultados • Sube al Muro en la categoría Benchmarks • Compite con tu gym",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ColorTextSecondary,
+                            lineHeight = 18.sp
+                        )
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            Text(
+                                "VER BENCHMARKS →",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LocalPrimaryColor.current,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
-                    else -> Spacer(Modifier.height(0.dp))
                 }
-
-                // --- ACCESO A BENCHMARKS ---
-                SectionTitle("Benchmarks")
-                BenchmarkAccessCard(onClick = onNavigateToBenchmarks)
 
                 Spacer(modifier = Modifier.height(80.dp))
             }

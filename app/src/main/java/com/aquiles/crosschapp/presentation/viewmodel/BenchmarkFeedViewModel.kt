@@ -39,7 +39,8 @@ data class FeedUiItem(
     val type: FeedItemType, 
     val videoUrl: String? = null,
     val validationStatus: String? = null,
-    val gym_id: String = ""
+    val gym_id: String = "",
+    val gymLogoUrl: String? = null
 )
 
 

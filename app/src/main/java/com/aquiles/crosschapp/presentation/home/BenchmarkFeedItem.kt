@@ -109,6 +109,28 @@ fun BenchmarkFeedItem(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            // ESCUDO DEL GYM (SOLO EN DESAFÍOS GLOBALES)
+                            if (item.type == FeedItemType.GLOBAL && !item.gymLogoUrl.isNullOrBlank()) {
+                                coil.compose.SubcomposeAsyncImage(
+                                    model = item.gymLogoUrl,
+                                    contentDescription = "Gym Logo",
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .border(1.5.dp, brandColor, CircleShape),
+                                    contentScale = ContentScale.Crop,
+                                    loading = { 
+                                        Box(
+                                            modifier = Modifier.fillMaxSize().background(Color.Gray),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.dp, color = Color.White)
+                                        }
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            
                             Text(
                                 text = item.userName,
                                 style = MaterialTheme.typography.titleMedium,
