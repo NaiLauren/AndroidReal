@@ -2046,7 +2046,7 @@ class AdminViewModel : ViewModel() {
     fun validateChallengeResult(result: ChallengeResult, approved: Boolean) {
         viewModelScope.launch {
             try {
-                val status = if (approved) "validated" else "rejected"
+                val status = if (approved) "approved" else "rejected"
                 firestore.collection("challenge_results").document(result.id)
                     .update("validationStatus", status)
                     .await()
@@ -2143,7 +2143,7 @@ class AdminViewModel : ViewModel() {
             try {
                 val results = firestore.collection("challenge_results")
                     .whereEqualTo("challengeId", challengeId)
-                    .whereEqualTo("validationStatus", "validated")
+                    .whereEqualTo("validationStatus", "approved")
                     .get().await()
                     .toObjects(ChallengeResult::class.java)
                 
@@ -2154,16 +2154,15 @@ class AdminViewModel : ViewModel() {
         }
     }
 
-    fun loadGlobalChallengeRanking() {
+    fun loadGlobalChallengeRanking(challengeId: String) {
         viewModelScope.launch {
             try {
                 _isLoadingRanking.value = true
-                val gymId = currentUserGymId ?: return@launch
                 
-                // Obtener todos los resultados validados de este gym
+                // Obtener todos los resultados aprobados de este desafío específico (Globalmente)
                 val results = firestore.collection("challenge_results")
-                    .whereEqualTo("gym_id", gymId)
-                    .whereEqualTo("validationStatus", "validated")
+                    .whereEqualTo("challengeId", challengeId)
+                    .whereEqualTo("validationStatus", "approved")
                     .orderBy("numericScore", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(100)
                     .get().await()

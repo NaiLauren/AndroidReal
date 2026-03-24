@@ -414,9 +414,7 @@ fun WodsScreen(
                                     .border(androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha=0.15f)), RoundedCornerShape(16.dp)),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
-                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                    NextBookingInnerColumn(gymClass = it, onClick = { onNavigateToClassDetail(it.id) })
-                                }
+                            NextBookingInnerColumn(gymClass = it, onClick = { onNavigateToClassDetail(it.id) })
                             }
                         }
                     }
@@ -910,24 +908,38 @@ fun NextBookingInnerColumn(gymClass: GymClass, onClick: () -> Unit) {
     val dateStr = gymClass.dateTime?.let { dayFormatter.format(it) }?.uppercase() ?: ""
     val timeStr = gymClass.dateTime?.let { timeFormatter.format(it) } ?: ""
 
-    Column(
-        modifier = Modifier.fillMaxSize().clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // Icono de reloj/tiempo
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .background(LocalPrimaryColor.current.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Schedule, null, tint = LocalPrimaryColor.current, modifier = Modifier.size(20.dp))
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "PRÓXIMA CLASE",
+                text = "PRÓXIMA CLASE • $dateStr",
                 style = MaterialTheme.typography.labelSmall,
                 color = LocalPrimaryColor.current,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp
+                letterSpacing = 0.5.sp
             )
             Text(
                 text = gymClass.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.ExtraBold,
                 color = Color.White,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             if (gymClass.coachName.isNotBlank()) {
@@ -938,22 +950,19 @@ fun NextBookingInnerColumn(gymClass: GymClass, onClick: () -> Unit) {
                 )
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+
+        // Hora compacta
+        Surface(
+            color = LocalPrimaryColor.current,
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Text(text = dateStr, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
-            Row(
-                modifier = Modifier
-                    .background(LocalPrimaryColor.current, RoundedCornerShape(20.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.AccessTime, null, tint = Color.White, modifier = Modifier.size(11.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(timeStr, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
-            }
+            Text(
+                text = timeStr,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            )
         }
     }
 }
@@ -1028,10 +1037,8 @@ fun GlobalChallengeCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp)
-            .clickable(onClick = onClick)
-            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
-            .border(androidx.compose.foundation.BorderStroke(1.dp, ColorBorder), RoundedCornerShape(16.dp)),
+            .height(160.dp)
+            .clickable(onClick = onClick),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Fondo decorativo sutil

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.aquiles.crosschapp.data.model.BenchmarkResult
 import com.aquiles.crosschapp.data.model.ChallengeResult
 import com.aquiles.crosschapp.data.model.Competition
+import com.aquiles.crosschapp.data.model.GlobalChallenge
 import com.aquiles.crosschapp.data.model.WodResult
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -94,6 +95,10 @@ class BenchmarkFeedViewModel : ViewModel() {
     private val _activeCompetitions = MutableStateFlow<List<Competition>>(emptyList())
     val activeCompetitions = _activeCompetitions.asStateFlow()
 
+    // [NEW] Desafíos Globales (Objetos completos para la lista)
+    private val _allGlobalChallenges = MutableStateFlow<List<GlobalChallenge>>(emptyList())
+    val allGlobalChallenges = _allGlobalChallenges.asStateFlow()
+
     fun setTab(tab: FeedTab) {
         _currentTab.value = tab
         applyFilters()
@@ -109,6 +114,7 @@ class BenchmarkFeedViewModel : ViewModel() {
         }
         if (tab == FeedTab.CHALLENGES) {
             loadGlobalChallengesFeed()
+            loadAllGlobalChallenges()
         }
     }
 
@@ -177,7 +183,7 @@ class BenchmarkFeedViewModel : ViewModel() {
             date = raw.date,
             score = raw.score,
             isRx = raw.isRx,
-            isVerified = raw.validationStatus == "validated",
+            isVerified = raw.validationStatus == "approved",
             reactions = raw.reactions,
             type = FeedItemType.GLOBAL,
             videoUrl = raw.videoUrl,
@@ -337,6 +343,39 @@ class BenchmarkFeedViewModel : ViewModel() {
                 _activeCompetitions.value = snap.toObjects(Competition::class.java)
             } catch (e: Exception) {
                 Log.e("BenchmarkFeedVM", "Error loading competitions", e)
+            }
+        }
+    }
+
+    private fun loadAllGlobalChallenges() {
+        val currentUser = UserSession.currentUser.value ?: return
+        val gymId = currentUser.gym_id
+        
+        viewModelScope.launch {
+            try {
+                // 1. Cargar desafíos globales
+                val globalSnapshot = firestore.collection("challenges")
+                    .whereEqualTo("isGlobal", true)
+                    .get().await()
+                
+                // 2. Cargar desafíos locales del gimnasio
+                val localSnapshot = firestore.collection("challenges")
+                    .whereEqualTo("gym_id", gymId)
+                    .get().await()
+
+                val challenges = (globalSnapshot.toObjects(GlobalChallenge::class.java) + 
+                                  localSnapshot.toObjects(GlobalChallenge::class.java))
+                    .distinctBy { it.id }
+                
+                _allGlobalChallenges.value = challenges.filter { bench ->
+                    if (bench.isGlobal) {
+                        bench.sponsorIds.isNullOrEmpty() || bench.sponsorIds!!.contains(gymId)
+                    } else {
+                        true 
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("BenchmarkFeedVM", "Error loading challenges", e)
             }
         }
     }

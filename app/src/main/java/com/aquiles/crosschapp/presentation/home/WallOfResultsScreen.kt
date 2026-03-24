@@ -35,6 +35,8 @@ import com.aquiles.crosschapp.presentation.viewmodel.UserSession
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.FeedUiItem
 import com.aquiles.crosschapp.presentation.viewmodel.FeedItemType
+import com.aquiles.crosschapp.data.model.Competition
+import com.aquiles.crosschapp.data.model.GlobalChallenge
 import com.aquiles.crosschapp.ui.theme.LocalPrimaryColor
 import kotlin.math.roundToInt
 
@@ -59,6 +61,7 @@ fun WallOfResultsScreen(
     val selectedGenderFilter by benchmarkFeedViewModel.selectedGenderFilter.collectAsState()
     val sortCriteria by benchmarkFeedViewModel.sortCriteria.collectAsState()
     val activeCompetitions by benchmarkFeedViewModel.activeCompetitions.collectAsState()
+    val allGlobalChallenges by benchmarkFeedViewModel.allGlobalChallenges.collectAsState()
     val currentUser = UserSession.currentUser.collectAsState().value
     val primaryColor = LocalPrimaryColor.current ?: Color(0xFFFC5200 // Color por defecto por si acaso
     )
@@ -325,11 +328,88 @@ fun WallOfResultsScreen(
                             )
                         }
                         items(activeComps) { competition ->
+                            GlassCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp)
+                                    .clickable { competition.id?.let { navController.navigate("student_competition/$it") } },
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(competition.type.uppercase(), style = MaterialTheme.typography.labelSmall, color = primaryColor, fontWeight = FontWeight.Black)
+                                        competition.status?.let { status ->
+                                            Box(modifier = Modifier.background(primaryColor.copy(0.15f), RoundedCornerShape(20.dp)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                                Text(status.uppercase(), color = primaryColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                    Text(competition.title, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                                    if (competition.description.isNotBlank()) {
+                                        Text(competition.description, color = Color.White.copy(0.7f), fontSize = 14.sp, maxLines = 3)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // SECCIÓN: FINALIZADAS
+                    if (finishedComps.isNotEmpty()) {
+                        item {
+                            Text("📜 HISTORIAL", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp))
+                        }
+                        items(finishedComps) { competition ->
+                            GlassCard(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).clickable { competition.id?.let { navController.navigate("student_competition/$it") } },
+                                shape = RoundedCornerShape(16.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(competition.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text("${competition.type} • Finalizada", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                                    Text("🏆 Ver resultados finales", color = primaryColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (currentTab == FeedTab.CHALLENGES) {
+                // ======================================================
+                // SECCIÓN: DESAFÍOS GLOBALES (LISTA INTERACTIVA)
+                // ======================================================
+                if (allGlobalChallenges.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 60.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text("🌎", fontSize = 56.sp)
+                            Text(
+                                "Sin desafíos actuales",
+                                color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp
+                            )
+                            Text(
+                                "Próximamente habrán nuevos desafíos globales.",
+                                color = Color.White.copy(0.5f), fontSize = 14.sp
+                            )
+                        }
+                    }
+                } else {
+                    items(allGlobalChallenges) { challenge ->
                         GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
-                                .clickable { competition.id?.let { navController.navigate("student_competition/$it") } },
+                                .clickable { navController.navigate("challenge_ranking/${challenge.id}") },
                             shape = RoundedCornerShape(20.dp)
                         ) {
                             Column(
@@ -342,95 +422,46 @@ fun WallOfResultsScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        competition.type.uppercase(),
+                                        if (challenge.isGlobal) "🌎 GLOBAL" else "🏠 LOCAL",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = primaryColor,
                                         fontWeight = FontWeight.Black
                                     )
-                                    competition.status?.let { status ->
-                                        Box(
-                                            modifier = Modifier
-                                                .background(primaryColor.copy(0.15f), RoundedCornerShape(20.dp))
-                                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                status.uppercase(),
-                                                color = primaryColor,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
+                                    Box(
+                                        modifier = Modifier
+                                            .background(primaryColor.copy(0.15f), RoundedCornerShape(20.dp))
+                                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            "VER RANKING",
+                                            color = primaryColor,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
                                 Text(
-                                    competition.title,
+                                    challenge.name,
                                     color = Color.White,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 20.sp
                                 )
-                                if (competition.description.isNotBlank()) {
+                                if (challenge.description.isNotBlank()) {
                                     Text(
-                                        competition.description,
+                                        challenge.description,
                                         color = Color.White.copy(0.7f),
                                         fontSize = 14.sp,
-                                        maxLines = 3
+                                        maxLines = 2
                                     )
                                 }
-                                competition.prizeDescription?.let { prize ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text("🏆", fontSize = 14.sp)
-                                        Text(
-                                            prize,
-                                            color = primaryColor,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    }
-                    
-                    // SECCIÓN: FINALIZADAS
-                    if (finishedComps.isNotEmpty()) {
-                        item {
-                            Text(
-                                "📜 HISTORIAL",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-                            )
-                        }
-                        items(finishedComps) { competition ->
-                            GlassCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp)
-                                    .clickable { competition.id?.let { navController.navigate("student_competition/$it") } },
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
+                                    Text("🏆", fontSize = 14.sp)
                                     Text(
-                                        competition.title,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp
-                                    )
-                                    Text(
-                                        "${competition.type} • Finalizada",
-                                        color = Color.White.copy(alpha = 0.6f),
-                                        fontSize = 12.sp
-                                    )
-                                    Text(
-                                        "🏆 Ver resultados finales",
+                                        "Compite con toda la comunidad",
                                         color = primaryColor,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -441,6 +472,7 @@ fun WallOfResultsScreen(
                     }
                 }
             } else {
+                // SECCIÓN: FEED NORMAL (TODAY, RECORDS)
                 when (feedState) {
                     is FeedState.Loading -> {
                         item {

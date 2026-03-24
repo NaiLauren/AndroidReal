@@ -480,10 +480,12 @@ fun NavGraphBuilder.mainGraph(
         composable(
             route = "challenge_ranking/{challengeId}",
             arguments = listOf(navArgument("challengeId") { type = NavType.StringType })
-        ) {
+        ) { backStackEntry ->
+            val challengeId = backStackEntry.arguments?.getString("challengeId") ?: ""
             GlobalChallengeRankingScreen(
                 innerPadding = innerPadding,
                 navController = navController,
+                challengeId = challengeId,
                 adminViewModel = viewModel()
             )
         }

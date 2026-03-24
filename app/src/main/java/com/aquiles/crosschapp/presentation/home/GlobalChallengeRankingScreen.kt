@@ -28,14 +28,15 @@ import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
 fun GlobalChallengeRankingScreen(
     innerPadding: PaddingValues,
     navController: NavController,
+    challengeId: String,
     adminViewModel: AdminViewModel = viewModel()
 ) {
     val globalRanking by adminViewModel.globalChallengeRanking.collectAsState()
     val isLoading by adminViewModel.isLoadingRanking.collectAsState()
     var selectedFilter by remember { mutableStateOf("all") } // "all", "week", "month"
 
-    LaunchedEffect(Unit) {
-        adminViewModel.loadGlobalChallengeRanking()
+    LaunchedEffect(challengeId) {
+        adminViewModel.loadGlobalChallengeRanking(challengeId)
     }
 
     val filteredResults = remember(globalRanking, selectedFilter) {

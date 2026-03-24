@@ -404,7 +404,7 @@ private data class DisplayRecord(
     val notes: String, val description: String, val uniqueId: String
 )
 
-enum class PerformanceTab { CLASSES, BENCHMARKS, CHALLENGES }
+enum class PerformanceTab { CLASSES, BENCHMARKS }
 
 @Composable
 fun UnifiedPerformanceRecordsCard(
@@ -436,7 +436,6 @@ fun UnifiedPerformanceRecordsCard(
                     val label = when(tab) {
                         PerformanceTab.CLASSES -> "MIS CLASES"
                         PerformanceTab.BENCHMARKS -> "MIS BENCHMARKS"
-                        PerformanceTab.CHALLENGES -> "MIS DESAFÍOS"
                     }
                     
                     Box(
@@ -475,15 +474,6 @@ fun UnifiedPerformanceRecordsCard(
                         RecordColumnInsideGlass(
                             state = benchmarkRecordsState,
                             label = "Mis Récords",
-                            viewModel = viewModel,
-                            isBenchmark = true,
-                            showHeaderLabel = false
-                        )
-                    }
-                    PerformanceTab.CHALLENGES -> {
-                        RecordColumnInsideGlass(
-                            state = globalBenchmarkRecordsState,
-                            label = "Mis Desafíos Globales",
                             viewModel = viewModel,
                             isBenchmark = true,
                             showHeaderLabel = false

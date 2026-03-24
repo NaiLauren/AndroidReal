@@ -19,7 +19,7 @@ data class ChallengeResult(
     val notes: String = "",
     @ServerTimestamp val date: Date? = null,
     val gym_id: String = "",
-    val validationStatus: String = "pending", // "pending", "validated", "rejected"
+    val validationStatus: String = "pending", // "pending", "approved", "rejected"
     val videoUrl: String? = null,
     val facilityName: String = "",
     val reactions: Map<String, String> = emptyMap()
