@@ -328,7 +328,8 @@ fun WallOfResultsScreen(
                         GlassCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
+                                .padding(horizontal = 16.dp)
+                                .clickable { competition.id?.let { navController.navigate("student_competition/$it") } },
                             shape = RoundedCornerShape(20.dp)
                         ) {
                             Column(
@@ -409,7 +410,8 @@ fun WallOfResultsScreen(
                             GlassCard(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 16.dp)
+                                    .clickable { competition.id?.let { navController.navigate("student_competition/$it") } },
                                 shape = RoundedCornerShape(16.dp)
                             ) {
                                 Column(

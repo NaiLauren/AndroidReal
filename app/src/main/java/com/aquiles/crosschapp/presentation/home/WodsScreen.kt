@@ -410,10 +410,11 @@ fun WodsScreen(
                     is NextBookingState.Success -> {
                         booking.nextClass?.let {
                             com.aquiles.crosschapp.presentation.components.GlassCard(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                                shape = RoundedCornerShape(20.dp)
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                                    .border(androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha=0.15f)), RoundedCornerShape(16.dp)),
+                                shape = RoundedCornerShape(16.dp)
                             ) {
-                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                                     NextBookingInnerColumn(gymClass = it, onClick = { onNavigateToClassDetail(it.id) })
                                 }
                             }
@@ -428,15 +429,17 @@ fun WodsScreen(
                     SectionTitle("🌎 Desafíos Globales")
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    // Card explicativa
+                    // Tarjeta Única Integrada
                     com.aquiles.crosschapp.presentation.components.GlassCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                            .border(androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha=0.3f)), RoundedCornerShape(24.dp)),
                         shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            modifier = Modifier.padding(top = 20.dp, bottom = 12.dp, start = 20.dp, end = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
+                            // Cabecera explicativa
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
                                     "COMPETENCIA INTER-GYMS",
@@ -451,24 +454,21 @@ fun WodsScreen(
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold
                                 )
+                                Text(
+                                    "Compara tu marca con otros gyms • Ve el ranking global",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ColorTextSecondary,
+                                    lineHeight = 18.sp
+                                )
                             }
                             
-                            Text(
-                                "Compara tu marca con otros gyms • Ve el ranking global",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = ColorTextSecondary,
-                                lineHeight = 18.sp
+                            // Carrusel de desafíos integrado sin fondo adicional
+                            GlobalChallengePager(
+                                challenges = globalChallenges, 
+                                onNavigateToChallengeRanking = onNavigateToChallengeRanking,
+                                onLogClick = { selectedChallengeToLog = it }
                             )
                         }
-                    }
-                    
-                    // Carrusel de desafíos
-                    if (globalChallenges.isNotEmpty()) {
-                        GlobalChallengePager(
-                            challenges = globalChallenges, 
-                            onNavigateToChallengeRanking = onNavigateToChallengeRanking,
-                            onLogClick = { selectedChallengeToLog = it }
-                        )
                     }
                 }
 
@@ -911,7 +911,7 @@ fun NextBookingInnerColumn(gymClass: GymClass, onClick: () -> Unit) {
     val timeStr = gymClass.dateTime?.let { timeFormatter.format(it) } ?: ""
 
     Column(
-        modifier = Modifier.fillMaxSize().clickable(onClick = onClick).padding(16.dp),
+        modifier = Modifier.fillMaxSize().clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -932,7 +932,7 @@ fun NextBookingInnerColumn(gymClass: GymClass, onClick: () -> Unit) {
             )
             if (gymClass.coachName.isNotBlank()) {
                 Text(
-                    text = gymClass.coachName,
+                    text = "Coach: ${gymClass.coachName}",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.5f)
                 )
@@ -967,10 +967,10 @@ fun GlobalChallengePager(
 ) {
     val pagerState = rememberPagerState(pageCount = { challenges.size })
     
-    Column(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 0.dp),
             pageSpacing = 12.dp
         ) { page ->
@@ -1024,12 +1024,14 @@ fun GlobalChallengeCard(
         }
     }
 
-    com.aquiles.crosschapp.presentation.components.GlassCard(
+    // Reemplazado GlassCard por Box para integrarlo sin doble fondo
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(180.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(24.dp)
+            .clickable(onClick = onClick)
+            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+            .border(androidx.compose.foundation.BorderStroke(1.dp, ColorBorder), RoundedCornerShape(16.dp)),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             // Fondo decorativo sutil

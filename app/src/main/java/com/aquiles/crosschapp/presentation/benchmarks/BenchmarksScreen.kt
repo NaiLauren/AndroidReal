@@ -54,7 +54,7 @@ fun BenchmarksScreen(
     val benchmarkWodsState by adminViewModel.benchmarksState.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedWod by remember { mutableStateOf<BenchmarkWod?>(null) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Benchmarks, 1: Desafíos
+    // Remover tab index, ya que sólo habrá una lista de benchmarks
 
     // Effects
     LaunchedEffect(Unit) {
@@ -103,30 +103,7 @@ fun BenchmarksScreen(
                     )
                 )
 
-                // Tabs: BENCHMARKS vs DESAFÍOS
-                SecondaryTabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color.Transparent,
-                    contentColor = ColorPrimaryAction,
-                    indicator = {
-                        TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(selectedTab),
-                            color = ColorPrimaryAction
-                        )
-                    },
-                    divider = { HorizontalDivider(color = ColorBorder) }
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text("BENCHMARKS", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text("DESAFÍOS", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) }
-                    )
-                }
+                // Text("Benchmarks", color = ColorPrimaryAction, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
 
                 // List
                 if (benchmarkWodsState is BenchmarkWodsState.Loading) {
@@ -138,7 +115,7 @@ fun BenchmarksScreen(
                     val filteredWods = allWods.filter {
                         val matchesSearch = it.name.contains(searchQuery, ignoreCase = true)
                         val isDes = it.isDesafio == true
-                        val matchesTab = if (selectedTab == 1) isDes else !isDes
+                        val matchesTab = !isDes // Filtramos para que solo muestre benchmarks, no desafíos
                         matchesSearch && matchesTab
                     }
 
