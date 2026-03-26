@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -66,7 +67,7 @@ fun BenchmarkFeedItem(
         FeedItemType.CLASS -> ContentTypeInfo(Icons.Default.SportsMma, brandColor, "CLASE") // CORREGIDO a CLASS
         FeedItemType.COMPETITION -> ContentTypeInfo(Icons.Default.Flag, brandColor, "COMPETENCIA")
         FeedItemType.GLOBAL -> ContentTypeInfo(Icons.Default.Public, ColorGlobalChallenge, "GLOBAL") // CORREGIDO a GLOBAL
-        else -> ContentTypeInfo(Icons.Default.HelpOutline, brandColor, "ACTIVIDAD")
+        else -> ContentTypeInfo(Icons.AutoMirrored.Filled.HelpOutline, brandColor, "ACTIVIDAD")
     }
 
     val borderBrush = if (item.type == FeedItemType.GLOBAL) { // CORREGIDO a GLOBAL

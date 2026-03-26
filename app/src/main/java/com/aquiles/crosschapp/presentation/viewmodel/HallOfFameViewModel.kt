@@ -222,6 +222,7 @@ class HallOfFameViewModel : ViewModel() {
                     val uid = doc.getString("userId") ?: return@mapNotNull null
                     val scoreStr = doc.getString("score") ?: return@mapNotNull null
                     val date = doc.getTimestamp("date")?.toDate() ?: return@mapNotNull null
+                    @Suppress("UNCHECKED_CAST")
                     val reactionsMap = doc.get("reactions") as? Map<String, String> ?: emptyMap()
 
                     GlobalRecord(
@@ -247,6 +248,7 @@ class HallOfFameViewModel : ViewModel() {
                     val uid = doc.getString("userId") ?: return@mapNotNull null
                     val scoreStr = doc.getString("score") ?: return@mapNotNull null
                     val date = doc.getTimestamp("date")?.toDate() ?: return@mapNotNull null
+                    @Suppress("UNCHECKED_CAST")
                     val reactionsMap = doc.get("reactions") as? Map<String, String> ?: emptyMap()
 
                     GlobalRecord(

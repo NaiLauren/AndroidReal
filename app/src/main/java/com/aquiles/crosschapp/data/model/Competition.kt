@@ -81,6 +81,8 @@ data class Competition(
     // y Kotlin usa el nombre isIntergym internamente sin chocar en el nivel JVM.
     @get:PropertyName("intergym") @set:PropertyName("intergym") var isIntergym: Boolean? = null,
 
+    val registrationCredits: Int = 0, // N-NUEVO: Costo en créditos para inscribirse
+
     // Estrategia de puntaje y validación (iOS escribe "scoreStrategy", "validationRule", "scoreStrategyEnum")
     val scoreStrategy: String? = null,
     val validationRule: String? = null,

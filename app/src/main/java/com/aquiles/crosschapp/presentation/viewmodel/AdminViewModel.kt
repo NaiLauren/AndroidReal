@@ -1311,8 +1311,13 @@ class AdminViewModel : ViewModel() {
                 
                 val dollarRate = dollarDeferred.await()
                 
-                val attendanceSnap = attendanceDeferred.await()
-                val attendanceUserIds = attendanceSnap.documents.mapNotNull { it.getString("userId") }
+                val attendanceSnap = try {
+                    attendanceDeferred.await()
+                } catch (e: Exception) {
+                    Log.e("AdminViewModel", "Error fetching attendance (índice faltante?): ${e.message}")
+                    null
+                }
+                val attendanceUserIds = attendanceSnap?.documents?.mapNotNull { it.getString("userId") } ?: emptyList()
 
                 val paymentStatusSnap = paymentStatusDeferred.await()
                 var paymentStatus = "PENDING"
@@ -1339,13 +1344,20 @@ class AdminViewModel : ViewModel() {
                     null
                 }
 
+                // Cargar Billing Plan
+                val billingDoc = firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("payment_info")
+                    .get().await()
+                val billingPlan = billingDoc.getString("billingPlan") ?: "STANDARD"
+
                 _reportsState.value = ReportsState.Success(
                     totalRevenue = requests.sumOf { it.amountPaid },
                     monthlyActiveUsers = activeUsersCount,
                     monthlyTransactions = requests,
                     dollarRate = dollarRate,
                     paymentStatus = paymentStatus,
-                    paymentInfo = paymentInfo
+                    paymentInfo = paymentInfo,
+                    billingPlan = billingPlan
                 )
             } catch (e: Exception) {
                 _reportsState.value = ReportsState.Error(e.localizedMessage ?: "Error.")
@@ -1435,7 +1447,8 @@ class AdminViewModel : ViewModel() {
                     .get().await()
 
                 val isSurcharge = doc.getBoolean("isSurchargeActive") ?: false
-                _billingRulesState.value = BillingRulesState.Success(BillingRules(isSurchargeActive = isSurcharge))
+                val plan = doc.getString("billingPlan") ?: "STANDARD"
+                _billingRulesState.value = BillingRulesState.Success(BillingRules(isSurchargeActive = isSurcharge, billingPlan = plan))
             } catch (e: Exception) {
                 _billingRulesState.value = BillingRulesState.Error(e.message ?: "Error")
             }
@@ -1456,6 +1469,26 @@ class AdminViewModel : ViewModel() {
                 _billingRulesState.value = BillingRulesState.Success(BillingRules(isSurchargeActive = active))
             } catch (e: Exception) {
                 _billingRulesState.value = BillingRulesState.Error(e.message ?: "Error")
+            }
+        }
+    }
+
+    fun setBillingPlan(plan: String) {
+        viewModelScope.launch {
+            val gymId = currentUserGymId ?: return@launch
+            try {
+                val data = mapOf("billingPlan" to plan)
+                firestore.collection("gyms").document(gymId)
+                    .collection("settings").document("payment_info")
+                    .set(data, SetOptions.merge())
+                    .await()
+                
+                // Recargar reglas y reportes para reflejar el cambio
+                loadBillingRules()
+                val calendar = Calendar.getInstance()
+                loadReportsForMonth(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }

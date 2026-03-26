@@ -30,12 +30,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
+import coil.compose.AsyncImage
 import com.aquiles.crosschapp.data.model.PersonalMessage
 import com.aquiles.crosschapp.data.model.*
 import com.aquiles.crosschapp.presentation.viewmodel.*
@@ -222,7 +224,7 @@ private fun HomeScreenContent(
             start = 16.dp,
             end = 16.dp
         ),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. GREETING (iOS Style)
         item {
@@ -595,16 +597,29 @@ fun UserClassItem(gymClass: GymClass) {
     } catch (e: Exception) {
         LocalPrimaryColor.current
     }
-    val compBrush = Brush.verticalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))
+    val compColor = Color(0xFFFFD700)
+    val compBrush = Brush.verticalGradient(listOf(compColor, Color(0xFFFFA500)))
 
     GlassCard(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isCompetition) Modifier.border(2.dp, compColor.copy(alpha=0.7f), RoundedCornerShape(24.dp)) else Modifier),
+        shape = RoundedCornerShape(24.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Left Time
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (isCompetition && !gymClass.imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = gymClass.imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize().alpha(0.25f)
+                )
+            }
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left Time
             Text(
                 text = timeStr,
                 style = MaterialTheme.typography.titleMedium,
@@ -648,5 +663,6 @@ fun UserClassItem(gymClass: GymClass) {
             // Status Icon (e.g. Registered Check)
             Icon(Icons.Default.CheckCircle, null, tint = Color.Green, modifier = Modifier.size(24.dp))
         }
+        } // Close Box
     }
 }

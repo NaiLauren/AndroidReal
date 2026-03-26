@@ -334,7 +334,7 @@ private fun GlobalBenchmarkCard(
 
             // Dates (if challenge)
             if (benchmark.isDesafio == true && benchmark.startDate != null && benchmark.endDate != null) {
-                Divider(
+                HorizontalDivider(
                     modifier = Modifier.padding(vertical = 12.dp),
                     color = Color.Gray.copy(alpha = 0.3f)
                 )

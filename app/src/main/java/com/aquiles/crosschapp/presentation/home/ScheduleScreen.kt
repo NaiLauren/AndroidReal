@@ -41,6 +41,8 @@ import java.util.*
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.drawBehind
 import com.aquiles.crosschapp.presentation.components.GlassCardSurface
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 
 // --- HELPER EXTENSION ---
 fun String.toColorSafe(): Color {
@@ -444,7 +446,16 @@ fun ClassItemCardGlass(
             .background(if (isCompetition) compBrush else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (isCompetition && !gymClass.imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = gymClass.imageUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize().alpha(0.25f)
+                )
+            }
+            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             // Sidebar Color
             Box(
                 modifier = Modifier
@@ -574,6 +585,21 @@ fun ClassItemCardGlass(
                             )
                         }
                     }
+
+                    // Indicador de créditos (solo si cuesta más de 1)
+                    if (gymClass.creditCost > 1) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ConfirmationNumber, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${gymClass.creditCost} créditos",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFD700),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
 
                 // Status Icons
@@ -589,6 +615,7 @@ fun ClassItemCardGlass(
                 }
             }
         }
+        } // Close Box
     }
 }
 

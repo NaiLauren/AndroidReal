@@ -2,6 +2,7 @@ package com.aquiles.crosschapp.presentation.home
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,7 +38,8 @@ fun DailyWodCard(
     imageUrl: String?,
     existingResult: WodResult?,
     onSaveResult: (result: String, isRx: Boolean, notes: String) -> Unit,
-    isSavingResult: Boolean
+    isSavingResult: Boolean,
+    isPremium: Boolean = false
 ) {
     var userResult by remember(existingResult) { mutableStateOf(existingResult?.score ?: "") }
     var userNotes by remember(existingResult) { mutableStateOf(existingResult?.notes ?: "") }
@@ -55,20 +57,24 @@ fun DailyWodCard(
         }
     }
 
+    val isCompetition = gymClass.classType == "COMPETITION" || isPremium
+    val finalImageUrl = if (isCompetition && !gymClass.imageUrl.isNullOrBlank()) gymClass.imageUrl else imageUrl
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .background(classColor.copy(alpha = 0.20f), RoundedCornerShape(24.dp))
+            .background(if (isCompetition) Color(0xFFFFD700).copy(alpha = 0.15f) else classColor.copy(alpha = 0.20f), RoundedCornerShape(24.dp))
+            .then(if (isCompetition) Modifier.border(2.dp, Color(0xFFFFD700).copy(alpha = 0.5f), RoundedCornerShape(24.dp)) else Modifier)
             .clickable { isExpanded = !isExpanded }, // Expandible
         shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, ColorBorder),
+        border = if (isCompetition) BorderStroke(2.dp, Color(0xFFFFD700).copy(alpha = 0.3f)) else BorderStroke(1.dp, ColorBorder),
         colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.5f))
     ) {
         Column {
             // Header Image Section
             Box(modifier = Modifier.height(200.dp)) {
                 SubcomposeAsyncImage(
-                    model = if (!imageUrl.isNullOrBlank()) imageUrl else fallbackImageUrl,
+                    model = if (!finalImageUrl.isNullOrBlank()) finalImageUrl else fallbackImageUrl,
                     contentDescription = "WOD Image",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
@@ -97,7 +103,13 @@ fun DailyWodCard(
 
         // Title
         Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
-            Text(text = "TU CLASE DE HOY", style = MaterialTheme.typography.labelSmall, color = LocalPrimaryColor.current, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text(
+                text = if (isCompetition) "COMPETENCIA ESPECIAL" else "TU CLASE DE HOY", 
+                style = MaterialTheme.typography.labelSmall, 
+                color = if (isCompetition) Color(0xFFFFD700) else LocalPrimaryColor.current, 
+                fontWeight = FontWeight.Bold, 
+                letterSpacing = 1.sp
+            )
             Text(text = gymClass.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = ColorTextPrimary)
         }
 

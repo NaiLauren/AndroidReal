@@ -449,7 +449,7 @@ private fun PodiumCard(podium: CompetitionPodium) {
                 }
             }
 
-            Divider(color = Color.White.copy(alpha = 0.08f))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
 
             // Podium visual
             Row(

@@ -162,7 +162,7 @@ fun SubmitChallengeResultScreen(
                 )
             )
 
-            Divider(color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
             // Video Upload Section
             Text(

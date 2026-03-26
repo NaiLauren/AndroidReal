@@ -306,7 +306,7 @@ fun ChallengeEditDialog(
                         label = { Text("Tipo de Resultado", color = ColorTextSecondary) },
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = scoreTypeExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable, true).fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = ColorPrimaryAction,
                             unfocusedBorderColor = ColorBorder,

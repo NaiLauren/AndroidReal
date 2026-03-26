@@ -346,17 +346,12 @@ fun ProCompetitionCard(
                 }
 
                 // Botón Expandir
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.horizontalGradient(listOf(Color(0xFFFC5200).copy(0.9f), Color(0xFFFF8C42).copy(0.9f)))
-                        )
-                        .clickable { showSheet = true }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                Button(
+                    onClick = { showSheet = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = LocalPrimaryColor.current),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
                 ) {
                     Icon(Icons.Default.Leaderboard, null, tint = Color.White, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))

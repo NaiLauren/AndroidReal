@@ -27,7 +27,8 @@ data class CreditPack(
 
 data class BillingRules(
     @get:PropertyName("surchargeActive") @set:PropertyName("surchargeActive")
-    var isSurchargeActive: Boolean = false
+    var isSurchargeActive: Boolean = false,
+    val billingPlan: String = "STANDARD" // "STANDARD" o "PARTNER"
 )
 
 data class Attendee(val userId: String, val fullName: String, val profileImageUrl: String)
@@ -143,7 +144,8 @@ sealed class ReportsState {
         val monthlyTransactions: List<CreditRequest>,
         val dollarRate: Double? = null,
         val paymentStatus: String = "PENDING", // PENDING, PENDING_REVIEW, PAID, REJECTED
-        val paymentInfo: AppPaymentInfo? = null
+        val paymentInfo: AppPaymentInfo? = null,
+        val billingPlan: String = "STANDARD"
     ) : ReportsState()
     data class Error(val message: String) : ReportsState()
     object Idle : ReportsState()

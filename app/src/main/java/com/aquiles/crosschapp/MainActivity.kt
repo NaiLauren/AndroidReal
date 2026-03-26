@@ -627,7 +627,7 @@ fun NavGraphBuilder.mainGraph(
         }
         
         composable("owner_create_competition") {
-            OwnerCreateCompetitionScreen(navController = navController)
+            AdminCompetitionManagerScreen(navController = navController)
         }
         // ------------------------------
         

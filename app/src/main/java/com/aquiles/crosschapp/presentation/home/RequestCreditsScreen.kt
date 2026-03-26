@@ -213,7 +213,7 @@ fun RequestCreditsScreen(
                                 Icon(Icons.Default.CloudQueue, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
                                 Spacer(Modifier.height(16.dp))
                                 Text("No pudimos cargar los packs", color = ColorTextSecondary)
-                                TextButton(onClick = { /* Retry logic if available */ }) {
+                                TextButton(onClick = { creditsViewModel.loadAvailablePacks() }) {
                                     Text("Reintentar", color = LocalPrimaryColor.current)
                                 }
                             }

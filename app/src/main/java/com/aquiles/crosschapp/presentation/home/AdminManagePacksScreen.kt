@@ -185,8 +185,10 @@ fun AdminManagePacksScreen(
     }
 
     if (showEditDialog) {
+        val currentPlan = (billingRulesState as? BillingRulesState.Success)?.rules?.billingPlan ?: "STANDARD"
         GlassEditPackDialog(
             pack = selectedPack,
+            billingPlan = currentPlan,
             onDismiss = { showEditDialog = false },
             onSave = { packToSave ->
                 adminViewModel.saveCreditPack(packToSave)
@@ -384,6 +386,7 @@ private fun GlassCreditPackItem(
 @Composable
 private fun GlassEditPackDialog(
     pack: CreditPack?,
+    billingPlan: String,
     onDismiss: () -> Unit,
     onSave: (CreditPack) -> Unit
 ) {
@@ -391,12 +394,27 @@ private fun GlassEditPackDialog(
     var name by remember { mutableStateOf(pack?.name ?: "") }
     var description by remember { mutableStateOf(pack?.description ?: "") }
     var credits by remember { mutableStateOf(pack?.credits?.toString() ?: "") }
-    var price by remember { mutableStateOf(pack?.price?.toString() ?: "") }
-    var surchargePrice by remember { mutableStateOf(pack?.surchargePrice?.toString() ?: "") }
+    var basePrice by remember { mutableStateOf("") } // Precio que el admin quiere ganar
+    var baseSurchargePrice by remember { mutableStateOf("") }
     var order by remember { mutableStateOf(pack?.order?.toString() ?: "0") }
     var isUnlimited by remember { mutableStateOf(pack?.isUnlimited ?: false) }
     var durationDays by remember { mutableStateOf(pack?.durationDays?.toString() ?: "30") }
     val isEditMode = pack != null
+
+    // Cálculo de recargo según plan
+    val monthlyFee = if (billingPlan == "PARTNER") 2000.0 else 1500.0
+    val durationFactor = (durationDays.toDoubleOrNull() ?: 30.0) / 30.0
+    val totalServiceFee = monthlyFee * durationFactor
+
+    // Inicializar precios base restando el fee si estamos editando
+    LaunchedEffect(pack) {
+        if (pack != null) {
+            val factor = pack.durationDays.toDouble() / 30.0
+            val currentFee = (if (billingPlan == "PARTNER") 2000.0 else 1500.0) * factor
+            basePrice = (pack.price - currentFee).coerceAtLeast(0.0).toString()
+            baseSurchargePrice = (pack.surchargePrice - currentFee).coerceAtLeast(0.0).toString()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -414,12 +432,32 @@ private fun GlassEditPackDialog(
 
                 if (!isUnlimited) {
                     GlassDialogTextField(value = credits, onValueChange = { credits = it.filter { c -> c.isDigit() } }, label = "Créditos *", keyboardType = KeyboardType.Number)
-                } else {
-                    GlassDialogTextField(value = durationDays, onValueChange = { durationDays = it.filter { c -> c.isDigit() } }, label = "Duración en Días * (ej. 30)", keyboardType = KeyboardType.Number)
                 }
+
+                GlassDialogTextField(value = durationDays, onValueChange = { durationDays = it.filter { c -> c.isDigit() } }, label = "Duración en Días * (ej. 30)", keyboardType = KeyboardType.Number)
                 
-                GlassDialogTextField(value = price, onValueChange = { price = it.filter { c -> c.isDigit() || c == '.' } }, label = "Precio Normal *", keyboardType = KeyboardType.Decimal)
-                GlassDialogTextField(value = surchargePrice, onValueChange = { surchargePrice = it.filter { c -> c.isDigit() || c == '.' } }, label = "Precio c/ Recargo *", keyboardType = KeyboardType.Decimal)
+                Column {
+                    GlassDialogTextField(value = basePrice, onValueChange = { basePrice = it.filter { c -> c.isDigit() || c == '.' } }, label = "Tu Ganancia Pack (Normal) *", keyboardType = KeyboardType.Decimal)
+                    val finalPrice = (basePrice.toDoubleOrNull() ?: 0.0) + totalServiceFee
+                    Text(
+                        "Al alumno le figura: ${formatCurrency(finalPrice)} (Incluye +${formatCurrency(totalServiceFee)} de App)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ColorPrimaryAction,
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                    )
+                }
+
+                Column {
+                    GlassDialogTextField(value = baseSurchargePrice, onValueChange = { baseSurchargePrice = it.filter { c -> c.isDigit() || c == '.' } }, label = "Tu Ganancia Pack (Mora) *", keyboardType = KeyboardType.Decimal)
+                    val finalSurcharge = (baseSurchargePrice.toDoubleOrNull() ?: 0.0) + totalServiceFee
+                    Text(
+                        "Al alumno le figura: ${formatCurrency(finalSurcharge)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ColorTextSecondary,
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                    )
+                }
+
                 GlassDialogTextField(value = order, onValueChange = { order = it.filter { c -> c.isDigit() } }, label = "Orden *", keyboardType = KeyboardType.Number)
             }
         },
@@ -427,12 +465,12 @@ private fun GlassEditPackDialog(
             Button(
                 onClick = {
                     val creditsInt = if (isUnlimited) 9999 else credits.toIntOrNull()
-                    val priceDouble = price.toDoubleOrNull()
-                    val surchargePriceDouble = surchargePrice.toDoubleOrNull()
+                    val priceDouble = (basePrice.toDoubleOrNull() ?: 0.0) + totalServiceFee
+                    val surchargePriceDouble = (baseSurchargePrice.toDoubleOrNull() ?: 0.0) + totalServiceFee
                     val orderInt = order.toIntOrNull()
                     val durationInt = durationDays.toIntOrNull() ?: 30
 
-                    if (name.isBlank() || creditsInt == null || priceDouble == null || surchargePriceDouble == null || orderInt == null) {
+                    if (name.isBlank() || creditsInt == null || orderInt == null) {
                         Toast.makeText(context, "Completa los campos obligatorios.", Toast.LENGTH_SHORT).show()
                     } else {
                         val packToSave = CreditPack(
@@ -484,4 +522,9 @@ fun GlassDialogTextField(
         ),
         shape = RoundedCornerShape(8.dp)
     )
+}
+
+private fun formatCurrency(amount: Double): String {
+    val formatter = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-AR"))
+    return formatter.format(amount)
 }

@@ -50,8 +50,12 @@ import com.aquiles.crosschapp.presentation.components.ValidationErrorBanner
 import com.aquiles.crosschapp.presentation.components.BrandOrange
 import com.aquiles.crosschapp.presentation.components.ErrorRed
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import coil.compose.AsyncImage
 import com.aquiles.crosschapp.presentation.common.AppBackground
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,6 +79,7 @@ fun AdminCompetitionManagerScreen(
     val competitions by viewModel.competitions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val successMessage by viewModel.successMessage.collectAsState()
     val context = LocalContext.current
 
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -87,6 +92,14 @@ fun AdminCompetitionManagerScreen(
         errorMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_LONG).show()
             viewModel.clearError()
+        }
+    }
+
+    LaunchedEffect(successMessage) {
+        successMessage?.let {
+            showCreateDialog = false
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearSuccess()
         }
     }
 
@@ -170,9 +183,9 @@ fun AdminCompetitionManagerScreen(
     if (showCreateDialog) {
         CreateCompetitionDialog(
             onDismiss = { showCreateDialog = false },
-            onConfirm = { title, desc, type, crit, start, end, prize, xp, score, validation, eventTime, capacity ->
+            onConfirm = { title, desc, type, crit, start, end, prize, xp, score, validation, eventTime, capacity, credits, imageUri ->
                 viewModel.createCompetitionWithEvent(
-                    title, desc, type, crit, start, end, prize, xp, score, validation, eventTime, capacity
+                    title, desc, type, crit, start, end, prize, xp, score, validation, eventTime, capacity, credits, imageUri
                 )
                 showCreateDialog = false
             }
@@ -186,89 +199,110 @@ fun CompetitionCard(competition: Competition, onClick: () -> Unit, onDelete: () 
         modifier = Modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Header
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = competition.resolveTypeEnum().value.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // Imagen de fondo si existe
+            if (!competition.imageUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = competition.imageUrl,
+                    contentDescription = null,
                     modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .fillMaxWidth()
+                        .matchParentSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                 )
-                
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Eliminar",
-                        tint = Color.Red.copy(alpha = 0.7f)
-                    )
-                }
+                // Overlay oscuro para legibilidad
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = 0.7f))
+                )
             }
 
-            Text(
-                text = competition.title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-
-            Text(
-                text = competition.description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.7f),
-                maxLines = 2
-            )
-
-            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Status Dot
-                val status = competition.resolveStatus()
-                val statusColor = when (status) {
-                    CompetitionStatus.ONGOING -> SuccessGreen
-                    CompetitionStatus.UPCOMING -> StatusUpcoming
-                    CompetitionStatus.FINISHED -> ErrorRed
-                    else -> Color.Gray
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
-                    Spacer(modifier = Modifier.width(8.dp))
+                // Header
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        text = when(status) {
-                            CompetitionStatus.ONGOING -> "En Curso"
-                            CompetitionStatus.UPCOMING -> "Próxima"
-                            CompetitionStatus.FINISHED -> "Finalizada"
-                            else -> "Inactiva"
-                        },
+                        text = competition.resolveTypeEnum().value.uppercase(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = statusColor
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                    
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Eliminar",
+                            tint = Color.Red.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                Text(
+                    text = competition.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+
+                Text(
+                    text = competition.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                    maxLines = 2
+                )
+
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Status Dot
+                    val status = competition.resolveStatus()
+                    val statusColor = when (status) {
+                        CompetitionStatus.ONGOING -> SuccessGreen
+                        CompetitionStatus.UPCOMING -> StatusUpcoming
+                        CompetitionStatus.FINISHED -> ErrorRed
+                        else -> Color.Gray
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when(status) {
+                                CompetitionStatus.ONGOING -> "En Curso"
+                                CompetitionStatus.UPCOMING -> "Próxima"
+                                CompetitionStatus.FINISHED -> "Finalizada"
+                                else -> "Inactiva"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = statusColor
+                        )
+                    }
+
+                    // Date
+                    val dateFormat = SimpleDateFormat("dd MMM", Locale.getDefault())
+                    val dateStr = "${dateFormat.format(competition.startDate ?: Date())} - ${dateFormat.format(competition.endDate ?: Date())}"
+                    Text(
+                        text = dateStr,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.5f)
                     )
                 }
-
-                // Date
-                val dateFormat = SimpleDateFormat("dd MMM", Locale.getDefault())
-                val dateStr = "${dateFormat.format(competition.startDate ?: Date())} - ${dateFormat.format(competition.endDate ?: Date())}"
-                Text(
-                    text = dateStr,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.5f)
-                )
             }
         }
     }
@@ -278,14 +312,14 @@ fun CompetitionCard(competition: Competition, onClick: () -> Unit, onDelete: () 
 @Composable
 fun CreateCompetitionDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, CompetitionType, RankingCriteria, Date, Date, String?, Int?, ScoreStrategy, ValidationRule, String, Int) -> Unit
+    onConfirm: (String, String, CompetitionType, RankingCriteria, Date, Date, String?, Int?, ScoreStrategy, ValidationRule, String, Int, Int, Uri?) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(CompetitionType.MONTHLY) }
+    var isSingleDay by remember { mutableStateOf(true) } // true = 1 día, false = múltiples días
     var criteria by remember { mutableStateOf(RankingCriteria.POINTS) }
     var startDate by remember { mutableStateOf(Date()) }
-    var endDate by remember { mutableStateOf(Date(System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L)) }
+    var endDate by remember { mutableStateOf(Date()) } // Para un día, es igual a startDate
     var prizeDescription by remember { mutableStateOf("") }
     var xpReward by remember { mutableStateOf("500") }
     var criteriaFieldValue by remember { mutableStateOf("") } // campo dinámico por criterio
@@ -297,6 +331,15 @@ fun CreateCompetitionDialog(
 
     var scoreStrategy by remember { mutableStateOf(ScoreStrategy.RELATIVE) }
     var validationRule by remember { mutableStateOf(ValidationRule.MANUAL) }
+    
+    var registrationCredits by remember { mutableStateOf("0") }
+    var imageUri by remember { mutableStateOf<Uri?>(null) }
+    
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        imageUri = uri
+    }
 
     // Estados de validación del formulario
     var formErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -405,6 +448,41 @@ fun CreateCompetitionDialog(
                             color = Color.White.copy(alpha = 0.6f)
                         )
 
+                        // Image Selection Header
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.White.copy(alpha = 0.05f))
+                                .clickable { photoPickerLauncher.launch("image/*") },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (imageUri != null) {
+                                AsyncImage(
+                                    model = imageUri,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                        .clickable { imageUri = null }
+                                        .padding(4.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                            } else {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Add, null, tint = BrandOrange, modifier = Modifier.size(32.dp))
+                                    Text("Añadir Imagen de Portada", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+                                }
+                            }
+                        }
+
                         BasicInfoSection(
                             title = title,
                             onTitleChange = { 
@@ -420,10 +498,10 @@ fun CreateCompetitionDialog(
                         )
 
                         TechnicalConfigSection(
-                            type = type,
-                            onTypeChange = { type = it },
+                            isSingleDay = isSingleDay,
+                            onDurationChange = { isSingleDay = it },
                             criteria = criteria,
-                            onCriteriaChange = { 
+                            onCriteriaChange = {
                                 criteria = it
                                 criteriaFieldValue = ""
                                 formErrors = formErrors.toMutableMap().also { m -> m.remove("criteriaField") }
@@ -441,7 +519,7 @@ fun CreateCompetitionDialog(
                             onShowEndDatePicker = { showEndDatePicker = true },
                             eventTime = eventTime,
                             onShowTimePicker = { showTimePicker = true },
-                            isEvent = type == CompetitionType.RANGE,
+                            isSingleDay = isSingleDay,
                             maxCapacity = maxCapacity,
                             onMaxCapacityChange = { if (it.all { c -> c.isDigit() }) maxCapacity = it }
                         )
@@ -450,7 +528,9 @@ fun CreateCompetitionDialog(
                             prizeDescription = prizeDescription,
                             onPrizeDescriptionChange = { prizeDescription = it },
                             xpReward = xpReward,
-                            onXpRewardChange = { if (it.all { c -> c.isDigit() }) xpReward = it }
+                            onXpRewardChange = { if (it.all { c -> c.isDigit() }) xpReward = it },
+                            registrationCredits = registrationCredits,
+                            onRegistrationCreditsChange = { if (it.all { c -> c.isDigit() }) registrationCredits = it }
                         )
                         
                         Spacer(modifier = Modifier.height(100.dp))
@@ -473,22 +553,26 @@ fun CreateCompetitionDialog(
                     Button(
                         onClick = {
                             val capacity = maxCapacity.toIntOrNull() ?: 0
+                            val actualEndDate = if (isSingleDay) startDate else endDate
                             val validation = CompetitionFormValidator.validate(
                                 title = title,
                                 description = description,
                                 startDate = startDate,
-                                endDate = endDate,
+                                endDate = actualEndDate,
                                 maxCapacity = capacity,
+                                registrationCredits = registrationCredits.toIntOrNull() ?: 0,
                                 criteriaSpecificValue = criteriaFieldValue.ifBlank { null },
                                 criteria = criteria
                             )
                             if (!validation.isValid) {
                                 formErrors = validation.errors
                             } else {
+                                val competitionType = if (isSingleDay) CompetitionType.DAILY else CompetitionType.RANGE
                                 onConfirm(
-                                    title, description, type, criteria, startDate, endDate,
+                                    title, description, competitionType, criteria, startDate, actualEndDate,
                                     prizeDescription.ifBlank { null }, xpReward.toIntOrNull(),
-                                    scoreStrategy, validationRule, eventTime, capacity
+                                    scoreStrategy, validationRule, eventTime, capacity,
+                                    registrationCredits.toIntOrNull() ?: 0, imageUri
                                 )
                             }
                         },
@@ -556,8 +640,8 @@ private fun BasicInfoSection(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TechnicalConfigSection(
-    type: CompetitionType,
-    onTypeChange: (CompetitionType) -> Unit,
+    isSingleDay: Boolean,
+    onDurationChange: (Boolean) -> Unit,
     criteria: RankingCriteria,
     onCriteriaChange: (RankingCriteria) -> Unit,
     criteriaFieldValue: String,
@@ -568,27 +652,33 @@ private fun TechnicalConfigSection(
     Text("CONFIGURACIÓN TÉCNICA", style = MaterialTheme.typography.labelLarge, color = BrandOrange, fontWeight = FontWeight.Black)
     GlassCard(shape = RoundedCornerShape(24.dp)) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // Type Selector
-            var expandedType by remember { mutableStateOf(false) }
-            Box {
-                OutlinedTextField(
-                    value = type.value,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Tipo de Evento") },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = { IconButton(onClick = { expandedType = true }) { Icon(Icons.Default.ArrowDropDown, "Select", tint = Color.White) } },
-                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
-                )
-                DropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
-                    CompetitionType.entries.forEach { option ->
-                        DropdownMenuItem(
-                            text = { Text(option.value) },
-                            onClick = { onTypeChange(option); expandedType = false }
-                        )
+            // Duration Selector (Segmented Control)
+            Text("Duración de la Competencia *", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.7f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.08f))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                listOf(true to "1 Día", false to "Múltiples Días").forEach { (isSingle, label) ->
+                    Button(
+                        onClick = { onDurationChange(isSingle) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isSingleDay == isSingle) BrandOrange else Color.Transparent,
+                            contentColor = if (isSingleDay == isSingle) Color.White else Color.White.copy(alpha = 0.6f)
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Criteria Selector
             var expandedCrit by remember { mutableStateOf(false) }
@@ -657,42 +747,29 @@ private fun ScheduleAndCapacitySection(
     onShowEndDatePicker: () -> Unit,
     eventTime: String,
     onShowTimePicker: () -> Unit,
-    isEvent: Boolean,
+    isSingleDay: Boolean,
     maxCapacity: String,
     onMaxCapacityChange: (String) -> Unit
 ) {
     Text("TIEMPO Y CAPACIDAD", style = MaterialTheme.typography.labelLarge, color = BrandOrange, fontWeight = FontWeight.Black)
     GlassCard(shape = RoundedCornerShape(24.dp)) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Inicia", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
-                    OutlinedButton(
-                        onClick = onShowStartDatePicker,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-                    ) {
-                        Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(startDate), color = Color.White)
-                    }
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Finaliza", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
-                    OutlinedButton(
-                        onClick = onShowEndDatePicker,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-                    ) {
-                        Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(endDate), color = Color.White)
-                    }
-                }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (isEvent) {
+            if (isSingleDay) {
+                // Para 1 día: mostrar selector de fecha + hora
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Hora de Inicio", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                        Text("Fecha de la Competencia *", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                        OutlinedButton(
+                            onClick = onShowStartDatePicker,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                        ) {
+                            Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(startDate), color = Color.White)
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Hora de Inicio *", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
                         OutlinedButton(
                             onClick = onShowTimePicker,
                             modifier = Modifier.fillMaxWidth(),
@@ -702,19 +779,45 @@ private fun ScheduleAndCapacitySection(
                             Text(eventTime, color = Color.White)
                         }
                     }
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
                 }
-                
-                OutlinedTextField(
-                    value = maxCapacity,
-                    onValueChange = onMaxCapacityChange,
-                    label = { Text("Cupos Max") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
-                )
+            } else {
+                // Para múltiples días: mostrar selectores de fecha inicial y final
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Fecha de Inicio *", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                        OutlinedButton(
+                            onClick = onShowStartDatePicker,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                        ) {
+                            Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(startDate), color = Color.White)
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Fecha de Fin *", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.5f))
+                        OutlinedButton(
+                            onClick = onShowEndDatePicker,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                        ) {
+                            Text(SimpleDateFormat("dd/MM/yy", Locale.getDefault()).format(endDate), color = Color.White)
+                        }
+                    }
+                }
             }
+
+            // Capacidad máxima
+            OutlinedTextField(
+                value = maxCapacity,
+                onValueChange = onMaxCapacityChange,
+                label = { Text("Máximo de Participantes *") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            )
         }
     }
 }
@@ -724,7 +827,9 @@ private fun RewardsSection(
     prizeDescription: String,
     onPrizeDescriptionChange: (String) -> Unit,
     xpReward: String,
-    onXpRewardChange: (String) -> Unit
+    onXpRewardChange: (String) -> Unit,
+    registrationCredits: String,
+    onRegistrationCreditsChange: (String) -> Unit
 ) {
     Text("RECOMPENSAS Y GAMIFICACIÓN", style = MaterialTheme.typography.labelLarge, color = BrandOrange, fontWeight = FontWeight.Black)
     GlassCard(shape = RoundedCornerShape(24.dp)) {
@@ -744,6 +849,16 @@ private fun RewardsSection(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.EmojiEvents, null, tint = BrandOrange) },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            )
+
+            OutlinedTextField(
+                value = registrationCredits,
+                onValueChange = onRegistrationCreditsChange,
+                label = { Text("Costo de Inscripción (Créditos)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
             )
         }

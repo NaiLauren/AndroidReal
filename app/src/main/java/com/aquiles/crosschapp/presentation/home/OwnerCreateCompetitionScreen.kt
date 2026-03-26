@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -29,7 +30,11 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.aquiles.crosschapp.data.model.CompetitionType
 import com.aquiles.crosschapp.data.model.RankingCriteria
+import com.aquiles.crosschapp.data.model.ScoreStrategy
+import com.aquiles.crosschapp.data.model.ValidationRule
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
+import com.aquiles.crosschapp.presentation.viewmodel.CompetitionViewModel
+import com.aquiles.crosschapp.domain.competition.CompetitionFormValidator
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
 import java.util.*
@@ -38,7 +43,8 @@ import java.util.*
 @Composable
 fun OwnerCreateCompetitionScreen(
     navController: NavController,
-    adminViewModel: AdminViewModel = viewModel()
+    adminViewModel: AdminViewModel = viewModel(),
+    competitionViewModel: CompetitionViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -47,11 +53,14 @@ fun OwnerCreateCompetitionScreen(
     // Form State
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(CompetitionType.MONTHLY) }
+    var isSingleDay by remember { mutableStateOf(true) }
     var selectedCriteria by remember { mutableStateOf(RankingCriteria.POINTS) }
     var startDate by remember { mutableStateOf<Date?>(null) }
     var endDate by remember { mutableStateOf<Date?>(null) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var eventTime by remember { mutableStateOf("10:00") }
+    var eventCapacity by remember { mutableStateOf("30") }
+    var registrationCredits by remember { mutableStateOf("1") }
     var isLoading by remember { mutableStateOf(false) }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -193,29 +202,37 @@ fun OwnerCreateCompetitionScreen(
                 textStyle = androidx.compose.material3.LocalTextStyle.current.copy(color = Color.White)
             )
 
-            Divider(color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
-            // Tipo de Competencia
+            // Duración de la Competencia
             Text(
-                "Tipo de Competencia",
+                "Duración *",
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 fontSize = 14.sp
             )
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.08f))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                CompetitionType.values().forEach { type ->
-                    FilterChip(
-                        selected = selectedType == type,
-                        onClick = { selectedType = type },
-                        label = { Text(type.value, fontSize = 11.sp) },
-                        modifier = Modifier.weight(1f),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFFFC5200)
-                        )
-                    )
+                listOf(true to "1 Día", false to "Múltiples Días").forEach { (isSingle, label) ->
+                    Button(
+                        onClick = { isSingleDay = isSingle },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isSingleDay == isSingle) Color(0xFFFC5200) else Color.Transparent,
+                            contentColor = if (isSingleDay == isSingle) Color.White else Color.White.copy(alpha = 0.6f)
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(label, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
                 }
             }
 
@@ -244,34 +261,97 @@ fun OwnerCreateCompetitionScreen(
                 }
             }
 
-            Divider(color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
             // Fechas
             Text(
-                "Duración",
+                if (isSingleDay) "Fecha de la Competencia *" else "Duración *",
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 fontSize = 14.sp
             )
 
+            if (isSingleDay) {
+                DatePickerButton(
+                    label = "Fecha",
+                    selectedDate = startDate,
+                    onDateSelected = { startDate = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    DatePickerButton(
+                        label = "Inicio",
+                        selectedDate = startDate,
+                        onDateSelected = { startDate = it },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    DatePickerButton(
+                        label = "Fin",
+                        selectedDate = endDate,
+                        onDateSelected = { endDate = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            
+            // Horario, Cupo y Valor (Créditos)
+            Text(
+                "Configuración del Evento",
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = 14.sp
+            )
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                DatePickerButton(
-                    label = "Inicio",
-                    selectedDate = startDate,
-                    onDateSelected = { startDate = it },
-                    modifier = Modifier.weight(1f)
+                OutlinedTextField(
+                    value = eventTime,
+                    onValueChange = { eventTime = it },
+                    label = { Text("Horario (HH:mm)") },
+                    modifier = Modifier.weight(1f),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedBorderColor = Color(0xFFFC5200)
+                    ),
+                    textStyle = androidx.compose.material3.LocalTextStyle.current.copy(color = Color.White)
                 )
 
-                DatePickerButton(
-                    label = "Fin",
-                    selectedDate = endDate,
-                    onDateSelected = { endDate = it },
-                    modifier = Modifier.weight(1f)
+                OutlinedTextField(
+                    value = eventCapacity,
+                    onValueChange = { eventCapacity = it },
+                    label = { Text("Cupo Máx") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedBorderColor = Color(0xFFFC5200)
+                    ),
+                    textStyle = androidx.compose.material3.LocalTextStyle.current.copy(color = Color.White)
                 )
             }
+            
+            OutlinedTextField(
+                value = registrationCredits,
+                onValueChange = { registrationCredits = it },
+                label = { Text("Costo en Créditos") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                    focusedBorderColor = Color(0xFFFC5200)
+                ),
+                textStyle = androidx.compose.material3.LocalTextStyle.current.copy(color = Color.White)
+            )
 
             Spacer(Modifier.height(8.dp))
 
@@ -285,22 +365,59 @@ fun OwnerCreateCompetitionScreen(
                         return@Button
                     }
 
-                    if (startDate == null || endDate == null) {
+                    if (startDate == null) {
                         scope.launch {
-                            snackbarHostState.showSnackbar("Selecciona fechas de inicio y fin")
+                            snackbarHostState.showSnackbar("Selecciona una fecha")
+                        }
+                        return@Button
+                    }
+
+                    if (!isSingleDay && endDate == null) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Selecciona fecha de fin")
+                        }
+                        return@Button
+                    }
+
+                    val capacityInt = eventCapacity.toIntOrNull() ?: 0
+                    val creditsInt = registrationCredits.toIntOrNull() ?: 0
+                    val finalEndDate = if (isSingleDay) startDate else endDate
+
+                    val validationResult = CompetitionFormValidator.validate(
+                        title = title,
+                        description = description,
+                        startDate = startDate!!,
+                        endDate = finalEndDate!!,
+                        maxCapacity = capacityInt,
+                        registrationCredits = creditsInt,
+                        criteriaSpecificValue = null,
+                        criteria = selectedCriteria
+                    )
+
+                    if (!validationResult.isValid) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(validationResult.errorMessages.first())
                         }
                         return@Button
                     }
 
                     isLoading = true
                     scope.launch {
-                        adminViewModel.createCompetition(
+                        val competitionType = if (isSingleDay) CompetitionType.DAILY else CompetitionType.RANGE
+                        competitionViewModel.createCompetitionWithEvent(
                             title = title,
                             description = description,
-                            type = selectedType.value,
-                            criteria = selectedCriteria.value,
+                            type = competitionType,
+                            criteria = selectedCriteria,
                             startDate = startDate!!,
-                            endDate = endDate!!,
+                            endDate = finalEndDate!!,
+                            prizeDescription = null,
+                            xpReward = null,
+                            scoreStrategy = ScoreStrategy.ABSOLUTE,
+                            validationRule = ValidationRule.AUTOMATIC,
+                            eventTime = eventTime,
+                            eventCapacity = capacityInt,
+                            registrationCredits = creditsInt,
                             imageUri = selectedImageUri
                         )
                         isLoading = false

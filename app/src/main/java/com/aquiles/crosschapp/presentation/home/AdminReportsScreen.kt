@@ -92,43 +92,49 @@ fun AdminReportsScreen(
             },
             containerColor = Color.Transparent
         ) { localScaffoldPadding ->
-            Column(
+            // Contenedor principal sin Column fija, dejamos que ReportsContent maneje su propio scroll
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = localScaffoldPadding.calculateTopPadding())
-                    .padding(horizontal = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 16.dp)
             ) {
-                // Selector de Mes
-                GlassMonthSelector(
-                    selectedDate = selectedDate.time,
-                    onPreviousMonth = {
-                        val newCalendar = selectedDate.clone() as Calendar
-                        newCalendar.add(Calendar.MONTH, -1)
-                        selectedDate = newCalendar
-                    },
-                    onNextMonth = {
-                        val newCalendar = selectedDate.clone() as Calendar
-                        newCalendar.add(Calendar.MONTH, 1)
-                        selectedDate = newCalendar
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
                 when (val state = reportsState) {
                     is ReportsState.Loading, is ReportsState.Idle -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = ColorPrimaryAction)
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                             MonthSelectorSection(selectedDate) { selectedDate = it }
+                             Spacer(modifier = Modifier.height(24.dp))
+                             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = ColorPrimaryAction)
+                             }
                         }
                     }
                     is ReportsState.Error -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Error: ${state.message}", color = MaterialTheme.colorScheme.error)
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                             MonthSelectorSection(selectedDate) { selectedDate = it }
+                             Spacer(modifier = Modifier.height(24.dp))
+                             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                Text("Error: ${state.message}", color = MaterialTheme.colorScheme.error)
+                             }
                         }
                     }
                     is ReportsState.Success -> {
-                        ReportsContent(state, innerPadding, adminViewModel, selectedDate)
+                        // Pasamos el selector como parte del contenido para que todo escrollee junto
+                        ReportsContent(
+                            state = state,
+                            innerPadding = innerPadding,
+                            adminViewModel = adminViewModel,
+                            selectedDate = selectedDate,
+                            monthSelector = {
+                                MonthSelectorSection(selectedDate) { selectedDate = it }
+                            }
+                        )
                     }
                 }
             }
@@ -137,73 +143,138 @@ fun AdminReportsScreen(
 }
 
 @Composable
+private fun MonthSelectorSection(selectedDate: Calendar, onDateChange: (Calendar) -> Unit) {
+    GlassMonthSelector(
+        selectedDate = selectedDate.time,
+        onPreviousMonth = {
+            val newCalendar = selectedDate.clone() as Calendar
+            newCalendar.add(Calendar.MONTH, -1)
+            onDateChange(newCalendar)
+        },
+        onNextMonth = {
+            val newCalendar = selectedDate.clone() as Calendar
+            newCalendar.add(Calendar.MONTH, 1)
+            onDateChange(newCalendar)
+        }
+    )
+}
+
+
+@Composable
 private fun ReportsContent(
     state: ReportsState.Success, 
     innerPadding: PaddingValues, 
     adminViewModel: AdminViewModel, 
-    selectedDate: Calendar
+    selectedDate: Calendar,
+    monthSelector: @Composable () -> Unit
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // Tarjetas de Métricas
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            GlassMetricCard(
-                title = "Ingresos",
-                value = formatCurrency(state.totalRevenue),
-                icon = Icons.Default.AttachMoney,
-                modifier = Modifier.weight(1f),
-                isMoney = true
-            )
-            GlassMetricCard(
-                title = "Activos",
-                value = state.monthlyActiveUsers.toString(),
-                icon = Icons.Default.People,
-                modifier = Modifier.weight(1f)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // --- 0. Selector de Mes (Integrado en el scroll) ---
+        item {
+            monthSelector()
+        }
+
+        // --- 0.1 Selector de Plan ---
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "PLAN DE SERVICIO",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorTextSecondary,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                )
+                GlassPlanSelector(
+                    currentPlan = state.billingPlan,
+                    onPlanSelected = { adminViewModel.setBillingPlan(it) }
+                )
+            }
+        }
+
+        // --- 1. Tarjetas de Métricas ---
+        item {
+            val totalAppFee = state.monthlyTransactions.sumOf { trans ->
+                val duration = trans.durationDays ?: 30
+                val factor = duration.toDouble() / 30.0
+                val monthlyFee = if (state.billingPlan == "PARTNER") 2000.0 else 1500.0
+                monthlyFee * factor
+            }
+            val netRevenue = (state.totalRevenue - totalAppFee).coerceAtLeast(0.0)
+
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                GlassMetricCard(
+                    title = "Ganancia Gym (Neta)",
+                    value = formatCurrency(netRevenue),
+                    icon = Icons.Default.AttachMoney,
+                    modifier = Modifier.fillMaxWidth(),
+                    isMoney = true,
+                    highlight = true
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    GlassMetricCard(
+                        title = "Recaudación Total",
+                        value = formatCurrency(state.totalRevenue),
+                        icon = Icons.Default.People,
+                        modifier = Modifier.weight(1f),
+                        fontSizeMultiplier = 0.8f
+                    )
+                    GlassMetricCard(
+                        title = "Costo App",
+                        value = formatCurrency(totalAppFee),
+                        icon = Icons.Default.AttachMoney,
+                        modifier = Modifier.weight(1f),
+                        fontSizeMultiplier = 0.8f,
+                        iconColor = ColorError
+                    )
+                }
+            }
+        }
+
+        // --- 2. Sección de Costos de la App ---
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "COSTOS DEL SERVICIO",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorTextSecondary,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                )
+                GlassAppCostCard(state, adminViewModel, selectedDate)
+            }
+        }
+        
+        // --- 3. Sección de Transacciones ---
+        item {
+            Text(
+                "TRANSACCIONES",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = ColorTextSecondary,
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        
-        // --- APP COSTS SECTION ---
-        Text(
-            "COSTOS DEL SERVICIO",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = ColorTextSecondary,
-            modifier = Modifier.fillMaxWidth().padding(start = 4.dp)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        GlassAppCostCard(state, adminViewModel, selectedDate)
-        
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            "TRANSACCIONES",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = ColorTextSecondary,
-            modifier = Modifier.fillMaxWidth().padding(start = 4.dp)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
         if (state.monthlyTransactions.isEmpty()) {
-            GlassCard(modifier = Modifier.fillMaxWidth().padding(32.dp)) {
-                Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text("Sin movimientos este mes.", color = ColorTextSecondary.copy(alpha = 0.5f))
+            item {
+                GlassCard(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                    Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("Sin movimientos este mes.", color = ColorTextSecondary.copy(alpha = 0.5f))
+                    }
                 }
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = innerPadding.calculateBottomPadding() + 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(state.monthlyTransactions, key = { it.id }) { transaction ->
-                    GlassTransactionItem(transaction)
-                }
+            items(state.monthlyTransactions, key = { it.id }) { transaction ->
+                GlassTransactionItem(transaction)
             }
         }
     }
@@ -250,7 +321,10 @@ private fun GlassMetricCard(
     value: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
-    isMoney: Boolean = false
+    isMoney: Boolean = false,
+    highlight: Boolean = false,
+    fontSizeMultiplier: Float = 1f,
+    iconColor: Color = ColorTextPrimary
 ) {
     GlassCard(
         modifier = modifier,
@@ -264,10 +338,13 @@ private fun GlassMetricCard(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp)),
+                    .background(
+                        if (highlight) ColorPrimaryAction.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f), 
+                        RoundedCornerShape(10.dp)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = ColorTextPrimary)
+                Icon(imageVector = icon, contentDescription = null, tint = if (highlight) ColorPrimaryAction else iconColor)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -275,9 +352,9 @@ private fun GlassMetricCard(
             Text(text = title.uppercase(), style = MaterialTheme.typography.labelSmall, color = ColorTextSecondary, fontWeight = FontWeight.Bold)
 
             // Ajuste dinámico de fuente
-            val baseStyle = MaterialTheme.typography.headlineSmall
-            var fontSize by remember(value) { mutableStateOf(baseStyle.fontSize) }
-
+            val baseStyle = if (highlight) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineSmall
+            var fontSize by remember(value) { mutableStateOf(baseStyle.fontSize * fontSizeMultiplier) }
+            
             Text(
                 text = value,
                 style = baseStyle.copy(fontSize = fontSize),
@@ -418,6 +495,26 @@ private fun GlassAppCostCard(
                     InvoiceRow("Alumnos Activos Mensuales", "${state.monthlyActiveUsers} x $1.13")
                     InvoiceRow("Licencia Base App", "Incluida")
                     InvoiceRow("Soporte Técnico", "Incluido")
+                    
+                    if (state.billingPlan == "PARTNER") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(ColorPrimaryAction.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.AttachMoney, null, tint = ColorPrimaryAction, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Tu ganancia extra (Plan Partner): ${formatCurrency(state.monthlyActiveUsers * 500.0)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ColorTextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
@@ -600,5 +697,79 @@ private fun PaymentDataItem(label: String, value: String) {
     Column {
         Text(label, style = MaterialTheme.typography.bodySmall, color = ColorTextSecondary)
         Text(value, style = MaterialTheme.typography.bodyMedium, color = ColorTextPrimary, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun GlassPlanSelector(
+    currentPlan: String,
+    onPlanSelected: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        PlanCard(
+            title = "Estándar",
+            subtitle = "$1500 / Alumno",
+            description = "100% recaudación app",
+            isSelected = currentPlan == "STANDARD",
+            onClick = { onPlanSelected("STANDARD") },
+            modifier = Modifier.weight(1f)
+        )
+        PlanCard(
+            title = "Partner",
+            subtitle = "$2000 / Alumno",
+            description = "Gimnasio gana $500",
+            isSelected = currentPlan == "PARTNER",
+            onClick = { onPlanSelected("PARTNER") },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun PlanCard(
+    title: String,
+    subtitle: String,
+    description: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val borderColor = if (isSelected) ColorPrimaryAction else Color.White.copy(alpha = 0.1f)
+    val backgroundColor = if (isSelected) ColorPrimaryAction.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f)
+
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        border = BorderStroke(2.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (isSelected) ColorPrimaryAction else ColorTextPrimary
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = ColorTextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.labelSmall,
+                color = ColorTextSecondary,
+                lineHeight = 14.sp
+            )
+        }
     }
 }

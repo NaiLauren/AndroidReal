@@ -108,7 +108,7 @@ fun BenchmarkEditScreen(
                 )
             )
 
-            Divider(color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
             // Desafío Section
             Column {
@@ -277,7 +277,7 @@ fun BenchmarkEditScreen(
                 }
             }
 
-            Divider(color = Color.White.copy(alpha = 0.1f))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
             // Save Button
             Button(

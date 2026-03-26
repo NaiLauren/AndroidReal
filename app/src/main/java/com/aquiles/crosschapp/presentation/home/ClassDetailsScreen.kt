@@ -508,8 +508,29 @@ private fun fetchRealTimeAttendance(classId: String, gymId: String, onResult: (S
 fun ClassHeaderSection(gymClass: GymClass) {
     val dateFormatter = SimpleDateFormat("EEEE dd, MMMM", Locale.forLanguageTag("es-ES"))
     val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val isCompetition = gymClass.classType == "COMPETITION"
+    val compGold = Color(0xFFFFD700)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        // Badge de Competencia
+        if (isCompetition) {
+            Surface(
+                color = compGold.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, compGold.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(Icons.Default.EmojiEvents, null, tint = compGold, modifier = Modifier.size(16.dp))
+                    Text("COMPETENCIA", color = compGold, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
         Text(
             text = gymClass.name,
             style = MaterialTheme.typography.headlineMedium,
@@ -521,14 +542,14 @@ fun ClassHeaderSection(gymClass: GymClass) {
         Text(
             text = gymClass.dateTime?.let { "${dateFormatter.format(it).uppercase()} • ${timeFormatter.format(it)}" } ?: "",
             style = MaterialTheme.typography.titleMedium,
-            color = ColorPrimaryAction,
+            color = if (isCompetition) compGold else ColorPrimaryAction,
             fontWeight = FontWeight.SemiBold
         )
 
         Spacer(Modifier.height(24.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (gymClass.isOpenGym != true) {
+            if (gymClass.isOpenGym != true && !isCompetition) {
                 GlassStatCard(
                     icon = Icons.Default.Person,
                     label = "Coach",
@@ -536,12 +557,28 @@ fun ClassHeaderSection(gymClass: GymClass) {
                     modifier = Modifier.weight(1f)
                 )
             }
+            if (isCompetition) {
+                GlassStatCard(
+                    icon = Icons.Default.EmojiEvents,
+                    label = "Participantes",
+                    value = "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}",
+                    modifier = Modifier.weight(1f),
+                    isWarning = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
+                )
+            } else {
+                GlassStatCard(
+                    icon = Icons.Default.Group,
+                    label = if (gymClass.enrolledUserIds.size >= gymClass.maxCapacity) "Llena/Espera" else "Cupos",
+                    value = if (gymClass.enrolledUserIds.size >= gymClass.maxCapacity) "${gymClass.maxCapacity} (+${gymClass.waitingList.size})" else "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}",
+                    modifier = Modifier.weight(1f),
+                    isWarning = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
+                )
+            }
             GlassStatCard(
-                icon = Icons.Default.Group,
-                label = if (gymClass.enrolledUserIds.size >= gymClass.maxCapacity) "Llena/Espera" else "Cupos",
-                value = if (gymClass.enrolledUserIds.size >= gymClass.maxCapacity) "${gymClass.maxCapacity} (+${gymClass.waitingList.size})" else "${gymClass.enrolledUserIds.size}/${gymClass.maxCapacity}",
-                modifier = Modifier.weight(1f),
-                isWarning = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
+                icon = Icons.Default.ConfirmationNumber,
+                label = "Créditos",
+                value = "${gymClass.creditCost}",
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -720,8 +757,9 @@ fun StudentActionButtons(
         isEnabled = now.before(thirtyMinutesBefore) || currentUser.isAdmin
     } else {
         val isFull = gymClass.enrolledUserIds.size >= gymClass.maxCapacity
-        val actionText = if (gymClass.isOpenGym == true) "AVISAR ASISTENCIA" else "RESERVAR LUGAR"
-        buttonText = if (isFull) "UNIRSE A ESPERA" else actionText
+        val creditLabel = if (gymClass.creditCost == 1) "1 crédito" else "${gymClass.creditCost} créditos"
+        val actionText = if (gymClass.isOpenGym == true) "AVISAR ASISTENCIA" else "RESERVAR ($creditLabel)"
+        buttonText = if (isFull) "LISTA DE ESPERA ($creditLabel)" else actionText
         isEnabled = classTime.after(now) && (currentUser.hasValidCredits || currentUser.isAdmin)
     }
 

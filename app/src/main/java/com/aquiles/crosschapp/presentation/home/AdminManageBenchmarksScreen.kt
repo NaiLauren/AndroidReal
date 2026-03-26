@@ -517,7 +517,7 @@ private fun GlassBenchmarkDialog(
                 }
 
                 // --- 7. CONFIGURACIÓN DEL DESAFÍO (isDesafio + FECHAS) ---
-                Divider(color = ColorBorder, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(color = ColorBorder, thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
                 
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

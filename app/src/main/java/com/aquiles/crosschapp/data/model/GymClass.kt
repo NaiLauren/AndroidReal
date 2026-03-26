@@ -41,10 +41,13 @@ data class GymClass(
     @PropertyName("competitionId")
     val competitionId: String? = null,
 
+    val imageUrl: String? = null, // N-NUEVO: Imagen específica (ej: logo de la competencia)
+
     @PropertyName("hexColor")
     val hexColor: String = "#FC5200",
     
-    val isOpenGym: Boolean? = null
+    val isOpenGym: Boolean? = null,
+    val creditCost: Int = 1 // Costo en créditos (default 1, competencias pueden valer más)
 ) {
     // Backward compatibility for reads
     val id: String

@@ -60,8 +60,17 @@ class CreditsViewModel : ViewModel() {
     val paymentDetailsState: StateFlow<PaymentDetailsState> = _paymentDetailsState.asStateFlow()
 
     init {
-        loadAvailablePacks()
-        loadPaymentDetails()
+        // Observar reactivamente el gymId: si ya está disponible, cargar inmediatamente.
+        // Si aún es null (sesión cargando), esperar a que se establezca.
+        viewModelScope.launch {
+            UserSession.currentUserGymId.collect { gymId ->
+                if (!gymId.isNullOrBlank()) {
+                    loadAvailablePacks()
+                    loadPaymentDetails()
+                    return@collect
+                }
+            }
+        }
     }
 
     // Carga los packs y verifica si hay recargo en 'payment_info'
@@ -70,11 +79,13 @@ class CreditsViewModel : ViewModel() {
             _offeringsState.value = OfferingsState.Loading
             val gymId = currentUserGymId
             if (gymId.isNullOrBlank()) {
+                Log.e("CreditsVM", "loadAvailablePacks: gymId es null o vacío, abortando")
                 _offeringsState.value = OfferingsState.Error("No se pudo identificar tu gimnasio.")
                 return@launch
             }
 
             try {
+                Log.d("CreditsVM", "loadAvailablePacks: cargando packs para gym=$gymId")
                 // UNIFICADO: Todo en 'payment_info'
                 val configSnapshot = firestore.collection("gyms").document(gymId)
                     .collection("settings").document("payment_info")
@@ -89,12 +100,14 @@ class CreditsViewModel : ViewModel() {
                     .get().await()
 
                 val activePacks = packsSnapshot.documents.mapNotNull { it.toObject(CreditPack::class.java)?.copy(id = it.id) }
+                Log.d("CreditsVM", "loadAvailablePacks: encontrados ${activePacks.size} packs activos")
 
                 // Aplica precio con recargo o normal
                 val finalPacks = if (isSurchargeActive) activePacks.map { it.copy(price = it.surchargePrice) } else activePacks
 
                 _offeringsState.value = OfferingsState.Success(finalPacks, isSurchargeActive)
             } catch (e: Exception) {
+                Log.e("CreditsVM", "loadAvailablePacks ERROR: ${e.message}", e)
                 _offeringsState.value = OfferingsState.Error("No se pudieron cargar los packs.")
             }
         }

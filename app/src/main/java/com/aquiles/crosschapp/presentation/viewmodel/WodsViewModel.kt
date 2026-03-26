@@ -176,6 +176,10 @@ class WodsViewModel : ViewModel() {
     private val _globalChallenges = MutableStateFlow<List<GlobalChallenge>>(emptyList())
     val globalChallenges: StateFlow<List<GlobalChallenge>> = _globalChallenges.asStateFlow()
 
+    // Récords del usuario actual por challengeId (para mostrar en la tarjeta del carrusel)
+    private val _userChallengeRecords = MutableStateFlow<Map<String, com.aquiles.crosschapp.data.model.ChallengeResult>>(emptyMap())
+    val userChallengeRecords: StateFlow<Map<String, com.aquiles.crosschapp.data.model.ChallengeResult>> = _userChallengeRecords.asStateFlow()
+
     fun loadGlobalChallenges() {
         val gymId = UserSession.currentUserGymId.value ?: return
         viewModelScope.launch {
@@ -195,17 +199,43 @@ class WodsViewModel : ViewModel() {
                     .distinctBy { it.id }
                 
                 // Filtrar por gimnasios permitidos (especialmente para los globales restringidos)
-                val filtered = allChallenges.filter { bench ->
-                    if (bench.isGlobal) {
-                        bench.sponsorIds.isNullOrEmpty() || bench.sponsorIds!!.contains(gymId)
+                val filtered = allChallenges.filter { challenge ->
+                    if (challenge.isGlobal) {
+                        challenge.sponsorIds.isNullOrEmpty() || challenge.sponsorIds!!.contains(gymId)
                     } else {
                         true // Ya filtrado por query
                     }
                 }
                 
                 _globalChallenges.value = filtered
+
+                // Cargar récords del usuario después de obtener los desafíos
+                loadUserChallengeRecords()
             } catch (e: Exception) {
                 Log.e("WodsViewModel", "Error cargando desafíos (globales/locales)", e)
+            }
+        }
+    }
+
+    private fun loadUserChallengeRecords() {
+        val userId = UserSession.currentUser.value?.id ?: return
+        viewModelScope.launch {
+            try {
+                val snapshot = firestore.collection("challenge_results")
+                    .whereEqualTo("userId", userId)
+                    .get().await()
+
+                val results = snapshot.toObjects(com.aquiles.crosschapp.data.model.ChallengeResult::class.java)
+                // Agrupar por challengeId, quedándonos con el mejor resultado (mayor numericScore)
+                val bestByChallenge = results
+                    .groupBy { it.challengeId }
+                    .mapValues { (_, records) -> records.maxByOrNull { it.numericScore } }
+                    .filterValues { it != null }
+                    .mapValues { it.value!! }
+
+                _userChallengeRecords.value = bestByChallenge
+            } catch (e: Exception) {
+                Log.e("WodsViewModel", "Error cargando récords del usuario", e)
             }
         }
     }
@@ -270,32 +300,54 @@ class WodsViewModel : ViewModel() {
                     "videoUrl" to (videoUrl ?: "")
                 )
 
-                firestore.collection("challenge_results")
-                    .add(resultData)
+                // Buscar resultado existente del usuario para este desafío
+                val existingDocs = firestore.collection("challenge_results")
+                    .whereEqualTo("challengeId", challengeId)
+                    .whereEqualTo("userId", user.id)
+                    .get()
                     .await()
 
-                // Award XP (iOS Parity)
-                try {
-                    com.aquiles.crosschapp.data.service.GamificationService.addXp(
-                        userId = user.id,
-                        gymId = gymId,
-                        amount = 15, // Desafíos dan más XP que WODs (Paridad iOS)
-                        type = "CHALLENGE",
-                        title = "Desafío Registrado",
-                        description = "Cargaste marca en: $challengeName",
-                        relatedId = challengeId
-                    )
-                } catch (e: Exception) {
-                    Log.e("WodsViewModel", "Error awarding XP for challenge", e)
+                val isUpdate = !existingDocs.isEmpty
+                if (isUpdate) {
+                    // Actualizar resultado existente
+                    val docId = existingDocs.documents.first().id
+                    firestore.collection("challenge_results")
+                        .document(docId)
+                        .set(resultData)
+                        .await()
+                } else {
+                    // Crear nuevo resultado
+                    firestore.collection("challenge_results")
+                        .add(resultData)
+                        .await()
                 }
 
-                _saveChallengeResultState.value = ChallengeSaveState.Success("¡Desafío guardado! (+15 XP)")
+                // Award XP solo en primera vez (iOS Parity)
+                if (!isUpdate) {
+                    try {
+                        com.aquiles.crosschapp.data.service.GamificationService.addXp(
+                            userId = user.id,
+                            gymId = gymId,
+                            amount = 15,
+                            type = "CHALLENGE",
+                            title = "Desafío Registrado",
+                            description = "Cargaste marca en: $challengeName",
+                            relatedId = challengeId
+                        )
+                    } catch (e: Exception) {
+                        Log.e("WodsViewModel", "Error awarding XP for challenge", e)
+                    }
+                }
+
+                val msg = if (isUpdate) "¡Marca mejorada! 🔥" else "¡Desafío guardado! (+15 XP)"
+                _saveChallengeResultState.value = ChallengeSaveState.Success(msg)
             } catch (e: Exception) {
                 Log.e("WodsViewModel", "Error saving challenge result", e)
                 _saveChallengeResultState.value = ChallengeSaveState.Error("Error al guardar: ${e.localizedMessage}")
             }
         }
     }
+
 
     private fun calculateNumericScore(scoreInput: String, unit: String): Double {
         return try {

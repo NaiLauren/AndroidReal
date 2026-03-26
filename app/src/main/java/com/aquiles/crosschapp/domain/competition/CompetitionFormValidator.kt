@@ -25,6 +25,7 @@ object CompetitionFormValidator {
         startDate: Date,
         endDate: Date,
         maxCapacity: Int,
+        registrationCredits: Int,
         criteriaSpecificValue: String? = null,
         criteria: RankingCriteria? = null
     ): ValidationResult {
@@ -42,7 +43,7 @@ object CompetitionFormValidator {
         }
 
         // --- Validación de fechas ---
-        if (!endDate.after(startDate)) {
+        if (endDate.before(startDate)) {
             errors["dates"] = "La fecha de fin debe ser posterior a la de inicio"
         }
 
@@ -54,6 +55,10 @@ object CompetitionFormValidator {
         }
 
         // --- Validación de campo específico por criterio (dinámico) ---
+        if (registrationCredits < 0) {
+            errors["registrationCredits"] = "Los créditos deben ser mayores o iguales a cero"
+        }
+
         if (criteria != null && criteriaSpecificValue != null) {
             val numericVal = criteriaSpecificValue.toDoubleOrNull()
             when (criteria) {

@@ -28,12 +28,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-// Colors mimicking iOS "Ultra Thin Material" Dark Mode sin auto-blur
-// Aumentamos opacidad a pedido del usuario para evitar traspaso excesivo de fondos traseros
-private val GlassSurfaceStart = Color.Black.copy(alpha = 0.75f)
-private val GlassSurfaceEnd = Color.Black.copy(alpha = 0.60f)
-private val GlassBorderStart = Color.Black.copy(alpha = 0.60f)
-private val GlassBorderEnd = Color.Black.copy(alpha = 0.12f)
+// Premium Glass Effect Colors - Dual tone approach
+private val GlassSurfaceStart = Color(0xFFFFFFFF).copy(alpha = 0.22f) // Un poco más sólido para estructura
+private val GlassSurfaceEnd = Color(0xFF000000).copy(alpha = 0.25f)   // Base más oscura
+private val GlassBorderLight = Color.White.copy(alpha = 0.35f)
+private val GlassBorderDark = Color.Black.copy(alpha = 0.22f)
 
 @Composable
 fun GlassCard(
@@ -43,7 +42,7 @@ fun GlassCard(
     content: @Composable BoxScope.() -> Unit
 ) {
     val defaultBorderBrush = Brush.linearGradient(
-        colors = listOf(GlassBorderStart, GlassBorderEnd),
+        colors = listOf(GlassBorderLight, GlassBorderDark),
         start = androidx.compose.ui.geometry.Offset(0f, 0f),
         end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
     )
@@ -52,16 +51,19 @@ fun GlassCard(
         modifier = modifier
             .fillMaxWidth()
             .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(GlassSurfaceStart, GlassSurfaceEnd),
-                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                    end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        GlassSurfaceStart,
+                        Color(0xFF1C1C1E).copy(alpha = 0.82f), // Aumentada opacidad (era 0.56f)
+                        GlassSurfaceEnd
+                    ),
+                    radius = 600f
                 ),
                 shape = shape
             )
             .border(
                 border = BorderStroke(
-                    width = 1.dp,
+                    width = 1.2.dp,
                     brush = borderBrush ?: defaultBorderBrush
                 ),
                 shape = shape
@@ -115,17 +117,20 @@ fun GlassCardSurface(
         Box(
             modifier = Modifier
                 .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(GlassSurfaceStart, GlassSurfaceEnd),
-                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            GlassSurfaceStart,
+                            Color(0xFF1C1C1E).copy(alpha = 0.82f), // Aumentada opacidad (era 0.56f)
+                            GlassSurfaceEnd
+                        ),
+                        radius = 600f
                     )
                 )
                 .border(
                     border = BorderStroke(
-                        width = 1.dp,
+                        width = 1.2.dp,
                         brush = Brush.linearGradient(
-                            colors = listOf(GlassBorderStart, GlassBorderEnd),
+                            colors = listOf(GlassBorderLight, GlassBorderDark),
                             start = androidx.compose.ui.geometry.Offset(0f, 0f),
                             end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                         )
@@ -153,18 +158,21 @@ fun GlassAlertDialog(
             modifier = modifier
                 .fillMaxWidth()
                 .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(GlassSurfaceStart, GlassSurfaceEnd),
-                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                        end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            GlassSurfaceStart,
+                            Color(0xFF1C1C1E).copy(alpha = 0.82f), // Aumentada opacidad (era 0.56f)
+                            GlassSurfaceEnd
+                        ),
+                        radius = 600f
                     ),
                     shape = RoundedCornerShape(24.dp)
                 )
                 .border(
                     border = BorderStroke(
-                        width = 1.dp,
+                        width = 1.2.dp,
                         brush = Brush.linearGradient(
-                            colors = listOf(GlassBorderStart, GlassBorderEnd),
+                            colors = listOf(GlassBorderLight, GlassBorderDark),
                             start = androidx.compose.ui.geometry.Offset(0f, 0f),
                             end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                         )

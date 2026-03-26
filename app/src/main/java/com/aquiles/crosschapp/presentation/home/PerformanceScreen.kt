@@ -978,29 +978,32 @@ fun TrainingScheduleSummarySectionGlass(viewModel: UserTrainingViewModel, onConf
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFFFFFFF).copy(alpha = 0.15f),
+                        Color(0xFF1C1C1E).copy(alpha = 0.56f),
+                        Color(0xFF000000).copy(alpha = 0.10f)
+                    ),
+                    radius = 600f
+                ),
+                shape = RoundedCornerShape(20.dp)
+            )
             .border(
-                width = 1.5.dp,
-                brush = Brush.horizontalGradient(
+                width = 1.2.dp,
+                brush = Brush.linearGradient(
                     listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = borderAlpha),
-                        Color(0xFFFFD700).copy(alpha = borderAlpha * 0.6f),
-                        MaterialTheme.colorScheme.primary.copy(alpha = borderAlpha)
-                    )
+                        Color.White.copy(alpha = 0.31f),
+                        Color.Black.copy(alpha = 0.19f)
+                    ),
+                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                    end = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                 ),
                 shape = RoundedCornerShape(20.dp)
             )
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF1A1A2E).copy(alpha = 0.95f),
-                            Color(0xFF0F0F1A).copy(alpha = 0.98f)
-                        )
-                    )
-                )
+            modifier = Modifier.fillMaxWidth()
         ) {
             // ── HEADER ────────────────────────────────────────────────────
             Row(

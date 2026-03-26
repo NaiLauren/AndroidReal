@@ -156,22 +156,27 @@ class PerformanceViewModel : ViewModel() {
                     val deferreds = benchmarkIds.map { id ->
                         async {
                             try {
-                                // Try benchmark_wods first
-                                val docRef = firestore.collection("benchmark_wods").document(id)
-                                val doc = docRef.get().await()
-                                var bench = doc.toObject(BenchmarkWod::class.java)
+                                // Intenta primero en benchmark_wods
+                                var bench: BenchmarkWod? = try {
+                                    val doc = firestore.collection("benchmark_wods").document(id).get().await()
+                                    doc.toObject(BenchmarkWod::class.java)?.copy(id = doc.id)
+                                } catch (e: Exception) { null }
                                 
-                                // If not found, try challenges collection
+                                // Si no está o falló el permiso, intenta en la colección de desafíos
                                 if (bench == null) {
-                                    val challengeDoc = firestore.collection("challenges").document(id).get().await()
-                                    bench = challengeDoc.toObject(BenchmarkWod::class.java)
-                                    bench?.copy(id = challengeDoc.id)
-                                } else {
-                                    bench.copy(id = doc.id)
+                                    try {
+                                        val challengeDoc = firestore.collection("challenges").document(id).get().await()
+                                        if (challengeDoc.exists()) {
+                                            bench = challengeDoc.toObject(BenchmarkWod::class.java)?.copy(id = challengeDoc.id)
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("PerfViewModel", "Error fetching challenge detail for $id", e)
+                                    }
                                 }
-                            } catch (e: Exception) { 
+                                bench
+                            } catch (e: Exception) {
                                 Log.e("PerfViewModel", "Error fetching detail for $id", e)
-                                null 
+                                null
                             }
                         }
                     }
@@ -350,7 +355,7 @@ class PerformanceViewModel : ViewModel() {
     }
 
     // --- SAVING ACTIONS ---
-    fun saveWodResult(wodId: String, score: String, notes: String, isRx: Boolean, classSessionId: String?, wodName: String? = null, isPublic: Boolean = true) {
+    fun saveWodResult(wodId: String, score: String, notes: String, isRx: Boolean, classSessionId: String?, wodName: String? = null, isPublic: Boolean = true, competitionId: String? = null) {
         val user = UserSession.currentUser.value ?: return
         _saveResultState.value = SaveResultState.Loading
         viewModelScope.launch {
@@ -364,10 +369,9 @@ class PerformanceViewModel : ViewModel() {
                     notes = notes,
                     isRx = isRx,
                     classSessionId = classSessionId,
-                    isPublic = isPublic, // Added field
-
-                    wodName = wodName, // [Fix] Persist name
-                    
+                    isPublic = isPublic,
+                    competitionId = competitionId,
+                    wodName = wodName,
                     // Desnormalized Data
                     userName = user.name,
                     userProfileImageUrl = user.profileImageUrl ?: "",
