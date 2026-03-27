@@ -1,5 +1,6 @@
 package com.aquiles.crosschapp.presentation.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -41,12 +42,23 @@ fun GlobalChallengePager(
 ) {
     val pagerState = rememberPagerState(pageCount = { challenges.size })
     
-    Column(modifier = Modifier.fillMaxWidth().wrapContentHeight()) {
+    // Contenedor con borde dorado degradado (Desert Luxury)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .wrapContentHeight()
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(listOf(Color(0xFFFFD700).copy(alpha = 0.3f), Color(0xFFFC5200).copy(alpha = 0.1f), Color(0xFFFFD700).copy(alpha = 0.3f))),
+                shape = RoundedCornerShape(24.dp)
+            )
+            .padding(1.dp)
+    ) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 0.dp),
-            pageSpacing = 12.dp
+            pageSpacing = 0.dp
         ) { page ->
             val challenge = challenges[page]
 
@@ -59,13 +71,12 @@ fun GlobalChallengePager(
         }
         
         if (challenges.size > 1) {
-            Spacer(Modifier.height(8.dp))
             Row(
-                Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 horizontalArrangement = Arrangement.Center
             ) {
                 repeat(challenges.size) { iteration ->
-                    val color = if (pagerState.currentPage == iteration) Color(0xFFFFD700) else Color.White.copy(alpha = 0.3f)
+                    val color = if (pagerState.currentPage == iteration) Color(0xFFFFD700) else Color.White.copy(alpha = 0.2f)
                     Box(
                         modifier = Modifier
                             .padding(2.dp)
@@ -86,153 +97,252 @@ fun GlobalChallengeCard(
     onClick: () -> Unit,
     onLogClick: () -> Unit
 ) {
-    val (typeText, icon) = remember(challenge.scoreType, challenge.measurementUnit) {
-        val unit = (challenge.measurementUnit ?: challenge.scoreType).uppercase()
-        when {
-            unit.contains("TIME") || unit.contains("TIEMPO") -> "MEJOR TIEMPO" to Icons.Default.Timer
-            unit.contains("WEIGHT") || unit.contains("PESO") || unit.contains("KG") || unit.contains("LB") -> "MÁXIMO PESO" to Icons.Default.FitnessCenter
-            unit.contains("REPS") || unit.contains("REPETICIONES") || unit.contains("AMRAP") -> "MÁX REPETICIONES" to Icons.Default.Repeat
-            unit.contains("ROUND") || unit.contains("RONDAS") -> "MÁX RONDAS" to Icons.Default.Refresh
-            unit.contains("DISTANCE") || unit.contains("DISTANCIA") || unit.contains("METROS") -> "MAYOR DISTANCIA" to Icons.Default.Straighten
-            else -> "PUNTUACIÓN" to Icons.Default.EmojiEvents
-        }
+    val scoreType = challenge.scoreType.uppercase()
+    
+    // Paleta de Colores Contextual (iOS Parity)
+    val themeColor = when {
+        scoreType.contains("TIME") -> Color(0xFF00FBFF)    // Cyan
+        scoreType.contains("WEIGHT") -> Color(0xFFFF8000)  // Orange
+        scoreType.contains("REPS") -> Color(0xFF30D158)    // Green
+        scoreType.contains("ROUND") -> Color(0xFFAF52DE)   // Purple
+        scoreType.contains("DISTANCE") -> Color(0xFFFFD600) // Yellow
+        else -> Color(0xFFFFD700)                          // Gold/Fallback
     }
 
-    GlassCard(
+    val scoreIcon = when {
+        scoreType.contains("TIME") -> Icons.Default.Timer
+        scoreType.contains("WEIGHT") -> Icons.Default.FitnessCenter
+        scoreType.contains("REPS") -> Icons.Default.Repeat
+        scoreType.contains("ROUND") -> Icons.Default.Refresh
+        scoreType.contains("DISTANCE") -> Icons.Default.Straighten
+        else -> Icons.Default.EmojiEvents
+    }
+
+    // Calculamos el estado del desafío
+    val status = challenge.getChallengeStatus()
+    val statusColor = when(status) {
+        GlobalChallenge.ChallengeStatus.ACTIVE -> Color(0xFF30D158)
+        GlobalChallenge.ChallengeStatus.UPCOMING -> Color(0xFFFFD600)
+        GlobalChallenge.ChallengeStatus.FINISHED -> Color.Red.copy(alpha = 0.7f)
+    }
+    val statusText = when(status) {
+        GlobalChallenge.ChallengeStatus.ACTIVE -> "ACTIVO"
+        GlobalChallenge.ChallengeStatus.UPCOMING -> "PRÓXIMAMENTE"
+        GlobalChallenge.ChallengeStatus.FINISHED -> "FINALIZADO"
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp)
-            .glassmorphicInteractive(onClick = onClick), // Usamos el modificador interactivo standard
-        shape = RoundedCornerShape(20.dp)
+            .clickable(onClick = onClick)
+            .background(Color.Transparent)
     ) {
-        // Mantenemos el brillo dorado interno característico de los desafíos
+        // --- HEADER CON GRADIENTE ---
         Box(
             modifier = Modifier
-                .size(120.dp)
-                .align(Alignment.BottomEnd)
-                .offset(x = 30.dp, y = 30.dp)
-                .background(Color(0xFFFFD700).copy(alpha = 0.08f), CircleShape)
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .height(100.dp)
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(themeColor.copy(alpha = 0.35f), Color.Black.copy(alpha = 0.6f))
+                    )
+                )
         ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically, 
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier
-                            .background(Color(0xFFFFD700).copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Icon(icon, null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
-                        Text(
-                            text = typeText,
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = Color(0xFFFFD700),
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.2.sp
-                        )
-                    }
+            // Partículas decorativas (Blur effect simulation with semi-transparent circles)
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 40.dp, y = -30.dp)
+                    .background(themeColor.copy(alpha = 0.15f), CircleShape)
+            )
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 20.dp, y = 20.dp)
+                    .background(themeColor.copy(alpha = 0.1f), CircleShape)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Icono Circular
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .background(themeColor.copy(alpha = 0.2f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = scoreIcon,
+                        contentDescription = null,
+                        tint = themeColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                VStack(spacing = 4, modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = challenge.name.uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        maxLines = 1
+                    )
                     
-                    Text(
-                        text = challenge.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    if (userRecord != null) {
-                        Column {
-                            Text(
-                                text = "TU RÉCORD",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.5f)
-                            )
-                            Text(
-                                text = userRecord.score,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFFFD700)
-                            )
-                        }
-                    } else {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(modifier = Modifier.size(8.dp).background(statusColor, CircleShape))
                         Text(
-                            text = "Sin marcas aún",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.4f),
-                            fontStyle = FontStyle.Italic
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Black,
+                            color = statusColor,
+                            letterSpacing = 1.sp
                         )
                     }
-
-                    Text(
-                        text = "Desafío de Comunidad 🌎",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Medium),
-                        color = Color(0xFFFFD700).copy(alpha = 0.8f)
-                    )
                 }
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (userRecord != null) "✓ REGISTRADO" else "PENDIENTE",
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                        color = if (userRecord != null) Color(0xFF30D158) else Color.White.copy(alpha = 0.4f),
-                        fontWeight = FontWeight.Bold
-                    )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Botón CARGAR / MEJORAR MARCA siempre visible
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFC5200))), 
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .clickable(onClick = onLogClick)
-                                .padding(horizontal = 10.dp, vertical = 5.dp)
-                        ) {
-                            Text(
-                                if (userRecord != null) "MEJORAR MARCA" else "CARGAR MARCA", 
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), 
-                                color = Color.Black.copy(alpha = 0.9f), 
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-
-                        // Botón VER PODIO solo si hay récord
-                        if (userRecord != null) {
-                            Box(
-                                modifier = Modifier
-                                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                                    .clickable(onClick = onClick)
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                Text(
-                                    "VER PODIO", 
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), 
-                                    color = Color.White.copy(alpha = 0.7f), 
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+                // Badges
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Surface(
+                        color = Color.White.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            text = "GLOBAL",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            color = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                    Surface(
+                        color = themeColor.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            text = challenge.scoreType.uppercase(),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                            color = themeColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            fontWeight = FontWeight.Black
+                        )
                     }
                 }
             }
         }
+
+        // --- CUERPO ---
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (challenge.description.isNotBlank()) {
+                Text(
+                    text = challenge.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f),
+                    maxLines = 2,
+                    lineHeight = 18.sp
+                )
+            }
+
+            // Fechas e Info
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                if (challenge.startDate != null && challenge.endDate != null) {
+                    val sdf = remember { java.text.SimpleDateFormat("dd/MM", java.util.Locale.getDefault()) }
+                    val startStr = sdf.format(challenge.startDate.toDate())
+                    val endStr = sdf.format(challenge.endDate.toDate())
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.CalendarToday, null, tint = themeColor.copy(alpha = 0.6f), modifier = Modifier.size(12.dp))
+                        Text(
+                            text = "$startStr → $endStr",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                if (userRecord != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("TU RÉCORD:", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.4f))
+                        Text(userRecord.score, style = MaterialTheme.typography.labelSmall, color = themeColor, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+
+            // --- ACCIONES ---
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // REGISTRAR
+                Button(
+                    onClick = onLogClick,
+                    modifier = Modifier.weight(1.2f).height(44.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = themeColor),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.AddCircle, null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = if (userRecord != null) "MEJORAR" else "REGISTRAR",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Black,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+
+                // PODIO
+                OutlinedButton(
+                    onClick = onClick,
+                    modifier = Modifier.weight(0.8f).height(44.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = "PODIO",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
+}
+
+// Auxiliar para diseño vertical similar a SwiftUI VStack
+@Composable
+fun VStack(
+    modifier: Modifier = Modifier,
+    spacing: Int = 0,
+    content: @Composable () -> Unit
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(spacing.dp)) {
+        content()
+    }
+}
 
 @Composable
 fun ChallengeLogDialog(

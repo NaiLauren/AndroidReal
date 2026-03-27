@@ -245,21 +245,19 @@ fun AdminDashboardScreen(
                                     HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
                                 }
                                 
-                                if (isSuperAdmin) {
-                                    AdminListRow(
-                                        title = "Benchmarks (WODs)",
-                                        icon = Icons.AutoMirrored.Filled.List,
-                                        onClick = { navController.navigate("admin_manage_benchmarks") }
-                                    )
-                                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
+                                AdminListRow(
+                                    title = "Benchmarks (WODs)",
+                                    icon = Icons.AutoMirrored.Filled.List,
+                                    onClick = { navController.navigate("admin_manage_benchmarks") }
+                                )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
 
-                                    AdminListRow(
-                                        title = "Torneos y Compe",
-                                        icon = Icons.Default.EmojiEvents,
-                                        onClick = { navController.navigate("admin_competition_manager") }
-                                    )
-                                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
-                                }
+                                AdminListRow(
+                                    title = "Torneos y Compe",
+                                    icon = Icons.Default.EmojiEvents,
+                                    onClick = { navController.navigate("admin_competition_manager") }
+                                )
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.1f), thickness = 0.5.dp)
 
                                 AdminListRow(
                                     title = "Ajustes de Marca",
