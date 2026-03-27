@@ -198,12 +198,33 @@ fun ClassesListContent(
                     }
                 }
 
-                // 1. Mostrar Horarios de "Centro Abierto" (Si existen para este día)
+                // 1. Obtener rangos de apertura ordenados
                 val adjustedDayOfWeek = if (selectedDate.dayOfWeek.value == 7) 1 else selectedDate.dayOfWeek.value + 1
                 val openHours = gymOperatingHoursState[adjustedDayOfWeek]?.ranges?.sortedBy { it.startTime } ?: emptyList()
                 
+                val classTimeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                
                 if (openHours.isNotEmpty()) {
-                    openHours.forEach { range ->
+                    val firstRangeStart = openHours.first().startTime
+                    val lastRangeEnd = openHours.last().endTime
+                    
+                    // A. CLASES TEMPRANAS (Antes del primer rango)
+                    val earlyClasses = classesState.classes.filter { gymClass ->
+                        val classTime = gymClass.dateTime?.let { classTimeFormat.format(it) } ?: ""
+                        classTime < firstRangeStart
+                    }
+                    if (earlyClasses.isNotEmpty()) {
+                        item {
+                            StandaloneClassesSection(
+                                title = "Clases Tempranas",
+                                classes = earlyClasses,
+                                onClassClick = onClassClick
+                            )
+                        }
+                    }
+
+                    // B. RANGOS Y BRECHAS (Timeline Sections y Gaps)
+                    openHours.forEachIndexed { index, range ->
                         item {
                             TimelineSection(
                                 range = range,
@@ -212,27 +233,52 @@ fun ClassesListContent(
                                 onClassClick = onClassClick
                             )
                         }
-                    }
-                    
-                    // Standalone classes (out of range)
-                    val inRangeIds = classesState.classes.filter { gymClass ->
-                        val classTimeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-                        val classTime = gymClass.dateTime?.let { classTimeFormat.format(it) } ?: ""
-                        openHours.any { range -> classTime >= range.startTime && classTime <= range.endTime }
-                    }.map { it.id }
-                    
-                    val standaloneClasses = classesState.classes.filter { it.id !in inRangeIds }
-                    if (standaloneClasses.isNotEmpty()) {
-                        item {
-                            StandaloneClassesSection(classes = standaloneClasses, onClassClick = onClassClick)
+                        
+                        // Si hay otro rango después, verificar si hay clases en la brecha (Gap)
+                        if (index < openHours.size - 1) {
+                            val nextRangeStart = openHours[index + 1].startTime
+                            val gapClasses = classesState.classes.filter { gymClass ->
+                                val classTime = gymClass.dateTime?.let { classTimeFormat.format(it) } ?: ""
+                                classTime > range.endTime && classTime < nextRangeStart
+                            }
+                            if (gapClasses.isNotEmpty()) {
+                                item {
+                                    StandaloneClassesSection(
+                                        title = "Entre Turnos",
+                                        classes = gapClasses,
+                                        onClassClick = onClassClick
+                                    )
+                                }
+                            }
                         }
                     }
+                    
+                    // C. CLASES TARDÍAS (Después del último rango)
+                    val lateClasses = classesState.classes.filter { gymClass ->
+                        val classTime = gymClass.dateTime?.let { classTimeFormat.format(it) } ?: ""
+                        classTime > lastRangeEnd
+                    }
+                    if (lateClasses.isNotEmpty()) {
+                        item {
+                            StandaloneClassesSection(
+                                title = "Otras Clases",
+                                classes = lateClasses,
+                                onClassClick = onClassClick
+                            )
+                        }
+                    }
+
                 } else {
+                    // Si no hay rangos definidos, mostrar todo cronológicamente
                     if (classesState.classes.isEmpty()) {
                         item { EmptyScheduleCard() }
                     } else {
                         item {
-                            StandaloneClassesSection(classes = classesState.classes, onClassClick = onClassClick)
+                            StandaloneClassesSection(
+                                title = "Clases del Día",
+                                classes = classesState.classes,
+                                onClassClick = onClassClick
+                            )
                         }
                     }
                 }
@@ -377,7 +423,11 @@ fun TimelineSection(
 }
 
 @Composable
-fun StandaloneClassesSection(classes: List<GymClass>, onClassClick: (String) -> Unit) {
+fun StandaloneClassesSection(
+    title: String,
+    classes: List<GymClass>,
+    onClassClick: (String) -> Unit
+) {
     Column {
         Box(
             modifier = Modifier
@@ -387,7 +437,7 @@ fun StandaloneClassesSection(classes: List<GymClass>, onClassClick: (String) -> 
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "Otras Clases",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = ColorTextPrimary

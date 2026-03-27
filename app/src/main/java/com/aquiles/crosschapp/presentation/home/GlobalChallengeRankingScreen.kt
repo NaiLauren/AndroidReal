@@ -22,6 +22,15 @@ import androidx.navigation.NavController
 import com.aquiles.crosschapp.data.model.ChallengeResult
 import com.aquiles.crosschapp.presentation.components.GlassCard
 import com.aquiles.crosschapp.presentation.viewmodel.AdminViewModel
+import coil.compose.AsyncImage
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.Path
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,6 +41,7 @@ fun GlobalChallengeRankingScreen(
     adminViewModel: AdminViewModel = viewModel()
 ) {
     val globalRanking by adminViewModel.globalChallengeRanking.collectAsState()
+    val gymLogos by adminViewModel.gymLogos.collectAsState()
     val isLoading by adminViewModel.isLoadingRanking.collectAsState()
     var selectedFilter by remember { mutableStateOf("all") } // "all", "week", "month"
 
@@ -140,19 +150,23 @@ fun GlobalChallengeRankingScreen(
             } else {
                 // Top 3 Podium
                 if (filteredResults.size >= 1) {
-                    PodiumView(results = filteredResults.take(3))
+                    PodiumView(
+                        results = filteredResults.take(3),
+                        gymLogos = gymLogos
+                    )
                     Spacer(Modifier.height(24.dp))
                 }
 
                 // Rest of ranking
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 32.dp)
                 ) {
                     itemsIndexed(filteredResults.drop(3)) { index, result ->
                         LeaderboardCard(
                             rank = index + 4,
                             result = result,
+                            gymLogo = gymLogos[result.gym_id],
                             dateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
                         )
                     }
@@ -163,11 +177,12 @@ fun GlobalChallengeRankingScreen(
 }
 
 @Composable
-fun PodiumView(results: List<ChallengeResult>) {
+fun PodiumView(results: List<ChallengeResult>, gymLogos: Map<String, String>) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp),
+            .height(280.dp)
+            .padding(horizontal = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Bottom
     ) {
@@ -176,7 +191,7 @@ fun PodiumView(results: List<ChallengeResult>) {
             PodiumPosition(
                 position = 2,
                 result = results[1],
-                height = 140.dp,
+                gymLogo = gymLogos[results[1].gym_id],
                 modifier = Modifier.weight(1f)
             )
         }
@@ -186,8 +201,8 @@ fun PodiumView(results: List<ChallengeResult>) {
             PodiumPosition(
                 position = 1,
                 result = results[0],
-                height = 180.dp,
-                modifier = Modifier.weight(1f)
+                gymLogo = gymLogos[results[0].gym_id],
+                modifier = Modifier.weight(1.2f)
             )
         }
 
@@ -196,7 +211,7 @@ fun PodiumView(results: List<ChallengeResult>) {
             PodiumPosition(
                 position = 3,
                 result = results[2],
-                height = 100.dp,
+                gymLogo = gymLogos[results[2].gym_id],
                 modifier = Modifier.weight(1f)
             )
         }
@@ -207,63 +222,206 @@ fun PodiumView(results: List<ChallengeResult>) {
 fun PodiumPosition(
     position: Int,
     result: ChallengeResult,
-    height: androidx.compose.ui.unit.Dp,
+    gymLogo: String?,
     modifier: Modifier = Modifier
 ) {
-    val medal = when (position) {
-        1 -> "🥇"
+    val heightScale = when (position) {
+        1 -> 0.95f
+        2 -> 0.75f
+        else -> 0.6f
+    }
+
+    val medalIcon = when (position) {
+        1 -> "👑"
         2 -> "🥈"
         else -> "🥉"
     }
 
-    val backgroundColor = when (position) {
-        1 -> Color(0xFFFFD700).copy(alpha = 0.2f)
-        2 -> Color(0xFFC0C0C0).copy(alpha = 0.2f)
-        else -> Color(0xFFCD7F32).copy(alpha = 0.2f)
+    val baseColor = when (position) {
+        1 -> Color(0xFFFFD700) // Gold
+        2 -> Color(0xFFC0C0C0) // Silver
+        else -> Color(0xFFCD7F32) // Bronze
     }
 
-    val borderColor = when (position) {
-        1 -> Color(0xFFFFD700)
-        2 -> Color(0xFFC0C0C0)
-        else -> Color(0xFFCD7F32)
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight(1f)
-            .background(
-                color = backgroundColor,
-                shape = RoundedCornerShape(16.dp)
-            )
-            .border(
-                width = 1.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(16.dp)
-            )
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Bottom
     ) {
-        Column(
+        // User Profile Image with Medal
+        Box(contentAlignment = Alignment.TopEnd) {
+            Box(
+                modifier = Modifier
+                    .size(if (position == 1) 70.dp else 60.dp)
+                    .border(2.dp, baseColor, CircleShape)
+                    .padding(3.dp)
+                    .clip(CircleShape)
+                    .background(Color.DarkGray)
+            ) {
+                AsyncImage(
+                    model = result.userProfileImage.ifBlank { "https://via.placeholder.com/150" },
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            Text(
+                medalIcon,
+                fontSize = if (position == 1) 22.sp else 18.sp,
+                modifier = Modifier.offset(x = 4.dp, y = (-4).dp)
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Podium Pillar
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxWidth()
+                .fillMaxHeight(heightScale)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            baseColor.copy(alpha = 0.4f),
+                            baseColor.copy(alpha = 0.1f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(baseColor, Color.Transparent)
+                    ),
+                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                )
         ) {
-            Text(medal, fontSize = 28.sp)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
+            ) {
+                Text(
+                    result.numericScore.toString(),
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    fontSize = if (position == 1) 20.sp else 16.sp
+                )
+                Text(
+                    result.userName,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(Modifier.weight(1f))
+                
+                // Gym Logo at the bottom of the pillar
+                if (gymLogo != null) {
+                    AsyncImage(
+                        model = gymLogo,
+                        contentDescription = "Gym Logo",
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.1f)),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LeaderboardCard(
+    rank: Int,
+    result: ChallengeResult,
+    gymLogo: String?,
+    dateFormat: java.text.SimpleDateFormat
+) {
+    GlassCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Rank
             Text(
-                "${result.numericScore}",
-                fontWeight = FontWeight.ExtraBold,
-                color = Color.White,
+                text = "#$rank",
+                color = Color.White.copy(alpha = 0.5f),
+                fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
-                maxLines = 1
+                modifier = Modifier.width(40.dp)
             )
-            Text(
-                "${result.userName}\n${result.userLastName}",
-                color = Color.White.copy(alpha = 0.8f),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
+
+            // User Info
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                AsyncImage(
+                    model = result.userProfileImage.ifBlank { "https://via.placeholder.com/150" },
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+                
+                Column {
+                    Text(
+                        "${result.userName} ${result.userLastName}",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (gymLogo != null) {
+                            AsyncImage(
+                                model = gymLogo,
+                                contentDescription = "Gym Logo",
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Fit
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            result.facilityName,
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
+            // Score
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = result.score,
+                    color = Color(0xFFFC5200),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 16.sp
+                )
+                if (result.isRx) {
+                    Text(
+                        "RX",
+                        color = Color(0xFFFFD700),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
+                }
+            }
         }
     }
 }

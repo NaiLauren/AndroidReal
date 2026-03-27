@@ -164,6 +164,9 @@ class AdminViewModel : ViewModel() {
     private val _isLoadingRanking = MutableStateFlow(false)
     val isLoadingRanking: StateFlow<Boolean> = _isLoadingRanking.asStateFlow()
 
+    private val _gymLogos = MutableStateFlow<Map<String, String>>(emptyMap())
+    val gymLogos: StateFlow<Map<String, String>> = _gymLogos.asStateFlow()
+
     init {
         listenForPendingRequests()
     }
@@ -2193,15 +2196,34 @@ class AdminViewModel : ViewModel() {
                 _isLoadingRanking.value = true
                 
                 // Obtener todos los resultados aprobados de este desafío específico (Globalmente)
-                val results = firestore.collection("challenge_results")
+                val resultsSnapshot = firestore.collection("challenge_results")
                     .whereEqualTo("challengeId", challengeId)
                     .whereEqualTo("validationStatus", "approved")
                     .orderBy("numericScore", com.google.firebase.firestore.Query.Direction.DESCENDING)
                     .limit(100)
                     .get().await()
-                    .toObjects(ChallengeResult::class.java)
                 
-                _globalChallengeRanking.value = results
+                val resultsList = resultsSnapshot.toObjects(ChallengeResult::class.java)
+                
+                // Cargar logos de gimnasios únicos
+                val gymIds = resultsList.map { it.gym_id }.filter { it.isNotBlank() }.distinct()
+                val logoMap = mutableMapOf<String, String>()
+                
+                if (gymIds.isNotEmpty()) {
+                    for (gid in gymIds) {
+                        try {
+                            val gymDoc = firestore.collection("gyms").document(gid).get().await()
+                            gymDoc.getString("logoUrl")?.let { url ->
+                                logoMap[gid] = url
+                            }
+                        } catch (e: Exception) {
+                            Log.e("AdminViewModel", "Error loading gym logo for $gid", e)
+                        }
+                    }
+                }
+                
+                _gymLogos.value = logoMap
+                _globalChallengeRanking.value = resultsList
             } catch (e: Exception) {
                 Log.e("AdminViewModel", "Error loading global ranking", e)
                 _globalChallengeRanking.value = emptyList()
